@@ -4,6 +4,12 @@ AI-powered convenience store management platform inspired by real depanneur oper
 
 This project helps store owners and staff manage products, inventory, sales, suppliers, expiration checks, restocking workflows, and AI-generated business insights from one full-stack application.
 
+## About
+
+SmartDepanneur AI is a portfolio-ready full-stack application based on real convenience store operations in Canada and Quebec. It combines inventory management, POS-style sales tracking, expiration monitoring, role-based access control, and AI-generated business recommendations into one practical store management workflow.
+
+The project is designed to demonstrate realistic retail domain knowledge together with a modern TypeScript stack: Next.js, React, NestJS, PostgreSQL, Prisma, and OpenAI API integration with a local fallback mode.
+
 ## Why This Project
 
 SmartDepanneur AI is designed around a realistic Canadian convenience store workflow instead of a generic demo app. It combines retail operations experience with a modern full-stack architecture, making it suitable for a portfolio, resume, or interview walkthrough.
