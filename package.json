@@ -1,9 +1,26 @@
 {
-  "name": "depanneur-demo",
+  "name": "smartdepanneur-ai",
   "private": true,
-  "version": "0.1.0",
+  "version": "1.0.0",
+  "description": "AI-powered convenience store management platform for depanneur inventory, sales, restocking, expiration tracking, and business insights.",
   "scripts": {
     "dev:backend": "npm run start:dev --prefix backend",
     "dev:frontend": "npm run dev --prefix frontend"
-  }
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/YuJieMichael/smartDepanneur.git"
+  },
+  "keywords": [
+    "nextjs",
+    "nestjs",
+    "postgresql",
+    "prisma",
+    "inventory",
+    "pos",
+    "ai",
+    "depanneur"
+  ],
+  "author": "YuJie Michael",
+  "license": "MIT"
 }
