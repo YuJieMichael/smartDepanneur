@@ -68,7 +68,6 @@ const zh: Translations = {
   },
   users: {
     ...en.users,
-    id: 'ID',
     email: '邮箱',
     roles: '角色',
     created_at: '创建时间',
@@ -101,8 +100,21 @@ const zh: Translations = {
   },
   home: {
     ...en.home,
+    applicant_title: '欢迎',
+    applicant_description: '你当前以普通用户身份登录。',
     owner_title: '仪表盘',
-    owner_description: '欢迎使用 SmartDepanneur。请选择一个模块开始操作。',
+    owner_description: '欢迎使用 SmartDepanneur，请从菜单选择模块开始操作。',
+    edit_template: '编辑模板',
+    create_post: '新建发布',
+    my_posts_title: '我的发布',
+    search_my_posts: '按标题搜索',
+    total_posts: '共 {count} 条发布',
+    post_title: '标题',
+    post_state: '状态',
+    post_posted_at: '发布时间',
+    post_created_at: '创建时间',
+    post_action: '操作',
+    delete_post_confirm: '确定要删除这条发布吗？',
   },
   tour: {
     ...en.tour,
@@ -110,6 +122,10 @@ const zh: Translations = {
     prev: '上一步',
     next: '下一步',
     finish: '完成',
+    nav_lang: '在英文、法文和中文之间切换。',
+    login_tabs: '在登录和注册之间切换。',
+    login_form: '输入邮箱和密码登录，也可以使用演示账号快速进入。',
+    login_roles: '注册时可以选择店主、收银员或库存人员等角色。',
   },
   products: {
     ...en.products,
@@ -153,40 +169,6 @@ const zh: Translations = {
     ...en.help,
     title: 'SmartDepanneur 文档',
     btn: '帮助',
-    pages: [
-      {
-        title: '1. 概览',
-        content: 'SmartDepanneur AI 是一个面向便利店 / dépanneur 的全栈管理系统，使用 Next.js、React、NestJS、PostgreSQL 和 Prisma 构建。\n\n它支持真实门店流程：商品库存、分类、供应商、库存流水、销售、低库存提醒、过期提醒、仪表盘和 AI 业务分析。\n\n系统适合店主、收银员和库存人员使用，帮助减少纸质盘点和人工判断。',
-      },
-      {
-        title: '2. 登录与角色',
-        content: '用户通过邮箱和密码登录，后端使用 JWT 保护接口。\n\n角色权限包括：\n\n- Admin / Store Owner：管理用户、角色、商品、供应商、报表和 AI 分析。\n- Cashier：创建销售订单，查看商品。\n- Inventory Staff：更新库存、检查过期商品、查看补货需求。\n\n权限通过角色分组，让不同员工只看到和自己工作相关的功能。',
-      },
-      {
-        title: '3. 商品与库存',
-        content: '商品可以覆盖饮料、零食、香烟、彩票、OTC 药品、日用品等便利店分类。\n\n每个商品可记录名称、条形码、SKU、分类、供应商、单位、当前库存、最低库存、进货价、售价、启用状态和过期日期。\n\n低库存商品会被高亮，方便员工优先补货。',
-      },
-      {
-        title: '4. 销售与仪表盘',
-        content: '销售模块类似轻量 POS：添加商品到购物车，计算小计、税费、总价、支付方式和预估利润。\n\n完成销售后，系统会自动扣减库存并记录库存流水。\n\n仪表盘汇总今日销售、收入、利润、低库存、即将过期商品和热销商品。',
-      },
-      {
-        title: '5. AI 分析',
-        content: 'AI Insights 页面可以把门店数据转换成自然语言建议。\n\n店主可以问：“今天应该补什么货？”、“哪些商品卖得最好？”、“哪些商品卖不动？”\n\n如果配置了 OPENAI_API_KEY，系统会调用 OpenAI API；没有 key 时，会使用本地规则分析作为 fallback。',
-      },
-      {
-        title: '6. 管理模块',
-        content: '系统支持基于角色的访问控制。流程是：权限代码 -> 角色 -> 用户。\n\n管理员可以管理用户、角色、权限和字典项。商品、库存、销售等操作也可以通过权限控制。',
-      },
-      {
-        title: '7. 供应商与审计',
-        content: '供应商模块保存供应商名称、联系人、电话、邮箱和备注，用于商品和补货流程。\n\n审计记录会保存关键的创建、修改和删除操作，方便店主追踪谁在什么时候修改了什么。',
-      },
-      {
-        title: '8. 导航',
-        content: '左侧菜单提供 Dashboard、Sales、Products、Categories、Suppliers、Inventory、AI Insights 和管理工具入口。\n\n顶部语言切换支持英文、法文和中文。',
-      },
-    ],
   },
 };
 

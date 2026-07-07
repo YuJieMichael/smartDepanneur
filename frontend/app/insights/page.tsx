@@ -17,7 +17,7 @@ import { useI18nStore } from '@/lib/i18n';
 const suggestedQuestions = [
   'What should I restock today?',
   '今天应该补什么货？',
-  'Que dois-je réapprovisionner aujourd’hui ?',
+  "Que dois-je reapprovisionner aujourd'hui ?",
   'Show me top sellers',
   '哪些商品卖得最好？',
   'Quels produits se vendent le mieux ?',
@@ -26,10 +26,96 @@ const suggestedQuestions = [
   'Quels produits se vendent mal ?',
 ];
 
+const labels = {
+  en: {
+    title: 'AI Insights',
+    askTitle: 'Ask AI',
+    placeholder: 'Ask in English, French, or Chinese, e.g. What should I restock today?',
+    ask: 'Ask',
+    error: 'Unable to get an answer. Please try again.',
+    local: 'Local fallback',
+    product: 'Product',
+    urgency: 'Urgency',
+    stock: 'Stock',
+    sold7d: 'Sold (7d)',
+    suggestOrder: 'Suggest Order',
+    estCost: 'Est. Cost',
+    supplier: 'Supplier',
+    category: 'Category',
+    totalSold: 'Total Sold',
+    revenue: 'Revenue',
+    inStock: 'In Stock',
+    stockValue: 'Stock Value',
+    expires: 'Expires',
+    reorderTitle: 'Reorder Suggestions',
+    topTitle: 'Top Sellers',
+    slowTitle: 'Slow Movers (No Sales in 30 Days)',
+    refresh: 'Refresh',
+    loadReorder: 'Load Reorder Suggestions',
+    loadTop: 'Load Top Sellers',
+    loadSlow: 'Load Slow Movers',
+  },
+  fr: {
+    title: 'Analyses IA',
+    askTitle: "Demander a l'IA",
+    placeholder: 'Posez une question en francais, anglais ou chinois',
+    ask: 'Demander',
+    error: 'Impossible d’obtenir une reponse. Veuillez reessayer.',
+    local: 'Analyse locale',
+    product: 'Produit',
+    urgency: 'Urgence',
+    stock: 'Stock',
+    sold7d: 'Vendus (7 j)',
+    suggestOrder: 'Commande suggeree',
+    estCost: 'Cout estime',
+    supplier: 'Fournisseur',
+    category: 'Categorie',
+    totalSold: 'Total vendu',
+    revenue: 'Revenus',
+    inStock: 'En stock',
+    stockValue: 'Valeur du stock',
+    expires: 'Expire le',
+    reorderTitle: 'Suggestions de reapprovisionnement',
+    topTitle: 'Meilleures ventes',
+    slowTitle: 'Produits lents (aucune vente en 30 jours)',
+    refresh: 'Actualiser',
+    loadReorder: 'Charger les suggestions',
+    loadTop: 'Charger les meilleures ventes',
+    loadSlow: 'Charger les produits lents',
+  },
+  zh: {
+    title: 'AI 分析',
+    askTitle: '询问 AI',
+    placeholder: '可以用中文、英文或法语提问，例如：今天应该补什么货？',
+    ask: '询问',
+    error: '暂时无法获取回答，请稍后重试。',
+    local: '本地分析',
+    product: '商品',
+    urgency: '紧急程度',
+    stock: '库存',
+    sold7d: '7 天销量',
+    suggestOrder: '建议补货',
+    estCost: '预计成本',
+    supplier: '供应商',
+    category: '分类',
+    totalSold: '总销量',
+    revenue: '收入',
+    inStock: '库存',
+    stockValue: '库存价值',
+    expires: '过期日期',
+    reorderTitle: '补货建议',
+    topTitle: '热销商品',
+    slowTitle: '滞销商品（30 天无销售）',
+    refresh: '刷新',
+    loadReorder: '加载补货建议',
+    loadTop: '加载热销商品',
+    loadSlow: '加载滞销商品',
+  },
+};
+
 export default function InsightsPage() {
   const locale = useI18nStore((state) => state.locale);
-  const isZh = locale === 'zh';
-  const isFr = locale === 'fr';
+  const text = labels[locale];
   const [reorderData, setReorderData] = useState<{ suggestions: ReorderSuggestion[]; summary: string } | null>(null);
   const [topSellers, setTopSellers] = useState<TopSeller[] | null>(null);
   const [slowMovers, setSlowMovers] = useState<{ slowMovers: SlowMover[]; message: string } | null>(null);
@@ -78,7 +164,7 @@ export default function InsightsPage() {
       setAnswer(result.answer);
       setProvider(result.provider);
     } catch {
-      setAnswer(isZh ? '暂时无法获取回答，请稍后重试。' : isFr ? 'Impossible d’obtenir une réponse. Veuillez réessayer.' : 'Unable to get an answer. Please try again.');
+      setAnswer(text.error);
       setProvider('');
     } finally {
       setLoadingAsk(false);
@@ -88,33 +174,33 @@ export default function InsightsPage() {
   const urgencyColor = { critical: 'red', high: 'orange', medium: 'gold' } as const;
 
   const reorderColumns = [
-    { title: isZh ? '商品' : isFr ? 'Produit' : 'Product', dataIndex: 'productName', key: 'name' },
+    { title: text.product, dataIndex: 'productName', key: 'name' },
     {
-      title: isZh ? '紧急程度' : isFr ? 'Urgence' : 'Urgency',
+      title: text.urgency,
       dataIndex: 'urgency',
       key: 'urgency',
       render: (value: ReorderSuggestion['urgency']) => <Tag color={urgencyColor[value]}>{value.toUpperCase()}</Tag>,
     },
     {
-      title: isZh ? '库存' : isFr ? 'Stock' : 'Stock',
+      title: text.stock,
       key: 'stock',
       render: (_: unknown, row: ReorderSuggestion) => `${row.currentStock}/${row.minStock}`,
     },
-    { title: isZh ? '7 天销量' : isFr ? 'Vendus (7 j)' : 'Sold (7d)', dataIndex: 'soldLast7Days', key: 'sold' },
+    { title: text.sold7d, dataIndex: 'soldLast7Days', key: 'sold' },
     {
-      title: isZh ? '建议补货' : isFr ? 'Commande suggérée' : 'Suggest Order',
+      title: text.suggestOrder,
       dataIndex: 'suggestedReorderQty',
       key: 'qty',
       render: (value: number, row: ReorderSuggestion) => `${value} ${row.unit}`,
     },
     {
-      title: isZh ? '预估成本' : isFr ? 'Coût estimé' : 'Est. Cost',
+      title: text.estCost,
       dataIndex: 'estimatedCost',
       key: 'cost',
       render: (value: string) => `$${parseFloat(value).toFixed(2)}`,
     },
     {
-      title: isZh ? '供应商' : isFr ? 'Fournisseur' : 'Supplier',
+      title: text.supplier,
       key: 'supplier',
       render: (_: unknown, row: ReorderSuggestion) => row.supplier?.name ?? '-',
     },
@@ -122,38 +208,38 @@ export default function InsightsPage() {
 
   const topColumns = [
     { title: '#', key: 'rank', render: (_: unknown, __: unknown, index: number) => index + 1 },
-    { title: isZh ? '商品' : isFr ? 'Produit' : 'Product', dataIndex: 'productName', key: 'name' },
+    { title: text.product, dataIndex: 'productName', key: 'name' },
     {
-      title: isZh ? '分类' : isFr ? 'Catégorie' : 'Category',
+      title: text.category,
       key: 'category',
       render: (_: unknown, row: TopSeller) => row.category?.name ?? '-',
     },
-    { title: isZh ? '总销量' : isFr ? 'Total vendu' : 'Total Sold', dataIndex: 'totalSold', key: 'sold' },
+    { title: text.totalSold, dataIndex: 'totalSold', key: 'sold' },
     {
-      title: isZh ? '收入' : isFr ? 'Revenus' : 'Revenue',
+      title: text.revenue,
       dataIndex: 'totalRevenue',
       key: 'revenue',
       render: (value: string) => `$${parseFloat(value).toFixed(2)}`,
     },
-    { title: isZh ? '库存' : isFr ? 'En stock' : 'In Stock', dataIndex: 'currentStock', key: 'stock' },
+    { title: text.inStock, dataIndex: 'currentStock', key: 'stock' },
   ];
 
   const slowColumns = [
-    { title: isZh ? '商品' : isFr ? 'Produit' : 'Product', dataIndex: 'name', key: 'name' },
-    { title: isZh ? '库存' : isFr ? 'En stock' : 'In Stock', dataIndex: 'currentStock', key: 'stock' },
+    { title: text.product, dataIndex: 'name', key: 'name' },
+    { title: text.inStock, dataIndex: 'currentStock', key: 'stock' },
     {
-      title: isZh ? '库存价值' : isFr ? 'Valeur du stock' : 'Stock Value',
+      title: text.stockValue,
       dataIndex: 'stockValue',
       key: 'value',
       render: (value: string) => `$${parseFloat(value).toFixed(2)}`,
     },
     {
-      title: isZh ? '分类' : isFr ? 'Catégorie' : 'Category',
+      title: text.category,
       key: 'category',
       render: (_: unknown, row: SlowMover) => row.category?.name ?? '-',
     },
     {
-      title: isZh ? '过期日期' : isFr ? 'Expire le' : 'Expires',
+      title: text.expires,
       dataIndex: 'expirationDate',
       key: 'expiration',
       render: (value: string | null) => (value ? new Date(value).toLocaleDateString() : '-'),
@@ -164,20 +250,20 @@ export default function InsightsPage() {
     <div style={{ padding: 24 }}>
       <h2 style={{ marginBottom: 20, fontSize: 20, fontWeight: 700 }}>
         <BulbOutlined style={{ marginRight: 8 }} />
-        {isZh ? 'AI 分析' : isFr ? 'Analyses IA' : 'AI Insights'}
+        {text.title}
       </h2>
 
-      <Card title={isZh ? '询问 AI' : isFr ? 'Demander à l’IA' : 'Ask AI'} style={{ marginBottom: 24 }}>
+      <Card title={text.askTitle} style={{ marginBottom: 24 }}>
         <div style={{ display: 'flex', gap: 8, marginBottom: 12 }}>
           <Input
             value={question}
             onChange={(event) => setQuestion(event.target.value)}
-            placeholder={isZh ? '可以用中文提问，例如：今天应该补什么货？' : isFr ? 'Posez une question en français, anglais ou chinois' : 'Ask in English, French, or Chinese, e.g. 今天应该补什么货？'}
+            placeholder={text.placeholder}
             onPressEnter={() => handleAsk()}
             style={{ flex: 1 }}
           />
           <Button type="primary" icon={<SendOutlined />} loading={loadingAsk} onClick={() => handleAsk()}>
-            {isZh ? '询问' : isFr ? 'Demander' : 'Ask'}
+            {text.ask}
           </Button>
         </div>
         <Space wrap style={{ marginBottom: answer ? 12 : 0 }}>
@@ -194,7 +280,7 @@ export default function InsightsPage() {
               <>
                 {provider && (
                   <Tag color={provider === 'openai' ? 'green' : 'gold'} style={{ marginBottom: 8 }}>
-                    {provider === 'openai' ? 'OpenAI API' : (isZh ? '本地分析' : isFr ? 'Analyse locale' : 'Local fallback')}
+                    {provider === 'openai' ? 'OpenAI API' : text.local}
                   </Tag>
                 )}
                 <pre style={{ whiteSpace: 'pre-wrap', fontFamily: 'inherit', margin: 0 }}>{answer}</pre>
@@ -207,8 +293,12 @@ export default function InsightsPage() {
       <Row gutter={[16, 16]}>
         <Col xs={24}>
           <Card
-            title={isZh ? '补货建议' : isFr ? 'Suggestions de réapprovisionnement' : 'Reorder Suggestions'}
-            extra={<Button size="small" onClick={loadReorder} loading={loadingReorder}>{isZh ? '刷新' : isFr ? 'Actualiser' : 'Refresh'}</Button>}
+            title={text.reorderTitle}
+            extra={
+              <Button size="small" onClick={loadReorder} loading={loadingReorder}>
+                {text.refresh}
+              </Button>
+            }
           >
             {reorderData ? (
               <>
@@ -228,25 +318,40 @@ export default function InsightsPage() {
                 )}
               </>
             ) : (
-              <Button onClick={loadReorder} loading={loadingReorder}>{isZh ? '加载补货建议' : isFr ? 'Charger les suggestions' : 'Load Reorder Suggestions'}</Button>
-            )}
-          </Card>
-        </Col>
-
-        <Col xs={24} md={12}>
-          <Card title={isZh ? '热销商品' : isFr ? 'Meilleures ventes' : 'Top Sellers'} extra={<Button size="small" onClick={loadTop} loading={loadingTop}>{isZh ? '刷新' : isFr ? 'Actualiser' : 'Refresh'}</Button>}>
-            {topSellers ? (
-              <Table size="small" dataSource={topSellers} columns={topColumns} rowKey="productId" pagination={false} />
-            ) : (
-              <Button onClick={loadTop} loading={loadingTop}>{isZh ? '加载热销商品' : isFr ? 'Charger les meilleures ventes' : 'Load Top Sellers'}</Button>
+              <Button onClick={loadReorder} loading={loadingReorder}>
+                {text.loadReorder}
+              </Button>
             )}
           </Card>
         </Col>
 
         <Col xs={24} md={12}>
           <Card
-            title={isZh ? '滞销商品（30 天无销售）' : isFr ? 'Produits lents (aucune vente en 30 jours)' : 'Slow Movers (No Sales in 30 Days)'}
-            extra={<Button size="small" onClick={loadSlow} loading={loadingSlow}>{isZh ? '刷新' : isFr ? 'Actualiser' : 'Refresh'}</Button>}
+            title={text.topTitle}
+            extra={
+              <Button size="small" onClick={loadTop} loading={loadingTop}>
+                {text.refresh}
+              </Button>
+            }
+          >
+            {topSellers ? (
+              <Table size="small" dataSource={topSellers} columns={topColumns} rowKey="productId" pagination={false} />
+            ) : (
+              <Button onClick={loadTop} loading={loadingTop}>
+                {text.loadTop}
+              </Button>
+            )}
+          </Card>
+        </Col>
+
+        <Col xs={24} md={12}>
+          <Card
+            title={text.slowTitle}
+            extra={
+              <Button size="small" onClick={loadSlow} loading={loadingSlow}>
+                {text.refresh}
+              </Button>
+            }
           >
             {slowMovers ? (
               <>
@@ -256,11 +361,19 @@ export default function InsightsPage() {
                   style={{ marginBottom: 12 }}
                 />
                 {slowMovers.slowMovers.length > 0 && (
-                  <Table size="small" dataSource={slowMovers.slowMovers} columns={slowColumns} rowKey="id" pagination={false} />
+                  <Table
+                    size="small"
+                    dataSource={slowMovers.slowMovers}
+                    columns={slowColumns}
+                    rowKey="id"
+                    pagination={false}
+                  />
                 )}
               </>
             ) : (
-              <Button onClick={loadSlow} loading={loadingSlow}>{isZh ? '加载滞销商品' : isFr ? 'Charger les produits lents' : 'Load Slow Movers'}</Button>
+              <Button onClick={loadSlow} loading={loadingSlow}>
+                {text.loadSlow}
+              </Button>
             )}
           </Card>
         </Col>

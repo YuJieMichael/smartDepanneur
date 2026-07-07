@@ -2,11 +2,17 @@
 
 import { useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { Form, Input, Button, Tabs, Checkbox, App, Tour } from 'antd';
-import { apiLogin, apiRegister, apiCheckEmailExists, fetchCurrentUser } from '@/api/auth';
+import { App, Button, Checkbox, Form, Input, Space, Tabs, Tour, Typography } from 'antd';
+import { apiCheckEmailExists, apiLogin, apiRegister, fetchCurrentUser } from '@/api/auth';
 import { useT } from '@/lib/i18n';
 
 const TOUR_KEY = 'smartdepanneur_tour_seen_login';
+
+const demoAccounts = [
+  { label: 'Store Owner', email: 'owner@smartdepanneur.local', password: '123456' },
+  { label: 'Cashier', email: 'cashier@smartdepanneur.local', password: '123456' },
+  { label: 'Inventory', email: 'inventory@smartdepanneur.local', password: '123456' },
+];
 
 export interface RoleWithPermissions {
   role: string;
@@ -23,6 +29,7 @@ export default function LoginForm({ rolesWithPermissions, isLoadingRoles = false
   const router = useRouter();
   const t = useT();
   const { message } = App.useApp();
+  const [signInFormInstance] = Form.useForm<{ email: string; password: string }>();
   const [loading, setLoading] = useState(false);
   const [activeKey, setActiveKey] = useState('signin');
   const emailCheckTimer = useRef<ReturnType<typeof setTimeout>>(undefined);
@@ -35,7 +42,6 @@ export default function LoginForm({ rolesWithPermissions, isLoadingRoles = false
       return () => clearTimeout(timer);
     }
   }, []);
-
 
   async function onSignIn(values: { email: string; password: string }) {
     setLoading(true);
@@ -57,7 +63,7 @@ export default function LoginForm({ rolesWithPermissions, isLoadingRoles = false
     setLoading(true);
     try {
       await apiRegister(values.email, values.password, values.roles ?? []);
-      message.success(t.auth.register_success + ', 请登录');
+      message.success(t.auth.register_success);
       setActiveKey('signin');
     } catch {
       message.error(t.auth.register_failed);
@@ -67,7 +73,7 @@ export default function LoginForm({ rolesWithPermissions, isLoadingRoles = false
   }
 
   const signInForm = (
-    <Form layout="vertical" onFinish={onSignIn} autoComplete="off">
+    <Form form={signInFormInstance} layout="vertical" onFinish={onSignIn} autoComplete="off">
       <Form.Item
         label={t.common.email}
         name="email"
@@ -90,6 +96,26 @@ export default function LoginForm({ rolesWithPermissions, isLoadingRoles = false
           {t.auth.login_button}
         </Button>
       </Form.Item>
+      <div style={{ marginTop: 16 }}>
+        <Typography.Text type="secondary" style={{ display: 'block', marginBottom: 8, fontSize: 12 }}>
+          Demo accounts
+        </Typography.Text>
+        <Space wrap>
+          {demoAccounts.map((account) => (
+            <Button
+              key={account.email}
+              size="small"
+              loading={loading}
+              onClick={() => {
+                signInFormInstance.setFieldsValue(account);
+                onSignIn(account);
+              }}
+            >
+              {account.label}
+            </Button>
+          ))}
+        </Space>
+      </div>
     </Form>
   );
 
@@ -112,7 +138,9 @@ export default function LoginForm({ rolesWithPermissions, isLoadingRoles = false
                     const { exists } = await apiCheckEmailExists(value);
                     if (exists) reject(new Error(t.auth.email_already_exists));
                     else resolve();
-                  } catch { resolve(); }
+                  } catch {
+                    resolve();
+                  }
                 }, 500);
               });
             },
@@ -157,7 +185,7 @@ export default function LoginForm({ rolesWithPermissions, isLoadingRoles = false
               value: role,
             }))}
           />
-          {rolesError && <div style={{ color: '#ff4d4f', marginTop: '8px', fontSize: '12px' }}>{rolesError}</div>}
+          {rolesError && <div style={{ color: '#ff4d4f', marginTop: 8, fontSize: 12 }}>{rolesError}</div>}
         </div>
       </Form.Item>
       <Form.Item className="mb-0 mt-6">

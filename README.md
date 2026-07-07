@@ -240,6 +240,57 @@ OPENAI_MODEL="gpt-4o-mini"
 
 If `OPENAI_API_KEY` is missing, SmartDepanneur AI still works with a local fallback that analyzes inventory and sales data deterministically. The AI response shows either `OpenAI API` or `Local fallback` in the UI.
 
+## Production Deployment
+
+Recommended deployment setup:
+
+- Frontend: Vercel
+- Backend: Railway, Render, or Fly.io
+- Database: Supabase, Neon, Railway Postgres, or another managed PostgreSQL provider
+- AI: OpenAI API key configured as a backend environment variable
+
+Frontend environment variables:
+
+```bash
+NEXT_PUBLIC_API_URL="https://your-backend-domain.com"
+```
+
+Backend environment variables:
+
+```bash
+DATABASE_URL="postgresql://user:password@host:5432/database"
+PORT=3101
+FRONTEND_URL="https://your-frontend-domain.com"
+JWT_SECRET="replace_with_a_strong_secret"
+NODE_ENV="production"
+OPENAI_API_KEY="your_api_key_here"
+OPENAI_MODEL="gpt-4o-mini"
+```
+
+Before publishing, run:
+
+```bash
+cd backend
+npm run build
+```
+
+```bash
+cd frontend
+npm run build
+```
+
+This repository also includes a GitHub Actions workflow at `.github/workflows/build.yml` that builds both the frontend and backend on pushes and pull requests to `main`.
+
+## Demo UX
+
+The login page includes one-click demo buttons for:
+
+- Store Owner
+- Cashier
+- Inventory Staff
+
+These accounts are created by `backend/prisma/seed-test-data.mjs` and are useful for interviews, portfolio demos, and quick production smoke tests.
+
 ## Multilingual Support
 
 The UI supports:

@@ -59,9 +59,7 @@ export class InsightsService {
       },
       _sum: { quantity: true },
     });
-    const velocityMap = new Map(
-      salesData.map((row) => [row.productId, row._sum?.quantity ?? 0]),
-    );
+    const velocityMap = new Map(salesData.map((row) => [row.productId, row._sum?.quantity ?? 0]));
 
     const suggestions = lowStockProducts.map((product) => {
       const soldLast7Days = velocityMap.get(product.id) ?? 0;
@@ -72,11 +70,7 @@ export class InsightsService {
       );
 
       const urgency: 'critical' | 'high' | 'medium' =
-        product.currentStock === 0
-          ? 'critical'
-          : soldLast7Days > 0
-            ? 'high'
-            : 'medium';
+        product.currentStock === 0 ? 'critical' : soldLast7Days > 0 ? 'high' : 'medium';
 
       const reason =
         product.currentStock === 0
@@ -208,7 +202,11 @@ export class InsightsService {
       data: {
         type: answer.type,
         prompt: question,
-        result: `[${answer.provider}] ${answer.result}`,
+        result: JSON.stringify({
+          provider: answer.provider,
+          type: answer.type,
+          answer: answer.result,
+        }),
         createdBy: { connect: { id: operator.id } },
       },
     });
@@ -243,9 +241,7 @@ export class InsightsService {
           'Use only the provided store data. Give concise, practical recommendations with product names, reasons, and next actions. ' +
           'If data is insufficient, say what is missing. Do not invent products or sales. ' +
           'Answer in the same language as the owner question. If the owner asks in Chinese, answer in clear Simplified Chinese. If the owner asks in French, answer in clear Quebec-friendly French.',
-        input:
-          `Store data JSON:\n${JSON.stringify(context, null, 2)}\n\n` +
-          `Owner question: ${question}`,
+        input: `Store data JSON:\n${JSON.stringify(context, null, 2)}\n\nOwner question: ${question}`,
       }),
     });
 
@@ -311,10 +307,7 @@ export class InsightsService {
       }),
     ]);
 
-    const todayRevenue = todaySales.reduce(
-      (sum, sale) => sum.plus(sale.total),
-      new Prisma.Decimal(0),
-    );
+    const todayRevenue = todaySales.reduce((sum, sale) => sum.plus(sale.total), new Prisma.Decimal(0));
     const todayProfit = todaySales.reduce(
       (sum, sale) => sum.plus(sale.profitEstimate ?? 0),
       new Prisma.Decimal(0),
@@ -337,111 +330,129 @@ export class InsightsService {
   private async getLocalInsightAnswer(question: string): Promise<InsightAnswer> {
     const normalizedQuestion = question.toLowerCase();
     const answerInChinese = this.containsChinese(question);
-    let result: string;
-    let type: InsightType;
-
-    if (
+    const asksForReorder =
       normalizedQuestion.includes('restock') ||
       normalizedQuestion.includes('reorder') ||
       normalizedQuestion.includes('low') ||
       normalizedQuestion.includes('order') ||
-      normalizedQuestion.includes('补货') ||
-      normalizedQuestion.includes('进货') ||
-      normalizedQuestion.includes('库存')
-    ) {
-      type = InsightType.reorder;
-      const { suggestions, summary } = await this.getReorderSuggestions();
-      if (suggestions.length === 0) {
-        result = answerInChinese ? '所有商品都高于最低库存线，目前不需要补货。' : summary;
-      } else {
-        const lines = suggestions.slice(0, 5).map(
-          (suggestion) =>
-            answerInChinese
-              ? `- ${suggestion.productName}: 当前库存 ${suggestion.currentStock}/${suggestion.minStock}, 建议补 ${suggestion.suggestedReorderQty} ${suggestion.unit}` +
-                (suggestion.soldLast7Days > 0 ? `，过去 7 天卖出 ${suggestion.soldLast7Days} 件` : '')
-              : `- ${suggestion.productName}: stock ${suggestion.currentStock}/${suggestion.minStock}, ` +
-                `suggest ordering ${suggestion.suggestedReorderQty} ${suggestion.unit}` +
-                (suggestion.soldLast7Days > 0
-                  ? ` (sold ${suggestion.soldLast7Days} in last 7 days)`
-                  : ''),
-        );
-        result = answerInChinese
-          ? `有 ${suggestions.length} 个商品需要补货。\n\n优先补货清单：\n${lines.join('\n')}`
-          : `${summary}\n\nTop reorder priorities:\n${lines.join('\n')}`;
-      }
-    } else if (
+      question.includes('补货') ||
+      question.includes('进货') ||
+      question.includes('库存');
+    const asksForTopSellers =
       normalizedQuestion.includes('top') ||
       normalizedQuestion.includes('best') ||
       normalizedQuestion.includes('popular') ||
       normalizedQuestion.includes('sell') ||
-      normalizedQuestion.includes('热销') ||
-      normalizedQuestion.includes('卖得好') ||
-      normalizedQuestion.includes('销量')
-    ) {
-      type = InsightType.top_sellers;
-      const { topSellers } = await this.getTopSellers();
-      if (topSellers.length === 0) {
-        result = answerInChinese ? '目前还没有销售记录。' : 'No sales have been recorded yet.';
-      } else {
-        const lines = topSellers
-          .slice(0, 5)
-          .map(
-            (seller, index) =>
-              answerInChinese
-                ? `${index + 1}. ${seller.productName} - 已售 ${seller.totalSold} 件，收入 $${parseFloat(String(seller.totalRevenue)).toFixed(2)}`
-                : `${index + 1}. ${seller.productName} - ${seller.totalSold} units sold, ` +
-                  `$${parseFloat(String(seller.totalRevenue)).toFixed(2)} revenue`,
-          );
-        result = answerInChinese ? `热销商品：\n${lines.join('\n')}` : `Top selling products:\n${lines.join('\n')}`;
-      }
-    } else if (
+      question.includes('热销') ||
+      question.includes('卖得最好') ||
+      question.includes('销量');
+    const asksForSlowMovers =
       normalizedQuestion.includes('slow') ||
       normalizedQuestion.includes('not selling') ||
       normalizedQuestion.includes('dead') ||
-      normalizedQuestion.includes('滞销') ||
-      normalizedQuestion.includes('卖不动') ||
-      normalizedQuestion.includes('不好卖')
-    ) {
-      type = InsightType.slow_movers;
-      const { slowMovers, message } = await this.getSlowMovers();
-      if (slowMovers.length === 0) {
-        result = answerInChinese ? '所有在售商品最近都有销售记录。' : message;
-      } else {
-        const lines = slowMovers
-          .slice(0, 5)
-          .map((product) =>
-            answerInChinese
-              ? `- ${product.name}: 当前库存 ${product.currentStock} 件，过去 30 天没有销售`
-              : `- ${product.name}: ${product.currentStock} units in stock, no sales in 30 days`,
-          );
-        result = answerInChinese
-          ? `有 ${slowMovers.length} 个商品过去 30 天没有销售。\n\n${lines.join('\n')}`
-          : `${message}\n\n${lines.join('\n')}`;
+      question.includes('滞销') ||
+      question.includes('卖不动') ||
+      question.includes('不好卖');
+
+    if (asksForReorder) {
+      const { suggestions, summary } = await this.getReorderSuggestions();
+      if (suggestions.length === 0) {
+        return {
+          type: InsightType.reorder,
+          provider: 'local-fallback',
+          result: answerInChinese ? '所有商品都高于最低库存线，目前不需要补货。' : summary,
+        };
       }
-    } else {
-      type = InsightType.sales_summary;
-      const todayStart = new Date();
-      todayStart.setUTCHours(0, 0, 0, 0);
-      const todayEnd = new Date(todayStart.getTime() + 86400000);
 
-      const [productCount, todaySales, lowCount] = await this.prisma.$transaction([
-        this.prisma.product.count({ where: { isActive: true } }),
-        this.prisma.sale.count({ where: { createdAt: { gte: todayStart, lt: todayEnd } } }),
-        this.prisma.product.count({
-          where: {
-            isActive: true,
-            currentStock: { lte: this.prisma.product.fields.minStock },
-          },
-        }),
-      ]);
+      const lines = suggestions.slice(0, 5).map((suggestion) =>
+        answerInChinese
+          ? `- ${suggestion.productName}: 当前库存 ${suggestion.currentStock}/${suggestion.minStock}, 建议补 ${suggestion.suggestedReorderQty} ${suggestion.unit}${
+              suggestion.soldLast7Days > 0 ? `，过去 7 天卖出 ${suggestion.soldLast7Days} 件` : ''
+            }`
+          : `- ${suggestion.productName}: stock ${suggestion.currentStock}/${suggestion.minStock}, suggest ordering ${suggestion.suggestedReorderQty} ${suggestion.unit}${
+              suggestion.soldLast7Days > 0 ? ` (sold ${suggestion.soldLast7Days} in last 7 days)` : ''
+            }`,
+      );
 
-      result = answerInChinese
-        ? `门店概况：当前有 ${productCount} 个在售商品，今天 ${todaySales} 笔销售，${lowCount} 个商品低于或等于最低库存线。`
-        : `Store summary: ${productCount} active product(s), ${todaySales} sale(s) today, ` +
-          `${lowCount} product(s) at or below minimum stock level.`;
+      return {
+        type: InsightType.reorder,
+        provider: 'local-fallback',
+        result: answerInChinese
+          ? `有 ${suggestions.length} 个商品需要补货。\n\n优先补货清单：\n${lines.join('\n')}`
+          : `${summary}\n\nTop reorder priorities:\n${lines.join('\n')}`,
+      };
     }
 
-    return { result, type, provider: 'local-fallback' };
+    if (asksForTopSellers) {
+      const { topSellers } = await this.getTopSellers();
+      if (topSellers.length === 0) {
+        return {
+          type: InsightType.top_sellers,
+          provider: 'local-fallback',
+          result: answerInChinese ? '目前还没有销售记录。' : 'No sales have been recorded yet.',
+        };
+      }
+
+      const lines = topSellers.slice(0, 5).map((seller, index) =>
+        answerInChinese
+          ? `${index + 1}. ${seller.productName} - 已售 ${seller.totalSold} 件，收入 $${parseFloat(String(seller.totalRevenue)).toFixed(2)}`
+          : `${index + 1}. ${seller.productName} - ${seller.totalSold} units sold, $${parseFloat(String(seller.totalRevenue)).toFixed(2)} revenue`,
+      );
+
+      return {
+        type: InsightType.top_sellers,
+        provider: 'local-fallback',
+        result: answerInChinese ? `热销商品：\n${lines.join('\n')}` : `Top selling products:\n${lines.join('\n')}`,
+      };
+    }
+
+    if (asksForSlowMovers) {
+      const { slowMovers, message } = await this.getSlowMovers();
+      if (slowMovers.length === 0) {
+        return {
+          type: InsightType.slow_movers,
+          provider: 'local-fallback',
+          result: answerInChinese ? '所有在售商品最近都有销售记录。' : message,
+        };
+      }
+
+      const lines = slowMovers.slice(0, 5).map((product) =>
+        answerInChinese
+          ? `- ${product.name}: 当前库存 ${product.currentStock} 件，过去 30 天没有销售`
+          : `- ${product.name}: ${product.currentStock} units in stock, no sales in 30 days`,
+      );
+
+      return {
+        type: InsightType.slow_movers,
+        provider: 'local-fallback',
+        result: answerInChinese
+          ? `有 ${slowMovers.length} 个商品过去 30 天没有销售。\n\n${lines.join('\n')}`
+          : `${message}\n\n${lines.join('\n')}`,
+      };
+    }
+
+    const todayStart = new Date();
+    todayStart.setUTCHours(0, 0, 0, 0);
+    const todayEnd = new Date(todayStart.getTime() + 86400000);
+
+    const [productCount, todaySales, lowCount] = await this.prisma.$transaction([
+      this.prisma.product.count({ where: { isActive: true } }),
+      this.prisma.sale.count({ where: { createdAt: { gte: todayStart, lt: todayEnd } } }),
+      this.prisma.product.count({
+        where: {
+          isActive: true,
+          currentStock: { lte: this.prisma.product.fields.minStock },
+        },
+      }),
+    ]);
+
+    return {
+      type: InsightType.sales_summary,
+      provider: 'local-fallback',
+      result: answerInChinese
+        ? `门店概况：当前有 ${productCount} 个在售商品，今天 ${todaySales} 笔销售，${lowCount} 个商品低于或等于最低库存线。`
+        : `Store summary: ${productCount} active product(s), ${todaySales} sale(s) today, ${lowCount} product(s) at or below minimum stock level.`,
+    };
   }
 
   private containsChinese(value: string) {
