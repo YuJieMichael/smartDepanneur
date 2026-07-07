@@ -1,0 +1,344 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// User 模型 — 对应数据库中的 users 表
+model User {
+  id        Int      @id @default(autoincrement())
+  email     String   @unique
+  password  String
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt     @map("updated_at")
+
+  roles     Role[]   // 多对多：一个用户可以有多个角色
+  jobPostTemplates JobPostTemplate[]
+  jobPosts  JobPost[]
+  applicantInfo ApplicantInformation?
+  applications Application[]
+  notifications Notification[]
+  products Product[]
+  inventoryMovements InventoryMovement[]
+  sales Sale[]
+  aiInsightLogs AiInsightLog[]
+
+  @@map("users")
+}
+
+// Role 模型 — 角色表
+model Role {
+  id          Int          @id @default(autoincrement())
+  name        String       @unique  // 角色名，如 "admin", "editor"
+  description String?               // 角色描述
+  createdAt   DateTime     @default(now()) @map("created_at")
+  updatedAt   DateTime     @updatedAt     @map("updated_at")
+
+  users       User[]       // 多对多：一个角色可以分配给多个用户
+  permissions Permission[] // 多对多：一个角色可以有多个权限
+
+  @@map("roles")
+}
+
+// Permission 模型 — 权限表
+model Permission {
+  id          Int      @id @default(autoincrement())
+  name        String   @unique  // 权限名，如 "user:read", "user:write"
+  description String?           // 权限描述
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt     @map("updated_at")
+
+  roles       Role[]   // 多对多：一个权限可以属于多个角色
+
+  @@map("permissions")
+}
+
+// Dictionary 模型 — 字典表
+model Dictionary {
+  id        Int      @id @default(autoincrement())
+  key       String   @unique
+  value     String[]
+  category  String?
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @default(now()) @updatedAt @map("updated_at")
+
+  @@map("dictionaries")
+}
+
+// AuditTrail 模型 — 审计日志表
+model AuditTrail {
+  id        Int      @id @default(autoincrement())
+  table     String
+  recordId  Int      @map("record_id")
+  field     String
+  oldValue  String?  @map("old_value")
+  newValue  String?  @map("new_value")
+  userId    Int      @map("user_id")
+  userEmail String   @map("user_email")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@index([table, recordId])
+  @@map("audit_trails")
+}
+
+// JobPostTemplate 模型 — 职位发布模板
+model JobPostTemplate {
+  id           Int      @id @default(autoincrement())
+  templateName String   @map("template_name")
+  fields       Json     @default("[]") // [{title, type, required}]
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt     @map("updated_at")
+
+  userId       Int      @map("user_id")
+  user         User     @relation(fields: [userId], references: [id])
+
+  @@map("job_post_templates")
+}
+
+enum JobPostState {
+  active
+  closed
+}
+
+// JobPost 模型 — 职位发布
+model JobPost {
+  id             Int          @id @default(autoincrement())
+  title          String
+  jobDescription String       @map("job_description")
+  state          JobPostState @default(active)
+  questions      Json     @default("[]") // same as template fields: [{title, type, required, options?}]
+  postedAt       DateTime @default(now()) @map("posted_at")
+  postedBy       String   @map("posted_by")
+  reviewer       String[]   @default([])
+  collector      Int[]      @default([])  // user IDs who collected/favorited this post
+  createdAt      DateTime @default(now()) @map("created_at")
+  updatedAt      DateTime @updatedAt     @map("updated_at")
+
+  userId         Int      @map("user_id")
+  user           User     @relation(fields: [userId], references: [id])
+
+  applications   Application[]
+
+  @@map("job_posts")
+}
+
+// ApplicantInformation 模型 — 申请人基本信息
+model ApplicantInformation {
+  id        Int      @id @default(autoincrement())
+  email     String
+  phone     String
+  nickname  String
+  country   String
+  state     String
+  address   String
+  postcode  String
+  resume    String   @default("") // file path or URL
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt     @map("updated_at")
+
+  userId    Int      @unique @map("user_id")
+  user      User     @relation(fields: [userId], references: [id])
+
+  @@map("applicant_information")
+}
+
+enum ApplicationState {
+  applied
+  rejected
+  reviewed
+}
+
+enum InventoryMovementType {
+  purchase
+  adjustment
+  sale
+  waste
+  expired
+  return_item
+}
+
+enum PaymentMethod {
+  cash
+  debit
+  credit
+  other
+}
+
+enum InsightType {
+  reorder
+  sales_summary
+  slow_movers
+  top_sellers
+}
+
+// Application 模型 — 职位申请
+model Application {
+  id        Int               @id @default(autoincrement())
+  answers   Json              @default("[]") // 自定义问题的回答: [{title, value}]
+  state     ApplicationState  @default(applied)
+  createdAt DateTime          @default(now()) @map("created_at")
+  updatedAt DateTime          @updatedAt     @map("updated_at")
+
+  userId    Int               @map("user_id")
+  user      User              @relation(fields: [userId], references: [id])
+
+  jobPostId Int               @map("job_post_id")
+  jobPost   JobPost           @relation(fields: [jobPostId], references: [id])
+
+  @@unique([userId, jobPostId]) // 每个用户每个职位只能申请一次
+  @@map("applications")
+}
+
+model Category {
+  id        Int      @id @default(autoincrement())
+  name      String   @unique
+  code      String?  @unique
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt     @map("updated_at")
+
+  products  Product[]
+
+  @@map("categories")
+}
+
+model Supplier {
+  id          Int      @id @default(autoincrement())
+  name        String   @unique
+  contactName String?  @map("contact_name")
+  phone       String?
+  email       String?
+  notes       String?
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt     @map("updated_at")
+
+  products    Product[]
+
+  @@map("suppliers")
+}
+
+model Product {
+  id                Int      @id @default(autoincrement())
+  name              String
+  barcode           String?  @unique
+  sku               String?  @unique
+  unit              String   @default("unit")
+  currentStock      Int      @default(0) @map("current_stock")
+  minStock          Int      @default(0) @map("min_stock")
+  costPrice         Decimal  @db.Decimal(10, 2) @map("cost_price")
+  sellingPrice      Decimal  @db.Decimal(10, 2) @map("selling_price")
+  expirationTracked Boolean  @default(false) @map("expiration_tracked")
+  expirationDate    DateTime? @map("expiration_date")
+  isActive          Boolean  @default(true) @map("is_active")
+  createdAt         DateTime @default(now()) @map("created_at")
+  updatedAt         DateTime @updatedAt     @map("updated_at")
+
+  categoryId        Int?     @map("category_id")
+  category          Category? @relation(fields: [categoryId], references: [id])
+
+  supplierId        Int?     @map("supplier_id")
+  supplier          Supplier? @relation(fields: [supplierId], references: [id])
+
+  createdById       Int?     @map("created_by_id")
+  createdBy         User?    @relation(fields: [createdById], references: [id])
+
+  inventoryMovements InventoryMovement[]
+  saleItems          SaleItem[]
+
+  @@index([name])
+  @@index([categoryId])
+  @@index([supplierId])
+  @@index([currentStock, minStock])
+  @@map("products")
+}
+
+model InventoryMovement {
+  id            Int                   @id @default(autoincrement())
+  type          InventoryMovementType
+  quantity      Int
+  unitCost      Decimal?              @db.Decimal(10, 2) @map("unit_cost")
+  reason        String?
+  referenceType String?               @map("reference_type")
+  referenceId   Int?                  @map("reference_id")
+  createdAt     DateTime              @default(now()) @map("created_at")
+
+  productId     Int                   @map("product_id")
+  product       Product               @relation(fields: [productId], references: [id])
+
+  userId        Int?                  @map("user_id")
+  user          User?                 @relation(fields: [userId], references: [id])
+
+  @@index([productId, createdAt])
+  @@index([type, createdAt])
+  @@map("inventory_movements")
+}
+
+model Sale {
+  id             Int           @id @default(autoincrement())
+  saleNumber     String        @unique @map("sale_number")
+  subtotal       Decimal       @db.Decimal(10, 2)
+  tax            Decimal       @db.Decimal(10, 2)
+  total          Decimal       @db.Decimal(10, 2)
+  profitEstimate Decimal?      @db.Decimal(10, 2) @map("profit_estimate")
+  paymentMethod  PaymentMethod @default(cash) @map("payment_method")
+  createdAt      DateTime      @default(now()) @map("created_at")
+  updatedAt      DateTime      @updatedAt     @map("updated_at")
+
+  cashierId      Int?          @map("cashier_id")
+  cashier        User?         @relation(fields: [cashierId], references: [id])
+
+  items          SaleItem[]
+
+  @@index([createdAt])
+  @@index([cashierId, createdAt])
+  @@map("sales")
+}
+
+model SaleItem {
+  id         Int      @id @default(autoincrement())
+  quantity   Int
+  unitPrice  Decimal  @db.Decimal(10, 2) @map("unit_price")
+  unitCost   Decimal? @db.Decimal(10, 2) @map("unit_cost")
+  lineTotal  Decimal  @db.Decimal(10, 2) @map("line_total")
+
+  saleId     Int      @map("sale_id")
+  sale       Sale     @relation(fields: [saleId], references: [id], onDelete: Cascade)
+
+  productId  Int      @map("product_id")
+  product    Product  @relation(fields: [productId], references: [id])
+
+  @@index([saleId])
+  @@index([productId])
+  @@map("sale_items")
+}
+
+model AiInsightLog {
+  id          Int         @id @default(autoincrement())
+  type        InsightType
+  prompt      String
+  result      String
+  createdAt   DateTime    @default(now()) @map("created_at")
+
+  createdById Int?        @map("created_by_id")
+  createdBy   User?       @relation(fields: [createdById], references: [id])
+
+  @@index([type, createdAt])
+  @@map("ai_insight_logs")
+}
+
+// Notification 模型 — 通知
+model Notification {
+  id        Int      @id @default(autoincrement())
+  message   String
+  url       String   @default("")
+  reviewed  Boolean  @default(false)
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt     @map("updated_at")
+
+  userId    Int      @map("user_id")
+  user      User     @relation(fields: [userId], references: [id])
+
+  @@map("notifications")
+}
