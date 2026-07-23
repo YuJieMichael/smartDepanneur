@@ -1,5 +1,16 @@
 # Changelog
 
+## v1.1.0 - Portfolio Hardening
+
+- Prevented concurrent sales and inventory adjustments from producing negative stock.
+- Added validated runtime configuration and removed the fallback JWT signing secret.
+- Separated production startup, database migrations, and demo data seeding.
+- Added backend tests for health, configuration, sales, inventory, and AI insights.
+- Added complete frontend/backend Docker images and a full local Compose stack.
+- Expanded GitHub Actions to run typechecking, linting, tests, builds, and container validation.
+- Added Dependabot and architecture, AWS deployment, roadmap, and interview demo documentation.
+- Added bounded AI questions, OpenAI timeouts, and logged fallback reasons.
+
 ## v1.0.0 - SmartDepanneur AI Initial Release
 
 Initial portfolio-ready release of SmartDepanneur AI.

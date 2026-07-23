@@ -243,14 +243,31 @@ export class InventoryService {
         throw new NotFoundException(`Product ${input.productId} not found`);
       }
 
-      const newStock = product.currentStock + input.quantityDelta;
-      if (newStock < 0) {
-        throw new BadRequestException(`Insufficient stock for product ${product.name}`);
+      const stockCondition =
+        input.quantityDelta < 0
+          ? { gte: Math.abs(input.quantityDelta) }
+          : undefined;
+      const updateResult = await tx.product.updateMany({
+        where: {
+          id: product.id,
+          ...(stockCondition ? { currentStock: stockCondition } : {}),
+        },
+        data: {
+          currentStock:
+            input.quantityDelta > 0
+              ? { increment: input.quantityDelta }
+              : { decrement: Math.abs(input.quantityDelta) },
+        },
+      });
+
+      if (updateResult.count !== 1) {
+        throw new BadRequestException(
+          `Insufficient stock for product ${product.name}`,
+        );
       }
 
-      const updatedProduct = await tx.product.update({
+      const updatedProduct = await tx.product.findUniqueOrThrow({
         where: { id: product.id },
-        data: { currentStock: newStock },
         select: { id: true, name: true, currentStock: true },
       });
 
@@ -269,7 +286,7 @@ export class InventoryService {
       });
 
       return {
-        previousStock: product.currentStock,
+        previousStock: updatedProduct.currentStock - input.quantityDelta,
         product: updatedProduct,
         movement,
       };

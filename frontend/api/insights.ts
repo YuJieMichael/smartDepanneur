@@ -53,7 +53,13 @@ export function apiGetSlowMovers() {
 }
 
 export function apiAskInsight(question: string) {
-  return request<{ question: string; answer: string; type: string; provider: 'openai' | 'local-fallback' }>('/api/insights/ask', {
+  return request<{
+    question: string;
+    answer: string;
+    type: string;
+    provider: 'openai' | 'local-fallback';
+    fallbackReason: string | null;
+  }>('/api/insights/ask', {
     method: 'POST',
     body: JSON.stringify({ question }),
   });

@@ -1,5 +1,6 @@
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { InventoryMovementType, PaymentMethod, Prisma } from '@prisma/client';
+import { randomUUID } from 'node:crypto';
 import { AuditTrailService } from '../audit-trail/audit-trail.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateSaleDto, SaleItemInput } from './dto/create-sale.dto';
@@ -135,30 +136,23 @@ export class SalesService {
     const resolvedItems = await this.resolveItems(data.items);
 
     const sale = await this.prisma.$transaction(async (tx) => {
-      // Lock and validate stock for each item
+      // The conditional update is atomic, so concurrent checkouts cannot drive
+      // stock below zero even when they target the same product.
       for (const item of resolvedItems) {
-        const product = await tx.product.findUnique({
-          where: { id: item.productId },
-          select: { id: true, name: true, currentStock: true },
-        });
-
-        if (!product) {
-          throw new NotFoundException(`Product ${item.productId} not found`);
-        }
-
-        if (product.currentStock < item.quantity) {
-          throw new BadRequestException(
-            `Insufficient stock for ${product.name}: available ${product.currentStock}, requested ${item.quantity}`,
-          );
-        }
-      }
-
-      // Deduct stock for each item
-      for (const item of resolvedItems) {
-        await tx.product.update({
-          where: { id: item.productId },
+        const result = await tx.product.updateMany({
+          where: {
+            id: item.productId,
+            isActive: true,
+            currentStock: { gte: item.quantity },
+          },
           data: { currentStock: { decrement: item.quantity } },
         });
+
+        if (result.count !== 1) {
+          throw new BadRequestException(
+            `Insufficient stock for ${item.productName}`,
+          );
+        }
       }
 
       // Compute totals
@@ -273,6 +267,7 @@ export class SalesService {
 
       return {
         productId: item.productId,
+        productName: product.name,
         quantity: item.quantity,
         unitPrice,
         unitCost,
@@ -331,7 +326,7 @@ export class SalesService {
   private generateSaleNumber(): string {
     const now = new Date();
     const datePart = now.toISOString().slice(0, 10).replace(/-/g, '');
-    const timePart = now.getTime().toString().slice(-6);
-    return `SALE-${datePart}-${timePart}`;
+    const uniquePart = randomUUID().slice(0, 8).toUpperCase();
+    return `SALE-${datePart}-${uniquePart}`;
   }
 }

@@ -11,7 +11,7 @@ import type { PostField } from '@/api/job-post-template';
 import { uploadFile } from '@/lib/upload';
 import { loadStateOptions as fetchStateOptions } from '@/lib/dictionary-utils';
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3001';
+const API_URL = process.env.NEXT_PUBLIC_API_URL ?? '';
 
 const DEFAULT_FIELD_KEYS: Record<string, keyof ApplicantInformation> = {
   Email: 'email',
