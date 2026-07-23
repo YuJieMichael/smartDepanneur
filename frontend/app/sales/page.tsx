@@ -35,6 +35,7 @@ import {
 import { useI18nStore, useT } from '@/lib/i18n';
 import { globalMessage } from '@/lib/message-bridge';
 import { ApiError } from '@/lib/request';
+import { localizeStoreCategory } from '@/lib/store-category';
 
 interface CartItem {
   productId: number;
@@ -45,6 +46,8 @@ interface CartItem {
   lineTotal: number;
 }
 
+type CategoryFilter = 'all' | 'uncategorized' | `category:${number}`;
+
 const TAX_RATE = 0.14975;
 
 export default function SalesPage() {
@@ -54,6 +57,7 @@ export default function SalesPage() {
   const isFr = locale === 'fr';
   const [products, setProducts] = useState<ProductRow[]>([]);
   const [cart, setCart] = useState<CartItem[]>([]);
+  const [categoryFilter, setCategoryFilter] = useState<CategoryFilter>('all');
   const [selectedProductId, setSelectedProductId] = useState<number | null>(null);
   const [quantity, setQuantity] = useState<number>(1);
   const [paymentMethod, setPaymentMethod] = useState<'cash' | 'debit' | 'credit' | 'other'>('cash');
@@ -98,6 +102,82 @@ export default function SalesPage() {
   const selectedProduct = useMemo(
     () => products.find((product) => product.id === selectedProductId) ?? null,
     [products, selectedProductId],
+  );
+
+  const categoryOptions = useMemo(() => {
+    const categoryCounts = new Map<
+      number,
+      { id: number; name: string; count: number }
+    >();
+    let uncategorizedCount = 0;
+
+    for (const product of products) {
+      if (!product.category) {
+        uncategorizedCount += 1;
+        continue;
+      }
+      const existing = categoryCounts.get(product.category.id);
+      categoryCounts.set(product.category.id, {
+        id: product.category.id,
+        name: product.category.name,
+        count: (existing?.count ?? 0) + 1,
+      });
+    }
+
+    const allLabel = isZh ? '全部分类' : isFr ? 'Toutes les catégories' : 'All categories';
+    const options: Array<{ label: string; value: CategoryFilter }> = [
+      { label: `${allLabel} (${products.length})`, value: 'all' },
+      ...[...categoryCounts.values()]
+        .sort((left, right) =>
+          localizeStoreCategory(left.name, locale).localeCompare(
+            localizeStoreCategory(right.name, locale),
+            locale === 'zh' ? 'zh-CN' : locale === 'fr' ? 'fr-CA' : 'en-CA',
+          ),
+        )
+        .map((category) => ({
+          label: `${localizeStoreCategory(category.name, locale)} (${category.count})`,
+          value: `category:${category.id}` as CategoryFilter,
+        })),
+    ];
+
+    if (uncategorizedCount > 0) {
+      options.push({
+        label: `${localizeStoreCategory('Uncategorized', locale)} (${uncategorizedCount})`,
+        value: 'uncategorized',
+      });
+    }
+
+    return options;
+  }, [isFr, isZh, locale, products]);
+
+  const filteredProducts = useMemo(() => {
+    if (categoryFilter === 'all') return products;
+    if (categoryFilter === 'uncategorized') {
+      return products.filter((product) => product.category === null);
+    }
+    const categoryId = Number(categoryFilter.replace('category:', ''));
+    return products.filter((product) => product.categoryId === categoryId);
+  }, [categoryFilter, products]);
+
+  const productSearchIndex = useMemo(
+    () =>
+      new Map(
+        products.map((product) => [
+          product.id,
+          [
+            product.name,
+            product.sku,
+            product.barcode,
+            product.category
+              ? localizeStoreCategory(product.category.name, locale)
+              : localizeStoreCategory('Uncategorized', locale),
+          ]
+            .filter(Boolean)
+            .join(' ')
+            .toLocaleLowerCase(),
+        ]),
+      ),
+    [locale, products],
   );
 
   const subtotal = cart.reduce((sum, item) => sum + item.lineTotal, 0);
@@ -450,14 +530,43 @@ export default function SalesPage() {
 
       <Card title={isZh ? '添加商品到购物车' : isFr ? 'Ajouter un article au panier' : 'Add Item to Cart'} style={{ marginBottom: 16 }}>
         <Space wrap>
+          <Select<CategoryFilter>
+            aria-label={isZh ? '商品分类' : isFr ? 'Catégorie de produit' : 'Product category'}
+            value={categoryFilter}
+            onChange={(value) => {
+              setCategoryFilter(value);
+              setSelectedProductId(null);
+              setQuantity(1);
+            }}
+            options={categoryOptions}
+            style={{ width: 220 }}
+          />
           <Select
             showSearch
-            placeholder={isZh ? '搜索商品' : isFr ? 'Rechercher un produit' : 'Search product'}
-            style={{ width: 320 }}
+            aria-label={isZh ? '选择商品' : isFr ? 'Choisir un produit' : 'Choose product'}
+            placeholder={
+              isZh
+                ? '按名称、条码或 SKU 搜索'
+                : isFr
+                  ? 'Rechercher par nom, code-barres ou UGS'
+                  : 'Search by name, barcode, or SKU'
+            }
+            style={{ width: 380 }}
             value={selectedProductId}
             onChange={setSelectedProductId}
-            optionFilterProp="label"
-            options={products.map((product) => ({
+            filterOption={(input, option) =>
+              productSearchIndex
+                .get(Number(option?.value))
+                ?.includes(input.trim().toLocaleLowerCase()) ?? false
+            }
+            notFoundContent={
+              isZh
+                ? '该分类没有匹配商品'
+                : isFr
+                  ? 'Aucun produit correspondant dans cette catégorie'
+                  : 'No matching products in this category'
+            }
+            options={filteredProducts.map((product) => ({
               label: `${product.name}${product.sku ? ` (${product.sku})` : ''} - ${isZh ? '库存' : isFr ? 'stock' : 'stock'}: ${product.currentStock}`,
               value: product.id,
               disabled: product.currentStock === 0,

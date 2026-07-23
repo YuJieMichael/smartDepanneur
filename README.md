@@ -52,6 +52,8 @@ flowchart LR
 - Stock-in, manual adjustment, waste, return, and sales movement history
 - POS-style checkout with Quebec tax, payment method, estimated profit, and
   automatic inventory deduction
+- Checkout category filtering with product counts and name, barcode, or SKU
+  search
 - Recent sale history with reason-required, auditable voids that restore stock
 - Cashier void ownership and ten-minute controls, plus Owner approval for
   cashier voids of CAD 100 or more

@@ -92,6 +92,24 @@ Key implementation:
 - `frontend/components/store/sales-trend-chart.tsx`
 - `frontend/components/store/category-performance-chart.tsx`
 
+### Faster product finding at checkout
+
+- Checkout builds its category list directly from the active product catalogue.
+- Every category displays its current product count.
+- Selecting a category limits the product picker to that category.
+- `All categories` and `Uncategorized` remain available when relevant.
+- Product search matches the product name, barcode, SKU, and localized
+  category name.
+- Changing category clears the previous product selection so an item hidden by
+  the new filter cannot be added accidentally.
+- All labels and empty states follow the selected English, French, or Chinese
+  interface language.
+
+Key implementation:
+
+- `frontend/app/sales/page.tsx`
+- `frontend/lib/store-category.ts`
+
 ### Sales history and controlled voids
 
 - Recent sales appear below checkout.
