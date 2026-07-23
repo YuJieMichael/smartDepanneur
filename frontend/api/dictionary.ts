@@ -38,7 +38,7 @@ export interface GetDictionaryListResult {
 }
 
 export async function serverGetAllDictionaries(): Promise<DictionaryItem[]> {
-  const baseUrl = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3001';
+  const baseUrl = process.env.NEXT_PUBLIC_API_URL ?? '';
   try {
     const res = await fetch(`${baseUrl}/api/dictionary`, { cache: 'no-store' });
     if (!res.ok) return [];

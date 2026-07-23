@@ -17,5 +17,46 @@ services:
       timeout: 5s
       retries: 10
 
+  backend:
+    build:
+      context: ./backend
+    container_name: smartdepanneur-backend
+    restart: unless-stopped
+    environment:
+      DATABASE_URL: postgresql://postgres:postgres@postgres:5432/depanneur
+      PORT: 3101
+      FRONTEND_URL: http://localhost:3100
+      JWT_SECRET: ${JWT_SECRET:-local-docker-demo-secret-change-before-production}
+      NODE_ENV: production
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      OPENAI_MODEL: ${OPENAI_MODEL:-gpt-4o-mini}
+    command:
+      - sh
+      - -c
+      - npm run migrate:deploy && npm run seed && npm run seed:demo && npm run start:prod
+    ports:
+      - "3101:3101"
+    volumes:
+      - smartdepanneur-uploads:/app/uploads
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  frontend:
+    build:
+      context: ./frontend
+      args:
+        API_INTERNAL_URL: http://backend:3101
+    container_name: smartdepanneur-frontend
+    restart: unless-stopped
+    environment:
+      API_INTERNAL_URL: http://backend:3101
+    ports:
+      - "3100:3100"
+    depends_on:
+      backend:
+        condition: service_healthy
+
 volumes:
   smartdepanneur-postgres-data:
+  smartdepanneur-uploads:

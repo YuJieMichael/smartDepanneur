@@ -82,7 +82,7 @@ export default function ApplicationDetailClient() {
               return (
                 <Descriptions.Item key={i} label={a.title}>
                   {val && val.startsWith('/api/upload/') ? (
-                    <a href={`${process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3001'}${val}`} download>
+                    <a href={`${process.env.NEXT_PUBLIC_API_URL ?? ''}${val}`} download>
                       {a.title}
                     </a>
                   ) : isEmail(val) ? (

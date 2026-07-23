@@ -90,7 +90,7 @@ export function apiDeletePermission(id: number | string) {
 }
 
 export async function serverGetPermissions(): Promise<PermissionOption[]> {
-  const baseUrl = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3001';
+  const baseUrl = process.env.NEXT_PUBLIC_API_URL ?? '';
   try {
     const res = await fetch(`${baseUrl}/api/permissions/all`, { cache: 'no-store' });
     if (!res.ok) return [];

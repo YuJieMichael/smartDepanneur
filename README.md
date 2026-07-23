@@ -1,337 +1,223 @@
 # SmartDepanneur AI
 
-AI-powered convenience store management platform inspired by real depanneur operations.
+AI-assisted inventory, sales, expiration, and replenishment software for
+Quebec convenience stores.
 
-This project helps store owners and staff manage products, inventory, sales, suppliers, expiration checks, restocking workflows, and AI-generated business insights from one full-stack application.
+SmartDepanneur is a full-stack portfolio project based on real depanneur
+workflows. A cashier can complete a sale, inventory is deducted atomically,
+the dashboard updates store metrics, and the insight engine turns recent
+sales and stock levels into practical reorder recommendations.
 
-## About
+## What it demonstrates
 
-SmartDepanneur AI is a portfolio-ready full-stack application based on real convenience store operations in Canada and Quebec. It combines inventory management, POS-style sales tracking, expiration monitoring, role-based access control, and AI-generated business recommendations into one practical store management workflow.
+- Real retail-domain modelling instead of generic CRUD
+- Next.js and React application architecture
+- NestJS REST APIs with JWT authentication and RBAC
+- PostgreSQL transactions through Prisma
+- Atomic stock updates that prevent negative inventory
+- OpenAI Responses API integration with a deterministic offline fallback
+- English, French, and Simplified Chinese user interfaces
+- Repeatable Docker development and production-style builds
+- Automated typechecking, linting, tests, builds, and container validation
 
-The project is designed to demonstrate realistic retail domain knowledge together with a modern TypeScript stack: Next.js, React, NestJS, PostgreSQL, Prisma, and OpenAI API integration with a local fallback mode.
+## Core workflow
 
-## Why This Project
+```mermaid
+flowchart LR
+  A["Cashier creates sale"] --> B["NestJS validates active products"]
+  B --> C["Atomic PostgreSQL stock reservation"]
+  C --> D["Sale + items + movements committed"]
+  D --> E["Dashboard metrics update"]
+  E --> F["Reorder engine recalculates demand"]
+  F --> G["OpenAI explanation or local fallback"]
+```
 
-SmartDepanneur AI is designed around a realistic Canadian convenience store workflow instead of a generic demo app. It combines retail operations experience with a modern full-stack architecture, making it suitable for a portfolio, resume, or interview walkthrough.
+## Features
 
-The app is built for common depanneur scenarios:
+### Store operations
 
-- A store owner checks today's sales, profit, low-stock items, and expiring products.
-- A cashier creates a sale and the system automatically deducts stock.
-- Inventory staff records stock-in, adjustments, waste, and expiration checks.
-- The AI assistant explains what to reorder and which products are performing poorly.
+- Product catalogue with barcode, SKU, category, supplier, unit, cost, price,
+  minimum stock, and expiration settings
+- Stock-in, manual adjustment, waste, return, and sales movement history
+- POS-style checkout with Quebec tax, payment method, estimated profit, and
+  automatic inventory deduction
+- Low-stock, out-of-stock, and expiration alerts
+- Daily revenue, profit, sale count, and top-seller dashboard
+- Audit records for important operational changes
 
-## Core Features
+### AI insights
 
-- Product inventory management for drinks, snacks, cigarettes, lottery items, OTC products, household goods, and other convenience store categories.
-- Low-stock and reorder suggestions based on current stock, minimum stock thresholds, and recent sales activity.
-- Expiration tracking for perishable products, helping staff identify expired and near-expiration items.
-- POS-style sales workflow with cart items, subtotal, tax, total, estimated profit, payment method, and automatic stock updates.
-- Dashboard for daily sales, revenue, low-stock products, active products, and top-selling products.
-- AI insights panel that turns inventory and sales data into natural-language restocking suggestions, top-seller summaries, slow-mover analysis, and owner-friendly answers.
-- Role-based access control for Admin, store owner, cashier, and inventory staff workflows.
-- Multilingual UI for English, French, and Simplified Chinese.
+- Reorder quantities derived from seven-day sales velocity and a fourteen-day
+  planning horizon
+- Top-seller and slow-mover analysis
+- English, French, and Chinese questions
+- OpenAI Responses API when `OPENAI_API_KEY` is configured
+- Deterministic local answers when the API is unavailable
+- Logged provider, model, result, and fallback reason
+- Twelve-second timeout so an AI outage does not block store operations
 
-## Main Modules
+### Security and reliability
 
-### Dashboard
+- JWT-protected store APIs
+- Role and permission management
+- Required environment validation at startup
+- No hard-coded production JWT fallback
+- Conditional database updates that prevent concurrent sales or adjustments
+  from taking stock below zero
+- Database-aware health endpoint at `/api/health`
+- Production startup is separated from migrations and demo seeding
 
-- Today's sales count
-- Today's revenue
-- Estimated profit
-- Low-stock product count
-- Products expiring soon
-- Top-selling products
-- Low-stock and expiration tables
+## Technology
 
-### Products
+| Layer | Technology |
+| --- | --- |
+| Frontend | Next.js 16, React 19, TypeScript, Ant Design, Tailwind CSS, Zustand |
+| Backend | NestJS 11, Node.js 22, Passport JWT, REST |
+| Data | PostgreSQL 16, Prisma 5 |
+| AI | OpenAI Responses API with local fallback |
+| Delivery | Docker Compose, GitHub Actions, Dependabot |
 
-- Product name, barcode, SKU, category, supplier, unit
-- Current stock and minimum stock
-- Cost price and selling price
-- Expiration tracking
-- Active / inactive product status
-- Audit history access
+## Run with Docker
 
-### Inventory
+Requirements: Docker Desktop with Docker Compose.
 
-- Stock-in workflow for supplier deliveries
-- Manual stock adjustment
-- Waste / disposal recording
-- Low-stock warning banner
-- Expiration warning banner
-- Inventory movement history
+```bash
+docker compose up --build
+```
 
-### Sales
+Open:
 
-- POS-style cart
-- Product search and quantity selection
-- Subtotal, Quebec tax, total, and estimated profit
-- Cash, debit, credit, and other payment methods
-- Automatic stock deduction after checkout
+- Application: `http://localhost:3100`
+- Backend health: `http://localhost:3101/api/health`
+- PostgreSQL: `localhost:5432`
 
-### AI Insights
+The local Compose environment applies migrations and installs idempotent demo
+data. Production containers do not seed data automatically.
 
-- Ask natural-language questions such as:
-  - `What should I restock today?`
-  - `今天应该补什么货？`
-  - `Que dois-je réapprovisionner aujourd’hui ?`
-- Uses OpenAI Responses API when `OPENAI_API_KEY` is configured.
-- Falls back to deterministic local analysis when no API key is available.
-- Shows whether the answer came from `OpenAI API` or `Local fallback`.
+To enable OpenAI-generated explanations:
 
-### Admin / RBAC
+```powershell
+$env:OPENAI_API_KEY="your-key"
+docker compose up --build
+```
 
-- User management
-- Role management
-- Permission management
-- Dictionary management
-- Audit trail for important changes
+## Run without Docker
 
-## Tech Stack
+Start PostgreSQL, then configure the backend:
 
-Frontend:
+```powershell
+Copy-Item backend/.env.example backend/.env
+```
 
-- Next.js
-- React
-- TypeScript
-- Ant Design
-- Tailwind CSS
-- Zustand
+Install, migrate, and seed:
 
-Backend:
+```powershell
+cd backend
+npm install
+npm run migrate:deploy
+npm run seed
+npm run seed:demo
+npm run start:dev
+```
 
-- NestJS
-- Node.js
-- REST APIs
-- JWT authentication
-- RBAC
-- OpenAI Responses API integration with local fallback
+In another terminal:
 
-Database and Tools:
+```powershell
+cd frontend
+npm install
+npm run dev
+```
 
-- PostgreSQL
-- Prisma
-- Docker
-- GitHub
+Default ports are frontend `3100`, backend `3101`, and PostgreSQL `5432`.
 
-## Demo Accounts
+## Demo accounts
 
-After running the seed scripts, use these accounts:
+Demo credentials exist only in seeded demo environments.
 
 | Role | Email | Password |
 | --- | --- | --- |
 | Store Owner | `owner@smartdepanneur.local` | `123456` |
 | Cashier | `cashier@smartdepanneur.local` | `123456` |
 | Inventory Staff | `inventory@smartdepanneur.local` | `123456` |
-| Admin | `admin@smartdepanneur.local` | `admin123` |
+| Administrator | `admin@smartdepanneur.local` | `admin123` |
 
-## Project Structure
+Never run `seed:demo` against a production database.
 
-- `backend`: NestJS API, Prisma schema, authentication, RBAC, products, categories, suppliers, inventory, sales, dashboard, and AI insight modules.
-- `frontend`: Next.js dashboard UI, product management, sales flow, inventory tools, supplier/category pages, admin management, and AI insights panel.
+## Quality checks
 
-## Quick Start
-
-### 1. Start PostgreSQL
-
-If you already have PostgreSQL running on `localhost:5432`, you can use it directly.
-
-Or start PostgreSQL with Docker:
-
-```bash
-docker compose up -d postgres
-```
-
-The default database connection is:
-
-```bash
-postgresql://postgres:postgres@localhost:5432/depanneur
-```
-
-### 2. Configure Backend Environment
-
-Create `backend/.env` based on `backend/.env.example`:
-
-```bash
-cd backend
-cp .env.example .env
-```
-
-On Windows PowerShell:
+Run the same checks used in CI:
 
 ```powershell
-Copy-Item .env.example .env
-```
-
-Required values:
-
-```bash
-DATABASE_URL="postgresql://postgres:postgres@localhost:5432/depanneur"
-PORT=3101
-FRONTEND_URL="http://localhost:3100"
-JWT_SECRET="change_me_for_local_demo"
-```
-
-### 3. Install Backend Dependencies
-
-Install and start the backend:
-
-```bash
-cd backend
-npm install
-npx prisma migrate deploy
-npm run seed
-node prisma/seed-test-data.mjs
-npm run start:dev
-```
-
-### 4. Install Frontend Dependencies
-
-Install and start the frontend:
-
-```bash
-cd frontend
-npm install
-npm run dev
-```
-
-Default ports:
-
-- Backend: `3101`
-- Frontend: `3100`
-
-Open the app:
-
-```bash
-http://localhost:3100
-```
-
-## Local Development Scripts
-
-From the repository root:
-
-```bash
-npm run dev:backend
-npm run dev:frontend
-```
-
-Backend:
-
-```bash
-cd backend
-npm run start:dev
-npm run build
-npm run seed
-```
-
-Frontend:
-
-```bash
-cd frontend
-npm run dev
+npm run typecheck
+npm run lint
+npm run test
 npm run build
 ```
 
-## AI Configuration
+Current backend tests cover:
 
-The AI Insights page supports English, French, and Simplified Chinese questions.
+- Required environment and secret validation
+- Database health behaviour
+- Atomic sale stock reservation
+- Negative-stock prevention for inventory movements
+- Reorder quantity calculation
+- AI local fallback and question validation
 
-Set these values in `backend/.env` to enable real OpenAI API calls:
+GitHub Actions runs backend and frontend typechecking, linting, tests and
+production builds. A final job validates Compose and builds both images.
 
-```bash
-OPENAI_API_KEY="your_api_key_here"
-OPENAI_MODEL="gpt-4o-mini"
+## Project structure
+
+```text
+.
+├── backend/
+│   ├── prisma/                 PostgreSQL schema, migrations, demo seed
+│   └── src/
+│       ├── auth/               JWT authentication
+│       ├── products/           Product catalogue
+│       ├── inventory/          Stock movements and expiration alerts
+│       ├── sales/              Transactional POS workflow
+│       ├── dashboard/          Store KPIs
+│       └── insights/           Reorder analysis and AI explanations
+├── frontend/
+│   ├── app/                    Next.js routes
+│   ├── api/                    Typed API clients
+│   ├── components/             UI and operational forms
+│   └── lib/i18n/               EN / FR / ZH translations
+├── docs/                       Architecture, AWS, demo, and roadmap
+└── docker-compose.yml          Complete local stack
 ```
 
-If `OPENAI_API_KEY` is missing, SmartDepanneur AI still works with a local fallback that analyzes inventory and sales data deterministically. The AI response shows either `OpenAI API` or `Local fallback` in the UI.
+## Documentation
 
-## Production Deployment
+- [Architecture](docs/ARCHITECTURE.md)
+- [AWS deployment](docs/DEPLOYMENT_AWS.md)
+- [Interview demo script](docs/DEMO_SCRIPT.md)
+- [Product roadmap](docs/ROADMAP.md)
 
-Recommended deployment setup:
+## Current scope
 
-- Frontend: Vercel
-- Backend: Railway, Render, or Fly.io
-- Database: Supabase, Neon, Railway Postgres, or another managed PostgreSQL provider
-- AI: OpenAI API key configured as a backend environment variable
+The portfolio release is intentionally a single-store system. Multi-store
+tenant isolation, lot-level expiration, purchase orders, POS imports, invoice
+OCR, and shelf vision are documented future increments rather than claimed as
+finished functionality.
 
-Frontend environment variables:
+## Resume summary
 
-```bash
-NEXT_PUBLIC_API_URL="https://your-backend-domain.com"
-```
+**SmartDepanneur AI — AI-Assisted Retail Inventory and Replenishment Platform**
 
-Backend environment variables:
+- Built a full-stack retail operations platform with Next.js, NestJS,
+  PostgreSQL, Prisma, and Docker for sales, inventory, suppliers, expiration
+  monitoring, audit trails, and role-based access.
+- Implemented atomic stock reservation in PostgreSQL transactions to prevent
+  concurrent checkouts and inventory adjustments from producing negative
+  stock.
+- Developed data-driven reorder recommendations from sales velocity, minimum
+  stock thresholds, and procurement cost, with OpenAI explanations and a
+  resilient deterministic fallback.
+- Automated TypeScript validation, linting, Jest tests, application builds, and
+  Docker image validation through GitHub Actions.
 
-```bash
-DATABASE_URL="postgresql://user:password@host:5432/database"
-PORT=3101
-FRONTEND_URL="https://your-frontend-domain.com"
-JWT_SECRET="replace_with_a_strong_secret"
-NODE_ENV="production"
-OPENAI_API_KEY="your_api_key_here"
-OPENAI_MODEL="gpt-4o-mini"
-```
+## License
 
-Before publishing, run:
-
-```bash
-cd backend
-npm run build
-```
-
-```bash
-cd frontend
-npm run build
-```
-
-This repository also includes a GitHub Actions workflow at `.github/workflows/build.yml` that builds both the frontend and backend on pushes and pull requests to `main`.
-
-## Demo UX
-
-The login page includes one-click demo buttons for:
-
-- Store Owner
-- Cashier
-- Inventory Staff
-
-These accounts are created by `backend/prisma/seed-test-data.mjs` and are useful for interviews, portfolio demos, and quick production smoke tests.
-
-## Multilingual Support
-
-The UI supports:
-
-- English
-- French
-- Simplified Chinese
-
-The language switcher is available in the top navigation bar. Core portfolio demo pages are localized, including Dashboard, Products, Inventory, Sales, and AI Insights.
-
-## Suggested Demo Flow
-
-1. Log in as `owner@smartdepanneur.local`.
-2. Open the Dashboard and review revenue, profit, low stock, and expiring products.
-3. Go to Products and inspect stock, prices, suppliers, and expiration status.
-4. Go to Inventory and record a stock-in or waste movement.
-5. Go to Sales and create a sale from the cart.
-6. Return to Dashboard to see the updated sales and stock data.
-7. Open AI Insights and ask:
-   - `What should I restock today?`
-   - `今天应该补什么货？`
-   - `Que dois-je réapprovisionner aujourd’hui ?`
-
-## Notes
-
-- This repository includes some legacy recruitment/admin modules from an earlier scaffold. The main portfolio experience is the SmartDepanneur store management workflow.
-- Demo data is generated by `backend/prisma/seed-test-data.mjs`.
-- Uploaded files, local `.env` files, dependencies, and build outputs are intentionally ignored by git.
-
-## Resume Summary
-
-**SmartDepanneur AI - AI-Powered Convenience Store Management Platform**
-
-- Built a full-stack convenience store management platform inspired by real depanneur operations, supporting product inventory, sales tracking, expiration monitoring, restocking workflows, and AI-generated business insights.
-- Developed responsive dashboards with Next.js, React, TypeScript, Ant Design, Tailwind CSS, and Zustand to display daily sales, estimated profit, low-stock products, top-selling items, and products approaching expiration.
-- Implemented backend modules with NestJS, PostgreSQL, Prisma, JWT authentication, and RBAC for products, categories, suppliers, users, sales, stock movements, and audit records.
-- Integrated an AI assistant that analyzes inventory and sales data to generate natural-language restocking suggestions, product performance summaries, and operational recommendations for store owners.
-- Automated stock updates after sales transactions and flagged low-stock or near-expiration products, reducing manual tracking and helping store staff make faster restocking decisions.
+MIT

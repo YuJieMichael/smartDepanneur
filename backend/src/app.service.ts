@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, ServiceUnavailableException } from '@nestjs/common';
 import { PrismaService } from './prisma/prisma.service';
 
 @Injectable()
@@ -14,11 +14,11 @@ export class AppService {
         timestamp: new Date().toISOString(),
       };
     } catch {
-      return {
+      throw new ServiceUnavailableException({
         status: 'error',
         database: 'disconnected',
         timestamp: new Date().toISOString(),
-      };
+      });
     }
   }
 }

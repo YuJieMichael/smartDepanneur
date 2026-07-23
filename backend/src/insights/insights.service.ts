@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { BadRequestException, Injectable } from '@nestjs/common';
 import { InsightType, Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 
@@ -13,6 +13,19 @@ interface InsightAnswer {
   result: string;
   type: InsightType;
   provider: InsightProvider;
+}
+
+interface OpenAiContent {
+  text?: unknown;
+}
+
+interface OpenAiOutputItem {
+  content?: unknown;
+}
+
+interface OpenAiResponsePayload {
+  output_text?: unknown;
+  output?: unknown;
 }
 
 @Injectable()
@@ -195,35 +208,55 @@ export class InsightsService {
   }
 
   async ask(question: string, operator: { id: number; email: string }) {
-    const fallback = await this.getLocalInsightAnswer(question);
-    const answer = await this.getOpenAiInsightAnswer(question, fallback.type).catch(() => fallback);
+    const normalizedQuestion = this.normalizeQuestion(question);
+    const fallback = await this.getLocalInsightAnswer(normalizedQuestion);
+    let answer = fallback;
+    let fallbackReason: string | null = process.env.OPENAI_API_KEY
+      ? null
+      : 'OPENAI_API_KEY is not configured';
+
+    if (process.env.OPENAI_API_KEY) {
+      try {
+        answer = await this.getOpenAiInsightAnswer(
+          normalizedQuestion,
+          fallback.type,
+        );
+      } catch (error) {
+        fallbackReason =
+          error instanceof Error ? error.message : 'Unknown OpenAI error';
+      }
+    }
 
     await this.prisma.aiInsightLog.create({
       data: {
         type: answer.type,
-        prompt: question,
+        prompt: normalizedQuestion,
         result: JSON.stringify({
           provider: answer.provider,
           type: answer.type,
           answer: answer.result,
+          model:
+            answer.provider === 'openai'
+              ? process.env.OPENAI_MODEL || 'gpt-4o-mini'
+              : null,
+          fallbackReason,
         }),
         createdBy: { connect: { id: operator.id } },
       },
     });
 
     return {
-      question,
+      question: normalizedQuestion,
       answer: answer.result,
       type: answer.type,
       provider: answer.provider,
+      fallbackReason,
     };
   }
 
   private async getOpenAiInsightAnswer(question: string, type: InsightType): Promise<InsightAnswer> {
     const apiKey = process.env.OPENAI_API_KEY;
-    if (!apiKey) {
-      return this.getLocalInsightAnswer(question);
-    }
+    if (!apiKey) throw new Error('OPENAI_API_KEY is not configured');
 
     const context = await this.buildAiBusinessContext();
     const model = process.env.OPENAI_MODEL || 'gpt-4o-mini';
@@ -243,13 +276,14 @@ export class InsightsService {
           'Answer in the same language as the owner question. If the owner asks in Chinese, answer in clear Simplified Chinese. If the owner asks in French, answer in clear Quebec-friendly French.',
         input: `Store data JSON:\n${JSON.stringify(context, null, 2)}\n\nOwner question: ${question}`,
       }),
+      signal: AbortSignal.timeout(12_000),
     });
 
     if (!response.ok) {
       throw new Error(`OpenAI request failed with ${response.status}`);
     }
 
-    const payload = await response.json();
+    const payload: unknown = await response.json();
     const result = this.extractOpenAiText(payload);
     if (!result) {
       throw new Error('OpenAI response did not contain text');
@@ -258,15 +292,24 @@ export class InsightsService {
     return { result, type, provider: 'openai' };
   }
 
-  private extractOpenAiText(payload: any): string {
-    if (typeof payload?.output_text === 'string') {
-      return payload.output_text.trim();
+  private extractOpenAiText(payload: unknown): string {
+    if (!this.isRecord(payload)) return '';
+
+    const typedPayload = payload as OpenAiResponsePayload;
+    if (typeof typedPayload.output_text === 'string') {
+      return typedPayload.output_text.trim();
     }
 
     const chunks: string[] = [];
-    for (const item of payload?.output ?? []) {
-      for (const content of item?.content ?? []) {
-        if (typeof content?.text === 'string') {
+    const output = Array.isArray(typedPayload.output)
+      ? (typedPayload.output as OpenAiOutputItem[])
+      : [];
+    for (const item of output) {
+      const contentItems = Array.isArray(item.content)
+        ? (item.content as OpenAiContent[])
+        : [];
+      for (const content of contentItems) {
+        if (typeof content.text === 'string') {
           chunks.push(content.text);
         }
       }
@@ -457,5 +500,22 @@ export class InsightsService {
 
   private containsChinese(value: string) {
     return /[\u3400-\u9fff]/.test(value);
+  }
+
+  private normalizeQuestion(value: string) {
+    const normalized = value?.trim();
+    if (!normalized) {
+      throw new BadRequestException('question is required');
+    }
+    if (normalized.length > 500) {
+      throw new BadRequestException(
+        'question must contain 500 characters or fewer',
+      );
+    }
+    return normalized;
+  }
+
+  private isRecord(value: unknown): value is Record<string, unknown> {
+    return typeof value === 'object' && value !== null;
   }
 }
