@@ -1,4 +1,6 @@
 import { Body, Controller, Delete, Get, Param, Patch, Post, Query, Request, UseGuards } from '@nestjs/common';
+import { PermissionGuard } from '../access-control/permission.guard';
+import { RequirePermissions } from '../access-control/require-permissions.decorator';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { CreateProductDto } from './dto/create-product.dto';
 import type { ProductSortField } from './dto/query-products.dto';
@@ -62,7 +64,8 @@ export class ProductsController {
     });
   }
 
-  @UseGuards(JwtAuthGuard)
+  @UseGuards(JwtAuthGuard, PermissionGuard)
+  @RequirePermissions('product-edit')
   @Post()
   async createProduct(
     @Body() body: CreateProductDto,
@@ -77,7 +80,8 @@ export class ProductsController {
     return this.productsService.findById(parseInt(id, 10));
   }
 
-  @UseGuards(JwtAuthGuard)
+  @UseGuards(JwtAuthGuard, PermissionGuard)
+  @RequirePermissions('product-edit')
   @Patch(':id')
   async updateProduct(
     @Param('id') id: string,
@@ -87,7 +91,8 @@ export class ProductsController {
     return this.productsService.updateProduct(parseInt(id, 10), body, req.user);
   }
 
-  @UseGuards(JwtAuthGuard)
+  @UseGuards(JwtAuthGuard, PermissionGuard)
+  @RequirePermissions('product-edit')
   @Delete(':id')
   async deleteProduct(
     @Param('id') id: string,

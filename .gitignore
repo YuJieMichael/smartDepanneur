@@ -3,7 +3,7 @@ node_modules/
 .env.*
 !.env.example
 !**/.env.example
-.next/
+.next*/
 dist/
 coverage/
 uploads/

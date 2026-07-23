@@ -1,5 +1,15 @@
 # Changelog
 
+## v1.2.0 - Multilingual Store Agent
+
+- Replaced the one-shot AI context prompt with a read-only Responses API
+  function-calling loop.
+- Added reorder, top-seller, slow-mover, and store-summary Agent tools.
+- Added an offline local Agent that uses the same business operations.
+- Made the selected `en`, `fr`, or `zh` UI locale authoritative for answers.
+- Reduced Ask suggestions from three mixed languages to the selected language.
+- Added visible tool traces and multilingual Agent tests.
+
 ## v1.1.0 - Portfolio Hardening
 
 - Prevented concurrent sales and inventory adjustments from producing negative stock.

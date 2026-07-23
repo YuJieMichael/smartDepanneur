@@ -1,4 +1,4 @@
-import { request } from '@/lib/request';
+import { request } from "@/lib/request";
 
 export interface DashboardOverview {
   products: {
@@ -34,6 +34,55 @@ export interface DashboardOverview {
   }>;
 }
 
+export interface DailyCloseoutReport {
+  date: string;
+  timeZone: string;
+  generatedAt: string;
+  saleCount: number;
+  totals: {
+    subtotal: string;
+    tax: string;
+    revenue: string;
+    grossProfit: string;
+    grossMargin: string;
+  };
+  categories: Array<{
+    categoryId: number | null;
+    categoryName: string;
+    quantity: number;
+    revenue: string;
+    grossProfit: string;
+    grossMargin: string;
+  }>;
+}
+
+export interface SalesTrendReport {
+  timeZone: string;
+  days: number;
+  points: Array<{
+    date: string;
+    saleCount: number;
+    revenue: string;
+    profit: string;
+  }>;
+  comparison: {
+    saleCountDelta: number;
+    revenueChangePercent: string | null;
+    profitChangePercent: string | null;
+  };
+}
+
 export function apiGetDashboardOverview() {
-  return request<DashboardOverview>('/api/dashboard/overview');
+  return request<DashboardOverview>("/api/dashboard/overview");
+}
+
+export function apiGetDailyCloseout(date?: string) {
+  const query = date ? `?date=${encodeURIComponent(date)}` : "";
+  return request<DailyCloseoutReport>(`/api/dashboard/daily-closeout${query}`);
+}
+
+export function apiGetSalesTrend(days = 7) {
+  return request<SalesTrendReport>(
+    `/api/dashboard/sales-trend?days=${encodeURIComponent(days)}`,
+  );
 }

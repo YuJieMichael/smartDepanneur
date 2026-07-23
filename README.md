@@ -1,6 +1,6 @@
-# SmartDepanneur AI
+# SmartDepanneur Agent
 
-AI-assisted inventory, sales, expiration, and replenishment software for
+Agent-assisted inventory, sales, expiration, and replenishment software for
 Quebec convenience stores.
 
 SmartDepanneur is a full-stack portfolio project based on real depanneur
@@ -15,7 +15,7 @@ sales and stock levels into practical reorder recommendations.
 - NestJS REST APIs with JWT authentication and RBAC
 - PostgreSQL transactions through Prisma
 - Atomic stock updates that prevent negative inventory
-- OpenAI Responses API integration with a deterministic offline fallback
+- OpenAI Responses API tool calling with a deterministic local Agent fallback
 - English, French, and Simplified Chinese user interfaces
 - Repeatable Docker development and production-style builds
 - Automated typechecking, linting, tests, builds, and container validation
@@ -29,7 +29,7 @@ flowchart LR
   C --> D["Sale + items + movements committed"]
   D --> E["Dashboard metrics update"]
   E --> F["Reorder engine recalculates demand"]
-  F --> G["OpenAI explanation or local fallback"]
+  F --> G["Store Agent selects business tools"]
 ```
 
 ## Features
@@ -45,16 +45,20 @@ flowchart LR
 - Daily revenue, profit, sale count, and top-seller dashboard
 - Audit records for important operational changes
 
-### AI insights
+### Store Agent
 
 - Reorder quantities derived from seven-day sales velocity and a fourteen-day
   planning horizon
 - Top-seller and slow-mover analysis
-- English, French, and Chinese questions
-- OpenAI Responses API when `OPENAI_API_KEY` is configured
-- Deterministic local answers when the API is unavailable
-- Logged provider, model, result, and fallback reason
-- Twelve-second timeout so an AI outage does not block store operations
+- Read-only tools for reorder suggestions, top sellers, slow movers, and store
+  summaries
+- OpenAI function calling chooses the business tools needed for each question
+- The selected UI language (`en`, `fr`, or `zh`) controls both suggested
+  questions and the answer language
+- Deterministic multilingual local Agent when the API is unavailable
+- Logged provider, model, selected language, tools used, result, and fallback
+  reason
+- Twelve-second timeout so an OpenAI outage does not block store operations
 
 ### Security and reliability
 
@@ -74,7 +78,7 @@ flowchart LR
 | Frontend | Next.js 16, React 19, TypeScript, Ant Design, Tailwind CSS, Zustand |
 | Backend | NestJS 11, Node.js 22, Passport JWT, REST |
 | Data | PostgreSQL 16, Prisma 5 |
-| AI | OpenAI Responses API with local fallback |
+| Agent | OpenAI Responses API function calling with local Agent fallback |
 | Delivery | Docker Compose, GitHub Actions, Dependabot |
 
 ## Run with Docker
@@ -204,7 +208,7 @@ finished functionality.
 
 ## Resume summary
 
-**SmartDepanneur AI — AI-Assisted Retail Inventory and Replenishment Platform**
+**SmartDepanneur Agent — Agent-Assisted Retail Inventory and Replenishment Platform**
 
 - Built a full-stack retail operations platform with Next.js, NestJS,
   PostgreSQL, Prisma, and Docker for sales, inventory, suppliers, expiration

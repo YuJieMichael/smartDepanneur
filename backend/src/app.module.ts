@@ -23,6 +23,7 @@ import { SalesModule } from './sales/sales.module';
 import { DashboardModule } from './dashboard/dashboard.module';
 import { InsightsModule } from './insights/insights.module';
 import { validateEnvironment } from './config/validate-environment';
+import { AccessControlModule } from './access-control/access-control.module';
 
 @Module({
   imports: [
@@ -31,6 +32,7 @@ import { validateEnvironment } from './config/validate-environment';
       validate: validateEnvironment,
     }),
     PrismaModule,
+    AccessControlModule,
     AuthModule,
     RolesModule,
     UsersModule,

@@ -1,4 +1,5 @@
 import { request } from '@/lib/request';
+import type { Locale } from '@/lib/i18n';
 
 export interface ReorderSuggestion {
   productId: number;
@@ -52,15 +53,23 @@ export function apiGetSlowMovers() {
   return request<{ slowMovers: SlowMover[]; message: string }>('/api/insights/slow-movers');
 }
 
-export function apiAskInsight(question: string) {
+export type InsightAgentTool =
+  | 'get_reorder_suggestions'
+  | 'get_top_sellers'
+  | 'get_slow_movers'
+  | 'get_store_summary';
+
+export function apiAskInsight(question: string, language: Locale) {
   return request<{
     question: string;
+    language: Locale;
     answer: string;
     type: string;
-    provider: 'openai' | 'local-fallback';
+    provider: 'openai-agent' | 'local-agent';
+    toolsUsed: InsightAgentTool[];
     fallbackReason: string | null;
   }>('/api/insights/ask', {
     method: 'POST',
-    body: JSON.stringify({ question }),
+    body: JSON.stringify({ question, language }),
   });
 }

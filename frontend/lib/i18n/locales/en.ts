@@ -38,9 +38,9 @@
     login_failed: 'Invalid email or password',
     register_failed: 'Registration failed, please try again',
     register_success: 'Registration successful, please log in',
-    roles_label: 'Roles',
-    roles_placeholder: 'Select roles',
-    roles_required: 'Please select at least one role',
+    roles_label: 'Role',
+    roles_placeholder: 'Select a role',
+    roles_required: 'Please select a role',
     email_already_exists: 'This email is already registered',
     no_token: 'Please log in to continue',
     session_expired: 'Your session has expired, please log in again',
@@ -225,7 +225,7 @@
     nav_profile: 'Access your profile or log out.',
     login_tabs: 'Switch between Sign In and Sign Up here.',
     login_form: 'Enter your email and password to log in. New users can register on the Sign Up tab.',
-    login_roles: 'When registering, select your role: Applicant (job seekers), Project Owner (post jobs), or Admin (manage system).',
+    login_roles: 'When registering, choose exactly one role: Store Owner or Cashier.',
     admin_menu: 'Admin sidebar — quick access to all management modules.',
     admin_users: 'View, create, edit, and delete user accounts with full audit trail.',
     admin_roles: 'Manage roles and assign permissions to control access.',
@@ -281,7 +281,7 @@
     pages: [
       {
         title: '1. Overview',
-        content: 'SmartDepanneur AI is a full-stack convenience store management platform built with Next.js, React, NestJS, PostgreSQL, and Prisma.\n\nIt supports real depanneur workflows: product inventory, categories, suppliers, stock movements, POS-style sales, low-stock alerts, expiration tracking, dashboards, and AI-generated business insights.\n\nThe app is designed for store owners, cashiers, and inventory staff who need faster daily decisions without paper-based stock checks.',
+        content: 'SmartDepanneur Agent is a full-stack convenience store management platform built with Next.js, React, NestJS, PostgreSQL, and Prisma.\n\nIt supports real depanneur workflows: product inventory, categories, suppliers, stock movements, POS-style sales, low-stock alerts, expiration tracking, dashboards, and agent-generated business insights.\n\nThe app is designed for store owners, cashiers, and inventory staff who need faster daily decisions without paper-based stock checks.',
       },
       {
         title: '2. Authentication & Roles',
@@ -296,8 +296,8 @@
         content: 'The sales workflow works like a lightweight POS module: add products to a cart, calculate subtotal, tax, total, payment method, and estimated profit.\n\nAfter a sale is created, stock is updated automatically and a stock movement record is saved for traceability.\n\nThe dashboard summarizes daily sales, revenue, active products, low-stock products, and top-selling products so owners can scan store performance quickly.',
       },
       {
-        title: '5. AI Insights',
-        content: 'The AI insights page converts store data into natural-language recommendations.\n\nOwners can ask questions like "What should I restock today?", "Which products are not selling?", or "What are the top-selling drinks?"\n\nThe system analyzes inventory, sales history, low-stock thresholds, and slow-moving products to generate restocking suggestions and operational summaries.',
+        title: '5. Store Agent',
+        content: 'The Store Agent selects read-only business tools and converts their results into natural-language recommendations.\n\nOwners can ask questions like "What should I restock today?", "Which products are not selling?", or "What are the top-selling drinks?"\n\nThe selected interface language controls both the suggested questions and the answer language.',
       },
       {
         title: '6. Admin Module - Roles & Permissions',

@@ -1,6 +1,6 @@
-# About SmartDepanneur AI
+# About SmartDepanneur Agent
 
-SmartDepanneur AI is an AI-powered convenience store management platform inspired by real depanneur operations in Canada and Quebec.
+SmartDepanneur Agent is an agent-powered convenience store management platform inspired by real depanneur operations in Canada and Quebec.
 
 It helps store owners, cashiers, and inventory staff manage daily retail workflows from one full-stack application:
 
@@ -9,7 +9,7 @@ It helps store owners, cashiers, and inventory staff manage daily retail workflo
 - Low-stock and restocking recommendations
 - Expiration alerts for perishable products
 - Dashboard analytics for revenue, profit, top sellers, and operational risks
-- AI-generated business insights using OpenAI API or local fallback analysis
+- A tool-using Store Agent powered by OpenAI or a deterministic local fallback
 - English, French, and Simplified Chinese interface support
 
 The project was built as a realistic portfolio application using:
@@ -23,7 +23,7 @@ The project was built as a realistic portfolio application using:
 Suggested GitHub repository About description:
 
 ```text
-AI-powered convenience store management platform with inventory, sales, expiration tracking, RBAC, multilingual UI, and OpenAI business insights.
+Agent-powered convenience store platform with inventory, sales, expiration tracking, RBAC, multilingual UI, and OpenAI tool calling.
 ```
 
 Suggested GitHub topics:

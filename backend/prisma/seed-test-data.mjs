@@ -258,7 +258,13 @@ async function main() {
   if (existingDemoSales.length > 0) {
     const saleIds = existingDemoSales.map((sale) => sale.id);
     await prisma.inventoryMovement.deleteMany({
-      where: { referenceType: 'sale', referenceId: { in: saleIds } },
+      where: {
+        referenceType: { in: ['sale', 'sale_void'] },
+        referenceId: { in: saleIds },
+      },
+    });
+    await prisma.auditTrail.deleteMany({
+      where: { table: 'sales', recordId: { in: saleIds } },
     });
     await prisma.sale.deleteMany({
       where: { id: { in: saleIds } },

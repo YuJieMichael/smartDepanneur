@@ -1,4 +1,6 @@
 import { Body, Controller, Delete, Get, Param, Patch, Post, Query, Request, UseGuards } from '@nestjs/common';
+import { PermissionGuard } from '../access-control/permission.guard';
+import { RequirePermissions } from '../access-control/require-permissions.decorator';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { CategoriesService } from './categories.service';
 import { CreateCategoryDto } from './dto/create-category.dto';
@@ -6,10 +8,11 @@ import type { CategorySortField } from './dto/query-categories.dto';
 import { UpdateCategoryDto } from './dto/update-category.dto';
 
 @Controller('api/categories')
+@UseGuards(JwtAuthGuard, PermissionGuard)
+@RequirePermissions('product-edit')
 export class CategoriesController {
   constructor(private readonly categoriesService: CategoriesService) {}
 
-  @UseGuards(JwtAuthGuard)
   @Get('filter-options')
   async getFilterOptions(
     @Query('field') field: string,
@@ -26,7 +29,6 @@ export class CategoriesController {
     });
   }
 
-  @UseGuards(JwtAuthGuard)
   @Get('list')
   async getCategories(
     @Query('name') name?: string,
@@ -50,7 +52,6 @@ export class CategoriesController {
     });
   }
 
-  @UseGuards(JwtAuthGuard)
   @Post()
   async createCategory(
     @Body() body: CreateCategoryDto,
@@ -59,13 +60,11 @@ export class CategoriesController {
     return this.categoriesService.createCategory(body, req.user);
   }
 
-  @UseGuards(JwtAuthGuard)
   @Get('detail/:id')
   async getCategoryById(@Param('id') id: string) {
     return this.categoriesService.findById(parseInt(id, 10));
   }
 
-  @UseGuards(JwtAuthGuard)
   @Patch(':id')
   async updateCategory(
     @Param('id') id: string,
@@ -75,7 +74,6 @@ export class CategoriesController {
     return this.categoriesService.updateCategory(parseInt(id, 10), body, req.user);
   }
 
-  @UseGuards(JwtAuthGuard)
   @Delete(':id')
   async deleteCategory(
     @Param('id') id: string,

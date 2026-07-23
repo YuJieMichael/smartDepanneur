@@ -1,4 +1,5 @@
 import {
+    BadRequestException,
     Injectable,
     ConflictException,
     UnauthorizedException,
@@ -7,6 +8,8 @@ import { JwtService } from '@nestjs/jwt';
 import * as bcrypt from 'bcrypt';
 import { PrismaService } from '../prisma/prisma.service';
 import { AuditTrailService } from '../audit-trail/audit-trail.service';
+
+const PUBLIC_REGISTRATION_ROLES = new Set(['Store Owner', 'Cashier']);
 
 @Injectable()
 export class AuthService {
@@ -41,6 +44,16 @@ export class AuthService {
     async register(email: string, password: string, rolesInput: string[] | string | undefined = []) {
         const roles = this.normalizeRoles(rolesInput);
 
+        if (roles.length !== 1 || !PUBLIC_REGISTRATION_ROLES.has(roles[0])) {
+            throw new BadRequestException(
+                'Public registration requires exactly one role: Store Owner or Cashier',
+            );
+        }
+
+        return this.createAccount(email, password, roles);
+    }
+
+    private async createAccount(email: string, password: string, roles: string[]) {
         const existing = await this.prisma.user.findUnique({
             where: { email },
         });
@@ -75,7 +88,7 @@ export class AuthService {
         operator: { id: number; email: string },
     ) {
         const roles = this.normalizeRoles(rolesInput);
-        const result = await this.register(email, password, roles);
+        const result = await this.createAccount(email, password, roles);
 
         await this.auditTrailService.create({
             table: 'users',

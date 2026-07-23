@@ -7,7 +7,7 @@ Target duration: 4–5 minutes.
 1. Start the stack with `docker compose up --build`.
 2. Confirm `http://localhost:3101/api/health` returns `status: ok`.
 3. Log in once as the Store Owner and confirm demo data is visible.
-4. Keep Dashboard, Sales, Inventory, and AI Insights in browser tabs.
+4. Keep Dashboard, Sales, Inventory, and Store Agent in browser tabs.
 
 ## Story
 
@@ -38,13 +38,15 @@ expiration risk, and reorder recommendations in one workflow.”
 - Show the movement in history.
 - Mention validation and audit records.
 
-### 5. AI insight — 60 seconds
+### 5. Store Agent — 60 seconds
 
+- Switch between English, French, and Chinese and show that only the selected
+  language's suggestions appear.
 - Ask: “What should I restock today?”
-- Show product names, current/minimum stock, recent velocity, recommended
-  quantity, and estimated cost.
-- Explain that calculations are deterministic; OpenAI converts the facts into
-  an owner-friendly answer. Without an API key, the workflow remains usable.
+- Show the tool trace, product names, current/minimum stock, recent velocity,
+  recommended quantity, and estimated cost.
+- Explain that OpenAI chooses a read-only store tool before answering and that
+  the deterministic local Agent keeps the workflow usable without an API key.
 
 ### 6. Engineering close — 30 seconds
 
