@@ -331,17 +331,24 @@ export default function SalesPage() {
   }));
 
   const cartColumns = [
-    { title: isZh ? '商品' : isFr ? 'Produit' : 'Product', dataIndex: 'productName', key: 'name' },
+    {
+      title: isZh ? '商品' : isFr ? 'Produit' : 'Product',
+      dataIndex: 'productName',
+      key: 'name',
+      ellipsis: true,
+    },
     {
       title: isZh ? '数量' : isFr ? 'Qté' : 'Qty',
       key: 'qty',
-      width: 120,
+      width: 128,
       render: (_: unknown, item: CartItem) => (
         <InputNumber
+          className="sales-cart-quantity"
           min={1}
           max={products.find((product) => product.id === item.productId)?.currentStock ?? 999}
           value={item.quantity}
           size="small"
+          style={{ width: 84 }}
           onChange={(value) => {
             if (!value) return;
             setCart((prev) =>
@@ -359,18 +366,23 @@ export default function SalesPage() {
       title: isZh ? '单价' : isFr ? 'Prix unitaire' : 'Unit Price',
       dataIndex: 'unitPrice',
       key: 'price',
+      width: 140,
+      align: 'right' as const,
       render: (value: number) => `$${value.toFixed(2)}`,
     },
     {
       title: isZh ? '小计' : isFr ? 'Total ligne' : 'Line Total',
       dataIndex: 'lineTotal',
       key: 'total',
+      width: 150,
+      align: 'right' as const,
       render: (value: number) => `$${value.toFixed(2)}`,
     },
     {
       title: '',
       key: 'remove',
       width: 48,
+      align: 'center' as const,
       render: (_: unknown, item: CartItem) => (
         <Button
           type="link"
@@ -598,6 +610,8 @@ export default function SalesPage() {
           columns={cartColumns}
           rowKey="productId"
           pagination={false}
+          tableLayout="fixed"
+          scroll={{ x: 640 }}
           locale={{ emptyText: isZh ? '购物车为空，请先添加商品' : isFr ? 'Le panier est vide - ajoutez des produits ci-dessus' : 'Cart is empty - add products above' }}
         />
 

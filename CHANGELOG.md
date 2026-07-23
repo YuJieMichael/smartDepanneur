@@ -2,6 +2,8 @@
 
 ## Unreleased - Store Operations and Controls
 
+- Stabilized checkout cart columns so quantity controls no longer move when
+  line totals gain digits.
 - Added a store-scoped audit permission so Store Owners can review operational
   changes while Cashiers remain blocked.
 - Added a multilingual category filter to checkout, including per-category
