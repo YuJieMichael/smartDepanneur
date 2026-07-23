@@ -50,23 +50,7 @@ async function main() {
   console.log('Seeded dictionary: poststate');
 
   // Seed permissions and assign to Admin role
-  const permissions = [
-    'create-permission',
-    'edit-permission',
-    'create-user',
-    'edit-user',
-    'view-admin',
-    'edit-role',
-    'template-edit',
-    'edit-dictionary',
-    'post-edit',
-    'post-view',
-    'product-edit',
-    'inventory-edit',
-    'sales-edit',
-    'dashboard-view',
-    'insights-view',
-  ];
+  const permissions = ['create-permission', 'edit-permission', 'create-user', 'edit-user', 'view-admin', 'edit-role', 'template-edit', 'edit-dictionary', 'post-edit', 'post-view', 'product-edit', 'inventory-edit', 'sales-edit', 'dashboard-view', 'insights-view', 'audit-view-store'];
 
   for (const name of permissions) {
     await prisma.permission.upsert({
@@ -86,8 +70,7 @@ async function main() {
     where: { name: 'Store Owner' },
     data: {
       permissions: {
-        set: ['product-edit', 'inventory-edit', 'sales-edit', 'dashboard-view', 'insights-view']
-          .map((name) => ({ name })),
+        set: ['product-edit', 'inventory-edit', 'sales-edit', 'dashboard-view', 'insights-view', 'audit-view-store'].map((name) => ({ name })),
       },
     },
   });
@@ -105,8 +88,7 @@ async function main() {
     where: { name: 'Inventory Staff' },
     data: {
       permissions: {
-        set: ['product-edit', 'inventory-edit', 'dashboard-view', 'insights-view']
-          .map((name) => ({ name })),
+        set: ['product-edit', 'inventory-edit', 'dashboard-view', 'insights-view'].map((name) => ({ name })),
       },
     },
   });
@@ -116,7 +98,9 @@ async function main() {
     where: { name: 'Project Owner' },
     data: {
       permissions: {
-        set: ['post-view', 'post-edit', 'template-edit'].map((name) => ({ name })),
+        set: ['post-view', 'post-edit', 'template-edit'].map((name) => ({
+          name,
+        })),
       },
     },
   });
@@ -130,9 +114,9 @@ async function main() {
 
   // Seed country and state dictionaries
   const countryStateMap = {
-    'Australia': ['New South Wales', 'Victoria', 'Queensland', 'Western Australia', 'South Australia', 'Tasmania', 'Northern Territory', 'Australian Capital Territory'],
+    Australia: ['New South Wales', 'Victoria', 'Queensland', 'Western Australia', 'South Australia', 'Tasmania', 'Northern Territory', 'Australian Capital Territory'],
     'United States': ['California', 'New York', 'Texas', 'Florida', 'Illinois', 'Pennsylvania', 'Ohio', 'Georgia', 'Washington', 'Massachusetts'],
-    'Canada': ['Ontario', 'Quebec', 'British Columbia', 'Alberta', 'Manitoba', 'Saskatchewan', 'Nova Scotia', 'New Brunswick'],
+    Canada: ['Ontario', 'Quebec', 'British Columbia', 'Alberta', 'Manitoba', 'Saskatchewan', 'Nova Scotia', 'New Brunswick'],
     'United Kingdom': ['England', 'Scotland', 'Wales', 'Northern Ireland'],
     'New Zealand': ['Auckland', 'Wellington', 'Canterbury', 'Waikato', 'Bay of Plenty', 'Otago'],
   };
@@ -170,7 +154,10 @@ async function main() {
     });
   }
 
-  console.log('Seeded categories:', categorySeeds.map((category) => category.name));
+  console.log(
+    'Seeded categories:',
+    categorySeeds.map((category) => category.name),
+  );
 
   const supplierSeeds = [
     {
@@ -209,7 +196,10 @@ async function main() {
     });
   }
 
-  console.log('Seeded suppliers:', supplierSeeds.map((supplier) => supplier.name));
+  console.log(
+    'Seeded suppliers:',
+    supplierSeeds.map((supplier) => supplier.name),
+  );
 }
 
 main()
@@ -218,4 +208,3 @@ main()
     process.exit(1);
   })
   .finally(() => prisma.$disconnect());
-

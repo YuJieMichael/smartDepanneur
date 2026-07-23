@@ -58,6 +58,36 @@ describe('PermissionGuard', () => {
     );
   });
 
+  it('allows a store owner to view operational audit records', async () => {
+    reflector.getAllAndOverride.mockReturnValue(['audit-view-store']);
+    prisma.user.findUnique.mockResolvedValue({
+      roles: [
+        {
+          name: 'Store Owner',
+          permissions: [{ name: 'audit-view-store' }],
+        },
+      ],
+    });
+
+    await expect(guard.canActivate(context)).resolves.toBe(true);
+  });
+
+  it('blocks a cashier from operational audit records', async () => {
+    reflector.getAllAndOverride.mockReturnValue(['audit-view-store']);
+    prisma.user.findUnique.mockResolvedValue({
+      roles: [
+        {
+          name: 'Cashier',
+          permissions: [{ name: 'sales-edit' }],
+        },
+      ],
+    });
+
+    await expect(guard.canActivate(context)).rejects.toBeInstanceOf(
+      ForbiddenException,
+    );
+  });
+
   it('allows Admin to access protected store routes', async () => {
     reflector.getAllAndOverride.mockReturnValue(['insights-view']);
     prisma.user.findUnique.mockResolvedValue({

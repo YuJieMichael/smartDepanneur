@@ -1,5 +1,14 @@
-import { Injectable } from '@nestjs/common';
+import { ForbiddenException, Injectable } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
+
+const STORE_AUDIT_TABLES = new Set([
+  'categories',
+  'inventory_movements',
+  'products',
+  'purchase_orders',
+  'sales',
+  'suppliers',
+]);
 
 @Injectable()
 export class AuditTrailService {
@@ -17,7 +26,30 @@ export class AuditTrailService {
     return this.prisma.auditTrail.create({ data });
   }
 
-  async findByRecord(table: string, recordId: number, page = 1, pageSize = 10) {
+  async findByRecord(
+    table: string,
+    recordId: number,
+    userId: number,
+    page = 1,
+    pageSize = 10,
+  ) {
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId },
+      select: { roles: { select: { name: true } } },
+    });
+
+    if (!user) {
+      throw new ForbiddenException('User no longer exists');
+    }
+
+    const isAdmin = user.roles.some((role) => role.name === 'Admin');
+
+    if (!isAdmin && !STORE_AUDIT_TABLES.has(table)) {
+      throw new ForbiddenException(
+        'Store audit access is limited to operational records',
+      );
+    }
+
     const where = { table, recordId };
     const [total, list] = await this.prisma.$transaction([
       this.prisma.auditTrail.count({ where }),

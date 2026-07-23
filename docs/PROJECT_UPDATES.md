@@ -7,6 +7,15 @@ This document records the functionality implemented on
 finished work from the next product increments so the repository, pull
 request, demo, and resume all make the same claims.
 
+## Owner operational audit access
+
+- Added the `audit-view-store` permission to the Store Owner role.
+- Store Owners can inspect audit history for products, categories, suppliers,
+  inventory movements, sales, and purchase orders.
+- Administrative audit tables remain restricted to Administrators.
+- Cashiers and other roles without the permission cannot call the audit API,
+  and the audit button is hidden from their operational pages.
+
 ## Release summary
 
 SmartDepanneur now supports the complete daily loop for a small convenience

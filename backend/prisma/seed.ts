@@ -38,6 +38,7 @@ async function main() {
     'create-user',
     'edit-user',
     'view-admin',
+    'audit-view-store',
     'edit-role',
     'template-edit',
   ];

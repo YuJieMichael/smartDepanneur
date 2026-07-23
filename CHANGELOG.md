@@ -2,6 +2,8 @@
 
 ## Unreleased - Store Operations and Controls
 
+- Added a store-scoped audit permission so Store Owners can review operational
+  changes while Cashiers remain blocked.
 - Added a multilingual category filter to checkout, including per-category
   product counts and name, barcode, or SKU search.
 - Persisted the selected English, French, or Chinese locale across navigation.
