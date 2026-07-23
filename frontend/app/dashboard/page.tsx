@@ -22,6 +22,7 @@ import {
   LineChartOutlined,
   ShoppingCartOutlined,
   ShoppingOutlined,
+  UndoOutlined,
 } from "@ant-design/icons";
 import {
   apiGetDailyCloseout,
@@ -386,7 +387,7 @@ export default function DashboardPage() {
       </div>
 
       <Row gutter={[16, 16]} style={{ marginBottom: 24 }}>
-        <Col xs={12} lg={5}>
+        <Col xs={12} md={8} xl={6}>
           <Card loading={loading}>
             <Statistic
               title={
@@ -399,7 +400,7 @@ export default function DashboardPage() {
               renderDelta(trend.comparison.saleCountDelta, false)}
           </Card>
         </Col>
-        <Col xs={12} lg={5}>
+        <Col xs={12} md={8} xl={6}>
           <Card loading={loading}>
             <Statistic
               title={
@@ -413,7 +414,7 @@ export default function DashboardPage() {
               renderDelta(trend.comparison.revenueChangePercent)}
           </Card>
         </Col>
-        <Col xs={12} lg={5}>
+        <Col xs={12} md={8} xl={6}>
           <Card loading={loading}>
             <Statistic
               title={
@@ -428,7 +429,36 @@ export default function DashboardPage() {
               renderDelta(trend.comparison.profitChangePercent)}
           </Card>
         </Col>
-        <Col xs={12} lg={5}>
+        <Col xs={12} md={8} xl={6}>
+          <Card loading={loading}>
+            <Statistic
+              title={
+                isZh ? "今日撤销次数" : isFr ? "Annulations du jour" : "Today's Voids"
+              }
+              value={data?.today.voidCount ?? 0}
+              prefix={<UndoOutlined />}
+              styles={{ content: { color: "#cf1322" } }}
+            />
+          </Card>
+        </Col>
+        <Col xs={12} md={8} xl={6}>
+          <Card loading={loading}>
+            <Statistic
+              title={
+                isZh
+                  ? "今日撤销金额"
+                  : isFr
+                    ? "Montant annulé"
+                    : "Voided Amount"
+              }
+              value={data ? Number(data.today.voidAmount) : 0}
+              precision={2}
+              prefix="$"
+              styles={{ content: { color: "#cf1322" } }}
+            />
+          </Card>
+        </Col>
+        <Col xs={12} md={8} xl={6}>
           <Card loading={loading}>
             <Statistic
               title={isZh ? "低库存" : isFr ? "Stock bas" : "Low Stock"}
@@ -442,7 +472,7 @@ export default function DashboardPage() {
             />
           </Card>
         </Col>
-        <Col xs={12} lg={4}>
+        <Col xs={12} md={8} xl={6}>
           <Card loading={loading}>
             <Statistic
               title={

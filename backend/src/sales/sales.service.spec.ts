@@ -1,5 +1,6 @@
 import { BadRequestException } from '@nestjs/common';
 import { PaymentMethod, Prisma } from '@prisma/client';
+import * as bcrypt from 'bcrypt';
 import { AuditTrailService } from '../audit-trail/audit-trail.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { SalesService } from './sales.service';
@@ -111,8 +112,11 @@ describe('SalesService', () => {
       saleNumber: 'SALE-TEST',
       cashierId: operator.id,
       isVoided: false,
+      total: new Prisma.Decimal('10.35'),
+      createdAt: new Date(),
       cashier: operator,
       voidedBy: null,
+      voidApprovedBy: null,
       items: [
         {
           id: 1,
@@ -137,7 +141,7 @@ describe('SalesService', () => {
         findUniqueOrThrow: jest.fn().mockResolvedValue({
           ...sale,
           isVoided: true,
-          voidReason: 'Wrong quantity',
+          voidReason: 'wrong_quantity',
           voidedBy: operator,
         }),
       },
@@ -167,7 +171,11 @@ describe('SalesService', () => {
     } as unknown as AuditTrailService;
     const service = new SalesService(prisma, audit);
 
-    const result = await service.voidSale(sale.id, 'Wrong quantity', operator);
+    const result = await service.voidSale(
+      sale.id,
+      { reason: 'wrong_quantity' },
+      operator,
+    );
 
     expect(result.isVoided).toBe(true);
     expect(tx.product.update).toHaveBeenCalledWith({
@@ -212,11 +220,194 @@ describe('SalesService', () => {
     } as unknown as AuditTrailService;
     const service = new SalesService(prisma, audit);
 
-    await expect(service.voidSale(99, 'Again', operator)).rejects.toThrow(
-      'already voided',
-    );
+    await expect(
+      service.voidSale(99, { reason: 'other' }, operator),
+    ).rejects.toThrow('already voided');
 
     expect(prisma.$transaction).not.toHaveBeenCalled();
     expect(audit.create).not.toHaveBeenCalled();
+  });
+
+  it('requires a selected void reason before reading the sale', async () => {
+    const prisma = {
+      sale: { findUnique: jest.fn() },
+    } as unknown as PrismaService;
+    const service = new SalesService(
+      prisma,
+      { create: jest.fn() } as unknown as AuditTrailService,
+    );
+
+    await expect(
+      service.voidSale(99, {}, operator),
+    ).rejects.toBeInstanceOf(BadRequestException);
+    expect(prisma.sale.findUnique).not.toHaveBeenCalled();
+  });
+
+  it('blocks a cashier after the ten-minute void window', async () => {
+    jest.useFakeTimers().setSystemTime(new Date('2026-07-23T16:20:00.000Z'));
+    try {
+      const prisma = {
+        sale: {
+          findUnique: jest.fn().mockResolvedValue({
+            id: 99,
+            saleNumber: 'SALE-OLD',
+            cashierId: operator.id,
+            isVoided: false,
+            total: new Prisma.Decimal('20.00'),
+            createdAt: new Date('2026-07-23T16:00:00.000Z'),
+            items: [],
+          }),
+        },
+        user: {
+          findUnique: jest.fn().mockResolvedValue({
+            roles: [{ name: 'Cashier' }],
+          }),
+        },
+        $transaction: jest.fn(),
+      } as unknown as PrismaService;
+      const service = new SalesService(
+        prisma,
+        { create: jest.fn() } as unknown as AuditTrailService,
+      );
+
+      await expect(
+        service.voidSale(99, { reason: 'wrong_item' }, operator),
+      ).rejects.toThrow('within 10 minutes');
+      expect(prisma.$transaction).not.toHaveBeenCalled();
+    } finally {
+      jest.useRealTimers();
+    }
+  });
+
+  it('lets an owner void another cashier sale after ten minutes', async () => {
+    const owner = { id: 8, email: 'owner@smartdepanneur.local' };
+    const sale = {
+      id: 99,
+      saleNumber: 'SALE-OLD',
+      cashierId: operator.id,
+      isVoided: false,
+      total: new Prisma.Decimal('150.00'),
+      createdAt: new Date('2026-07-22T16:00:00.000Z'),
+      items: [],
+    };
+    const tx = {
+      sale: {
+        updateMany: jest.fn().mockResolvedValue({ count: 1 }),
+        findUniqueOrThrow: jest.fn().mockResolvedValue({
+          ...sale,
+          isVoided: true,
+          voidReason: 'customer_cancelled',
+        }),
+      },
+      product: { update: jest.fn() },
+      inventoryMovement: { create: jest.fn() },
+    };
+    const prisma = {
+      sale: { findUnique: jest.fn().mockResolvedValue(sale) },
+      user: {
+        findUnique: jest.fn().mockResolvedValue({
+          roles: [{ name: 'Store Owner' }],
+        }),
+      },
+      $transaction: jest.fn(
+        async (callback: (client: typeof tx) => Promise<unknown>) =>
+          callback(tx),
+      ),
+    } as unknown as PrismaService;
+    const audit = {
+      create: jest.fn().mockResolvedValue({ id: 1 }),
+    } as unknown as AuditTrailService;
+    const service = new SalesService(prisma, audit);
+
+    const result = await service.voidSale(
+      sale.id,
+      { reason: 'customer_cancelled' },
+      owner,
+    );
+
+    expect(result.isVoided).toBe(true);
+    expect(tx.sale.updateMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          voidedById: owner.id,
+          voidApprovedById: null,
+        }),
+      }),
+    );
+  });
+
+  it('records owner approval for a large cashier void', async () => {
+    const ownerPassword = 'owner-secret';
+    const ownerPasswordHash = await bcrypt.hash(ownerPassword, 4);
+    const sale = {
+      id: 100,
+      saleNumber: 'SALE-LARGE',
+      cashierId: operator.id,
+      isVoided: false,
+      total: new Prisma.Decimal('125.00'),
+      createdAt: new Date(),
+      items: [],
+    };
+    const tx = {
+      sale: {
+        updateMany: jest.fn().mockResolvedValue({ count: 1 }),
+        findUniqueOrThrow: jest.fn().mockResolvedValue({
+          ...sale,
+          isVoided: true,
+          voidReason: 'payment_error',
+          voidApprovedBy: {
+            id: 8,
+            email: 'owner@smartdepanneur.local',
+          },
+        }),
+      },
+      product: { update: jest.fn() },
+      inventoryMovement: { create: jest.fn() },
+    };
+    const prisma = {
+      sale: { findUnique: jest.fn().mockResolvedValue(sale) },
+      user: {
+        findUnique: jest
+          .fn()
+          .mockResolvedValueOnce({ roles: [{ name: 'Cashier' }] })
+          .mockResolvedValueOnce({
+            id: 8,
+            email: 'owner@smartdepanneur.local',
+            password: ownerPasswordHash,
+            roles: [{ name: 'Store Owner' }],
+          }),
+      },
+      $transaction: jest.fn(
+        async (callback: (client: typeof tx) => Promise<unknown>) =>
+          callback(tx),
+      ),
+    } as unknown as PrismaService;
+    const audit = {
+      create: jest.fn().mockResolvedValue({ id: 1 }),
+    } as unknown as AuditTrailService;
+    const service = new SalesService(prisma, audit);
+
+    await service.voidSale(
+      sale.id,
+      {
+        reason: 'payment_error',
+        ownerEmail: 'owner@smartdepanneur.local',
+        ownerPassword,
+      },
+      operator,
+    );
+
+    expect(tx.sale.updateMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          voidApprovedById: 8,
+        }),
+      }),
+    );
+    expect(audit.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        newValue: expect.stringContaining('approved by owner@smartdepanneur.local'),
+      }),
+    );
   });
 });

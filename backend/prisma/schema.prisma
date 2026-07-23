@@ -25,6 +25,7 @@ model User {
   inventoryMovements InventoryMovement[]
   sales              Sale[]                @relation("SaleCashier")
   voidedSales        Sale[]                @relation("SaleVoider")
+  approvedSaleVoids  Sale[]                @relation("SaleVoidApprover")
   aiInsightLogs      AiInsightLog[]
   purchaseOrders     PurchaseOrder[]
 
@@ -306,11 +307,16 @@ model Sale {
   voidedById Int?  @map("voided_by_id")
   voidedBy   User? @relation("SaleVoider", fields: [voidedById], references: [id])
 
+  voidApprovedById Int?  @map("void_approved_by_id")
+  voidApprovedBy   User? @relation("SaleVoidApprover", fields: [voidApprovedById], references: [id])
+
   items SaleItem[]
 
   @@index([createdAt])
   @@index([isVoided, createdAt])
+  @@index([isVoided, voidedAt])
   @@index([cashierId, createdAt])
+  @@index([voidApprovedById])
   @@map("sales")
 }
 
