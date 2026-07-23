@@ -41,8 +41,10 @@ export interface SlowMover {
   category: { id: number; name: string } | null;
 }
 
-export function apiGetReorderSuggestions() {
-  return request<{ suggestions: ReorderSuggestion[]; summary: string }>('/api/insights/reorder');
+export function apiGetReorderSuggestions(language: Locale) {
+  return request<{ suggestions: ReorderSuggestion[]; summary: string }>(
+    `/api/insights/reorder?language=${encodeURIComponent(language)}`,
+  );
 }
 
 export function apiGetTopSellers() {

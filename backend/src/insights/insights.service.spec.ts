@@ -34,7 +34,7 @@ describe('InsightsService', () => {
     } as unknown as PrismaService;
     const service = new InsightsService(prisma);
 
-    const result = await service.getReorderSuggestions();
+    const result = await service.getReorderSuggestions('zh');
 
     expect(result.suggestions).toHaveLength(1);
     expect(result.suggestions[0]).toMatchObject({
@@ -42,8 +42,12 @@ describe('InsightsService', () => {
       soldLast7Days: 7,
       suggestedReorderQty: 17,
       urgency: 'high',
+      reason: 'Milk 2% 过去 7 天卖出 7 件，且库存低于最低线。',
     });
     expect(String(result.suggestions[0].estimatedCost)).toBe('51');
+    expect(result.summary).toBe(
+      '1 个商品需要补货。1 个近期有销量且库存偏低。建议在下一个繁忙时段前完成补货。',
+    );
   });
 
   it('uses and records the deterministic fallback without an API key', async () => {

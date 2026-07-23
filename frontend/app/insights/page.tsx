@@ -40,6 +40,9 @@ const labels = {
     tools: 'Tools used',
     product: 'Product',
     urgency: 'Urgency',
+    critical: 'Critical',
+    high: 'High',
+    medium: 'Medium',
     stock: 'Stock',
     sold7d: 'Sold (7d)',
     suggestOrder: 'Suggest Order',
@@ -69,18 +72,21 @@ const labels = {
     tools: 'Outils utilisés',
     product: 'Produit',
     urgency: 'Urgence',
+    critical: 'Critique',
+    high: 'Élevée',
+    medium: 'Moyenne',
     stock: 'Stock',
     sold7d: 'Vendus (7 j)',
-    suggestOrder: 'Commande suggeree',
-    estCost: 'Cout estime',
+    suggestOrder: 'Commande suggérée',
+    estCost: 'Coût estimé',
     supplier: 'Fournisseur',
-    category: 'Categorie',
+    category: 'Catégorie',
     totalSold: 'Total vendu',
     revenue: 'Revenus',
     inStock: 'En stock',
     stockValue: 'Valeur du stock',
     expires: 'Expire le',
-    reorderTitle: 'Suggestions de reapprovisionnement',
+    reorderTitle: 'Suggestions de réapprovisionnement',
     topTitle: 'Meilleures ventes',
     slowTitle: 'Produits lents (aucune vente en 30 jours)',
     refresh: 'Actualiser',
@@ -98,6 +104,9 @@ const labels = {
     tools: '已调用工具',
     product: '商品',
     urgency: '紧急程度',
+    critical: '紧急',
+    high: '较高',
+    medium: '一般',
     stock: '库存',
     sold7d: '7 天销量',
     suggestOrder: '建议补货',
@@ -160,12 +169,13 @@ export default function InsightsPage() {
     setAnswer('');
     setProvider('');
     setToolsUsed([]);
+    setReorderData(null);
   }, [locale]);
 
   const loadReorder = async () => {
     setLoadingReorder(true);
     try {
-      setReorderData(await apiGetReorderSuggestions());
+      setReorderData(await apiGetReorderSuggestions(locale));
     } finally {
       setLoadingReorder(false);
     }
@@ -209,6 +219,41 @@ export default function InsightsPage() {
   };
 
   const urgencyColor = { critical: 'red', high: 'orange', medium: 'gold' } as const;
+  const urgencyLabel = {
+    critical: text.critical,
+    high: text.high,
+    medium: text.medium,
+  };
+  const formatUnit = (unit: string) => {
+    const unitKey = unit.toLowerCase();
+    const translatedUnits: Record<Locale, Record<string, string>> = {
+      en: {},
+      fr: {
+        unit: 'unité',
+        bottle: 'bouteille',
+        pack: 'paquet',
+        box: 'boîte',
+        case: 'caisse',
+        can: 'canette',
+        carton: 'carton',
+        piece: 'pièce',
+        bag: 'sac',
+      },
+      zh: {
+        unit: '件',
+        bottle: '瓶',
+        pack: '包',
+        box: '盒',
+        case: '箱',
+        can: '罐',
+        carton: '盒',
+        piece: '件',
+        bag: '袋',
+      },
+    };
+
+    return translatedUnits[locale][unitKey] ?? unit;
+  };
 
   const reorderColumns = [
     { title: text.product, dataIndex: 'productName', key: 'name' },
@@ -216,7 +261,9 @@ export default function InsightsPage() {
       title: text.urgency,
       dataIndex: 'urgency',
       key: 'urgency',
-      render: (value: ReorderSuggestion['urgency']) => <Tag color={urgencyColor[value]}>{value.toUpperCase()}</Tag>,
+      render: (value: ReorderSuggestion['urgency']) => (
+        <Tag color={urgencyColor[value]}>{urgencyLabel[value]}</Tag>
+      ),
     },
     {
       title: text.stock,
@@ -228,7 +275,8 @@ export default function InsightsPage() {
       title: text.suggestOrder,
       dataIndex: 'suggestedReorderQty',
       key: 'qty',
-      render: (value: number, row: ReorderSuggestion) => `${value} ${row.unit}`,
+      render: (value: number, row: ReorderSuggestion) =>
+        `${value} ${formatUnit(row.unit)}`,
     },
     {
       title: text.estCost,
