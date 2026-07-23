@@ -1,4 +1,4 @@
-import { Controller, Get, UseGuards } from '@nestjs/common';
+import { Controller, Get, Query, UseGuards } from '@nestjs/common';
 import { PermissionGuard } from '../access-control/permission.guard';
 import { RequirePermissions } from '../access-control/require-permissions.decorator';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
@@ -13,5 +13,10 @@ export class DashboardController {
   @Get('overview')
   async getOverview() {
     return this.dashboardService.getOverview();
+  }
+
+  @Get('daily-closeout')
+  async getDailyCloseout(@Query('date') date?: string) {
+    return this.dashboardService.getDailyCloseout(date);
   }
 }
