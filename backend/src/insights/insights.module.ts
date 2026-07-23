@@ -7,5 +7,6 @@ import { InsightsService } from './insights.service';
   imports: [PrismaModule],
   controllers: [InsightsController],
   providers: [InsightsService],
+  exports: [InsightsService],
 })
 export class InsightsModule {}

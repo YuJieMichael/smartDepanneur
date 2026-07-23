@@ -200,6 +200,7 @@ export class InsightsService {
         minStock: product.minStock,
         soldLast7Days,
         suggestedReorderQty,
+        unitCost: new Prisma.Decimal(product.costPrice),
         estimatedCost: new Prisma.Decimal(product.costPrice).times(suggestedReorderQty),
         urgency,
         reason,

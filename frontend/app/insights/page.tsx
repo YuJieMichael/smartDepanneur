@@ -1,13 +1,16 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { Alert, Button, Card, Col, Input, Row, Space, Table, Tag } from 'antd';
-import { BulbOutlined, SendOutlined } from '@ant-design/icons';
+import { Alert, Button, Card, Col, Input, Modal, Row, Space, Table, Tag } from 'antd';
+import { BulbOutlined, FileAddOutlined, SendOutlined } from '@ant-design/icons';
 import {
   apiAskInsight,
+  apiGeneratePurchaseOrders,
   apiGetReorderSuggestions,
   apiGetSlowMovers,
   apiGetTopSellers,
+  GeneratedPurchaseOrder,
+  GeneratedPurchaseOrderBatch,
   InsightAgentTool,
   ReorderSuggestion,
   SlowMover,
@@ -61,6 +64,22 @@ const labels = {
     loadReorder: 'Load Reorder Suggestions',
     loadTop: 'Load Top Sellers',
     loadSlow: 'Load Slow Movers',
+    generateOrders: 'Generate Purchase Orders',
+    generatingOrders: 'Generating...',
+    orderError: 'Unable to generate purchase orders. Please try again.',
+    ordersTitle: 'Purchase Orders',
+    orderCreated: 'new draft(s) created',
+    orderUpdated: 'existing draft(s) updated',
+    orderNumber: 'Order No.',
+    orderDate: 'Business Date',
+    draft: 'Draft',
+    quantity: 'Quantity',
+    unitCost: 'Unit Cost',
+    lineTotal: 'Line Total',
+    orderTotal: 'Estimated Total',
+    noSupplier: 'Supplier not assigned',
+    noOrders: 'No purchase orders were needed.',
+    close: 'Close',
   },
   fr: {
     title: 'Agent du magasin',
@@ -93,6 +112,22 @@ const labels = {
     loadReorder: 'Charger les suggestions',
     loadTop: 'Charger les meilleures ventes',
     loadSlow: 'Charger les produits lents',
+    generateOrders: 'Générer les bons de commande',
+    generatingOrders: 'Génération...',
+    orderError: 'Impossible de générer les bons de commande. Veuillez réessayer.',
+    ordersTitle: 'Bons de commande',
+    orderCreated: 'nouveau(x) brouillon(s) créé(s)',
+    orderUpdated: 'brouillon(s) existant(s) mis à jour',
+    orderNumber: 'No de commande',
+    orderDate: 'Date commerciale',
+    draft: 'Brouillon',
+    quantity: 'Quantité',
+    unitCost: 'Coût unitaire',
+    lineTotal: 'Total',
+    orderTotal: 'Total estimé',
+    noSupplier: 'Fournisseur non attribué',
+    noOrders: 'Aucun bon de commande nécessaire.',
+    close: 'Fermer',
   },
   zh: {
     title: '门店 Agent',
@@ -125,6 +160,22 @@ const labels = {
     loadReorder: '加载补货建议',
     loadTop: '加载热销商品',
     loadSlow: '加载滞销商品',
+    generateOrders: '一键生成采购单',
+    generatingOrders: '正在生成...',
+    orderError: '采购单生成失败，请稍后重试。',
+    ordersTitle: '今日采购单',
+    orderCreated: '张新草稿已创建',
+    orderUpdated: '张原草稿已更新',
+    orderNumber: '采购单号',
+    orderDate: '营业日期',
+    draft: '草稿',
+    quantity: '数量',
+    unitCost: '单价',
+    lineTotal: '小计',
+    orderTotal: '预计总额',
+    noSupplier: '未指定供应商',
+    noOrders: '当前无需生成采购单。',
+    close: '关闭',
   },
 };
 
@@ -163,6 +214,11 @@ export default function InsightsPage() {
   const [provider, setProvider] = useState<'openai-agent' | 'local-agent' | ''>('');
   const [toolsUsed, setToolsUsed] = useState<InsightAgentTool[]>([]);
   const [loadingAsk, setLoadingAsk] = useState(false);
+  const [loadingOrders, setLoadingOrders] = useState(false);
+  const [orderError, setOrderError] = useState('');
+  const [purchaseOrderBatch, setPurchaseOrderBatch] =
+    useState<GeneratedPurchaseOrderBatch | null>(null);
+  const [ordersOpen, setOrdersOpen] = useState(false);
 
   useEffect(() => {
     setQuestion('');
@@ -170,6 +226,9 @@ export default function InsightsPage() {
     setProvider('');
     setToolsUsed([]);
     setReorderData(null);
+    setOrderError('');
+    setPurchaseOrderBatch(null);
+    setOrdersOpen(false);
   }, [locale]);
 
   const loadReorder = async () => {
@@ -215,6 +274,20 @@ export default function InsightsPage() {
       setToolsUsed([]);
     } finally {
       setLoadingAsk(false);
+    }
+  };
+
+  const handleGenerateOrders = async () => {
+    setLoadingOrders(true);
+    setOrderError('');
+    try {
+      const result = await apiGeneratePurchaseOrders(locale);
+      setPurchaseOrderBatch(result);
+      setOrdersOpen(true);
+    } catch {
+      setOrderError(text.orderError);
+    } finally {
+      setLoadingOrders(false);
     }
   };
 
@@ -331,6 +404,29 @@ export default function InsightsPage() {
     },
   ];
 
+  const purchaseOrderItemColumns = [
+    { title: text.product, dataIndex: 'productName', key: 'productName' },
+    {
+      title: text.quantity,
+      dataIndex: 'quantity',
+      key: 'quantity',
+      render: (value: number, row: GeneratedPurchaseOrder['items'][number]) =>
+        `${value} ${formatUnit(row.unit)}`,
+    },
+    {
+      title: text.unitCost,
+      dataIndex: 'unitCost',
+      key: 'unitCost',
+      render: (value: string) => `$${parseFloat(value).toFixed(2)}`,
+    },
+    {
+      title: text.lineTotal,
+      dataIndex: 'lineTotal',
+      key: 'lineTotal',
+      render: (value: string) => `$${parseFloat(value).toFixed(2)}`,
+    },
+  ];
+
   return (
     <div style={{ padding: 24 }}>
       <h2 style={{ marginBottom: 20, fontSize: 20, fontWeight: 700 }}>
@@ -388,9 +484,21 @@ export default function InsightsPage() {
           <Card
             title={text.reorderTitle}
             extra={
-              <Button size="small" onClick={loadReorder} loading={loadingReorder}>
-                {text.refresh}
-              </Button>
+              <Space wrap>
+                {reorderData && reorderData.suggestions.length > 0 && (
+                  <Button
+                    type="primary"
+                    icon={<FileAddOutlined />}
+                    onClick={handleGenerateOrders}
+                    loading={loadingOrders}
+                  >
+                    {loadingOrders ? text.generatingOrders : text.generateOrders}
+                  </Button>
+                )}
+                <Button size="small" onClick={loadReorder} loading={loadingReorder}>
+                  {text.refresh}
+                </Button>
+              </Space>
             }
           >
             {reorderData ? (
@@ -401,13 +509,25 @@ export default function InsightsPage() {
                   style={{ marginBottom: 12 }}
                 />
                 {reorderData.suggestions.length > 0 && (
-                  <Table
-                    size="small"
-                    dataSource={reorderData.suggestions}
-                    columns={reorderColumns}
-                    rowKey="productId"
-                    pagination={false}
-                  />
+                  <>
+                    {orderError && (
+                      <Alert
+                        type="error"
+                        message={orderError}
+                        closable
+                        onClose={() => setOrderError('')}
+                        style={{ marginBottom: 12 }}
+                      />
+                    )}
+                    <Table
+                      size="small"
+                      dataSource={reorderData.suggestions}
+                      columns={reorderColumns}
+                      rowKey="productId"
+                      pagination={false}
+                      scroll={{ x: 760 }}
+                    />
+                  </>
                 )}
               </>
             ) : (
@@ -471,6 +591,69 @@ export default function InsightsPage() {
           </Card>
         </Col>
       </Row>
+
+      <Modal
+        title={text.ordersTitle}
+        open={ordersOpen}
+        onCancel={() => setOrdersOpen(false)}
+        width={860}
+        footer={
+          <Button type="primary" onClick={() => setOrdersOpen(false)}>
+            {text.close}
+          </Button>
+        }
+      >
+        {purchaseOrderBatch && (
+          <>
+            <Alert
+              type={purchaseOrderBatch.orders.length > 0 ? 'success' : 'info'}
+              message={
+                purchaseOrderBatch.orders.length > 0
+                  ? `${purchaseOrderBatch.createdCount} ${text.orderCreated}，${purchaseOrderBatch.updatedCount} ${text.orderUpdated}`
+                  : text.noOrders
+              }
+              description={`${text.orderDate}: ${purchaseOrderBatch.businessDate}`}
+              style={{ marginBottom: 16 }}
+            />
+            <Space direction="vertical" size={16} style={{ width: '100%' }}>
+              {purchaseOrderBatch.orders.map((order) => (
+                <Card
+                  key={order.id}
+                  size="small"
+                  title={order.supplier?.name ?? text.noSupplier}
+                  extra={<Tag color="blue">{text.draft}</Tag>}
+                >
+                  <Space wrap style={{ marginBottom: 12 }}>
+                    <span>
+                      <strong>{text.orderNumber}:</strong> {order.orderNumber}
+                    </span>
+                    {order.supplier?.phone && <span>{order.supplier.phone}</span>}
+                    {order.supplier?.email && <span>{order.supplier.email}</span>}
+                  </Space>
+                  <Table
+                    size="small"
+                    dataSource={order.items}
+                    columns={purchaseOrderItemColumns}
+                    rowKey="id"
+                    pagination={false}
+                    scroll={{ x: 560 }}
+                    summary={() => (
+                      <Table.Summary.Row>
+                        <Table.Summary.Cell index={0} colSpan={3}>
+                          <strong>{text.orderTotal}</strong>
+                        </Table.Summary.Cell>
+                        <Table.Summary.Cell index={3}>
+                          <strong>${parseFloat(order.estimatedTotal).toFixed(2)}</strong>
+                        </Table.Summary.Cell>
+                      </Table.Summary.Row>
+                    )}
+                  />
+                </Card>
+              ))}
+            </Space>
+          </>
+        )}
+      </Modal>
     </div>
   );
 }
