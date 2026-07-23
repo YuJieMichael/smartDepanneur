@@ -98,4 +98,77 @@ describe('DashboardService', () => {
       BadRequestException,
     );
   });
+
+  it('builds a store-local sales trend and compares it with yesterday', async () => {
+    jest.useFakeTimers().setSystemTime(new Date('2026-07-23T16:00:00.000Z'));
+    try {
+      const findMany = jest.fn().mockResolvedValue([
+        {
+          createdAt: new Date('2026-07-22T15:00:00.000Z'),
+          total: new Prisma.Decimal('10.00'),
+          profitEstimate: new Prisma.Decimal('4.00'),
+        },
+        {
+          createdAt: new Date('2026-07-23T15:00:00.000Z'),
+          total: new Prisma.Decimal('15.00'),
+          profitEstimate: new Prisma.Decimal('6.00'),
+        },
+      ]);
+      const prisma = {
+        sale: { findMany },
+      } as unknown as PrismaService;
+      const service = new DashboardService(prisma);
+
+      const report = await service.getSalesTrend(2);
+
+      expect(findMany).toHaveBeenCalledWith({
+        where: {
+          isVoided: false,
+          createdAt: {
+            gte: new Date('2026-07-22T04:00:00.000Z'),
+            lt: new Date('2026-07-24T04:00:00.000Z'),
+          },
+        },
+        select: {
+          createdAt: true,
+          total: true,
+          profitEstimate: true,
+        },
+        orderBy: { createdAt: 'asc' },
+      });
+      expect(report).toMatchObject({
+        timeZone: 'America/Toronto',
+        days: 2,
+        points: [
+          {
+            date: '2026-07-22',
+            saleCount: 1,
+            revenue: '10.00',
+            profit: '4.00',
+          },
+          {
+            date: '2026-07-23',
+            saleCount: 1,
+            revenue: '15.00',
+            profit: '6.00',
+          },
+        ],
+        comparison: {
+          saleCountDelta: 0,
+          revenueChangePercent: '50.00',
+          profitChangePercent: '50.00',
+        },
+      });
+    } finally {
+      jest.useRealTimers();
+    }
+  });
+
+  it('rejects an invalid sales trend range', async () => {
+    const service = new DashboardService({} as PrismaService);
+
+    await expect(service.getSalesTrend(1)).rejects.toBeInstanceOf(
+      BadRequestException,
+    );
+  });
 });

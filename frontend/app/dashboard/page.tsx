@@ -26,10 +26,14 @@ import {
 import {
   apiGetDailyCloseout,
   apiGetDashboardOverview,
+  apiGetSalesTrend,
   DailyCloseoutReport,
   DashboardOverview,
+  SalesTrendReport,
 } from "@/api/dashboard";
+import CategoryPerformanceChart from "@/components/store/category-performance-chart";
 import DonutChart from "@/components/store/donut-chart";
+import SalesTrendChart from "@/components/store/sales-trend-chart";
 import { useI18nStore } from "@/lib/i18n";
 import { localizeStoreCategory } from "@/lib/store-category";
 
@@ -41,18 +45,21 @@ export default function DashboardPage() {
   const [data, setData] = useState<DashboardOverview | null>(null);
   const [loading, setLoading] = useState(true);
   const [closeout, setCloseout] = useState<DailyCloseoutReport | null>(null);
+  const [trend, setTrend] = useState<SalesTrendReport | null>(null);
   const [closeoutLoading, setCloseoutLoading] = useState(false);
   const [closeoutOpen, setCloseoutOpen] = useState(false);
 
   const load = useCallback(async () => {
     try {
       setLoading(true);
-      const [overview, report] = await Promise.all([
+      const [overview, report, trendReport] = await Promise.all([
         apiGetDashboardOverview(),
         apiGetDailyCloseout(),
+        apiGetSalesTrend(7),
       ]);
       setData(overview);
       setCloseout(report);
+      setTrend(trendReport);
     } finally {
       setLoading(false);
     }
@@ -307,11 +314,43 @@ export default function DashboardPage() {
       value: Number(category[metric]),
     }));
 
-  const itemsSold =
-    closeout?.categories.reduce(
-      (sum, category) => sum + category.quantity,
-      0,
-    ) ?? 0;
+  const renderDelta = (
+    value: number | string | null | undefined,
+    isPercent = true,
+  ) => {
+    if (value === undefined) return null;
+    if (value === null) {
+      return (
+        <div style={{ marginTop: 8, color: "#1677ff", fontSize: 12 }}>
+          {isZh
+            ? "较昨日为新增"
+            : isFr
+              ? "Nouveau depuis hier"
+              : "New since yesterday"}
+        </div>
+      );
+    }
+
+    const numericValue = Number(value);
+    const color =
+      numericValue > 0 ? "#389e0d" : numericValue < 0 ? "#cf1322" : "#8c8c8c";
+    const prefix = numericValue > 0 ? "↑ " : numericValue < 0 ? "↓ " : "";
+    const amount = isPercent
+      ? `${Math.abs(numericValue).toFixed(1)}%`
+      : `${numericValue > 0 ? "+" : ""}${numericValue}`;
+    const comparisonText = isZh
+      ? "较昨日"
+      : isFr
+        ? "par rapport à hier"
+        : "vs yesterday";
+
+    return (
+      <div style={{ marginTop: 8, color, fontSize: 12, fontWeight: 600 }}>
+        {prefix}
+        {amount} {comparisonText}
+      </div>
+    );
+  };
 
   return (
     <div style={{ padding: 24 }}>
@@ -356,6 +395,8 @@ export default function DashboardPage() {
               value={data?.today.saleCount ?? 0}
               prefix={<ShoppingCartOutlined />}
             />
+            {trend &&
+              renderDelta(trend.comparison.saleCountDelta, false)}
           </Card>
         </Col>
         <Col xs={12} lg={5}>
@@ -368,6 +409,8 @@ export default function DashboardPage() {
               prefix={<DollarOutlined />}
               suffix="$"
             />
+            {trend &&
+              renderDelta(trend.comparison.revenueChangePercent)}
           </Card>
         </Col>
         <Col xs={12} lg={5}>
@@ -381,6 +424,8 @@ export default function DashboardPage() {
               suffix="$"
               styles={{ content: { color: "#237804" } }}
             />
+            {trend &&
+              renderDelta(trend.comparison.profitChangePercent)}
           </Card>
         </Col>
         <Col xs={12} lg={5}>
@@ -454,26 +499,16 @@ export default function DashboardPage() {
             loading={loading}
             title={
               isZh
-                ? "分类毛利占比"
+                ? "近 7 日收入与毛利"
                 : isFr
-                  ? "Profit par catégorie"
-                  : "Category Gross Profit"
+                  ? "Revenus et profit sur 7 jours"
+                  : "7-Day Revenue & Profit"
             }
             style={{ height: "100%" }}
           >
-            <DonutChart
-              slices={categorySlices("grossProfit")}
-              centerValue={formatCurrency(closeout?.totals.grossProfit ?? 0)}
-              centerLabel={
-                isZh ? "今日毛利" : isFr ? "Profit brut" : "Gross Profit"
-              }
-              emptyText={
-                isZh
-                  ? "暂无毛利数据"
-                  : isFr
-                    ? "Aucune donnée"
-                    : "No Profit Data"
-              }
+            <SalesTrendChart
+              points={trend?.points ?? []}
+              locale={locale}
               valueFormatter={formatCurrency}
             />
           </Card>
@@ -483,27 +518,20 @@ export default function DashboardPage() {
             loading={loading}
             title={
               isZh
-                ? "售出数量占比"
+                ? "分类销售与毛利对比"
                 : isFr
-                  ? "Articles vendus"
-                  : "Units Sold Mix"
+                  ? "Ventes et profit par catégorie"
+                  : "Category Sales vs Profit"
             }
             style={{ height: "100%" }}
           >
-            <DonutChart
-              slices={categorySlices("quantity")}
-              centerValue={String(itemsSold)}
-              centerLabel={
-                isZh ? "售出商品" : isFr ? "Articles vendus" : "Items Sold"
+            <CategoryPerformanceChart
+              categories={closeout?.categories ?? []}
+              locale={locale}
+              valueFormatter={formatCurrency}
+              labelFormatter={(label) =>
+                localizeStoreCategory(label, locale)
               }
-              emptyText={
-                isZh
-                  ? "今日暂无销售"
-                  : isFr
-                    ? "Aucune vente"
-                    : "No Sales Today"
-              }
-              valueFormatter={(value) => String(value)}
             />
           </Card>
         </Col>

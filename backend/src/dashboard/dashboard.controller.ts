@@ -19,4 +19,9 @@ export class DashboardController {
   async getDailyCloseout(@Query('date') date?: string) {
     return this.dashboardService.getDailyCloseout(date);
   }
+
+  @Get('sales-trend')
+  async getSalesTrend(@Query('days') days?: string) {
+    return this.dashboardService.getSalesTrend(days ? Number(days) : 7);
+  }
 }

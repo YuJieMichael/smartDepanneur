@@ -56,6 +56,22 @@ export interface DailyCloseoutReport {
   }>;
 }
 
+export interface SalesTrendReport {
+  timeZone: string;
+  days: number;
+  points: Array<{
+    date: string;
+    saleCount: number;
+    revenue: string;
+    profit: string;
+  }>;
+  comparison: {
+    saleCountDelta: number;
+    revenueChangePercent: string | null;
+    profitChangePercent: string | null;
+  };
+}
+
 export function apiGetDashboardOverview() {
   return request<DashboardOverview>("/api/dashboard/overview");
 }
@@ -63,4 +79,10 @@ export function apiGetDashboardOverview() {
 export function apiGetDailyCloseout(date?: string) {
   const query = date ? `?date=${encodeURIComponent(date)}` : "";
   return request<DailyCloseoutReport>(`/api/dashboard/daily-closeout${query}`);
+}
+
+export function apiGetSalesTrend(days = 7) {
+  return request<SalesTrendReport>(
+    `/api/dashboard/sales-trend?days=${encodeURIComponent(days)}`,
+  );
 }

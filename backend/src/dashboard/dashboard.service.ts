@@ -231,15 +231,87 @@ export class DashboardService {
     };
   }
 
+  async getSalesTrend(days = 7) {
+    if (!Number.isInteger(days) || days < 2 || days > 31) {
+      throw new BadRequestException('days must be an integer between 2 and 31');
+    }
+
+    const { date: today, end } = this.getStoreDateRange();
+    const [year, month, day] = today.split('-').map(Number);
+    const dates = Array.from({ length: days }, (_, index) => {
+      const offset = index - (days - 1);
+      return new Date(Date.UTC(year, month - 1, day + offset))
+        .toISOString()
+        .slice(0, 10);
+    });
+    const start = this.storeMidnightToUtc(dates[0]);
+    const sales = await this.prisma.sale.findMany({
+      where: {
+        isVoided: false,
+        createdAt: { gte: start, lt: end },
+      },
+      select: {
+        createdAt: true,
+        total: true,
+        profitEstimate: true,
+      },
+      orderBy: { createdAt: 'asc' },
+    });
+
+    const buckets = new Map(
+      dates.map((date) => [
+        date,
+        {
+          date,
+          saleCount: 0,
+          revenue: new Prisma.Decimal(0),
+          profit: new Prisma.Decimal(0),
+        },
+      ]),
+    );
+
+    for (const sale of sales) {
+      const saleDate = this.formatStoreDate(sale.createdAt);
+      const bucket = buckets.get(saleDate);
+      if (!bucket) continue;
+
+      bucket.saleCount += 1;
+      bucket.revenue = bucket.revenue.plus(sale.total);
+      bucket.profit = bucket.profit.plus(sale.profitEstimate ?? 0);
+    }
+
+    const points = dates.map((date) => {
+      const bucket = buckets.get(date)!;
+      return {
+        date,
+        saleCount: bucket.saleCount,
+        revenue: bucket.revenue.toFixed(2),
+        profit: bucket.profit.toFixed(2),
+      };
+    });
+    const latest = points.at(-1)!;
+    const previous = points.at(-2)!;
+
+    return {
+      timeZone: STORE_TIME_ZONE,
+      days,
+      points,
+      comparison: {
+        saleCountDelta: latest.saleCount - previous.saleCount,
+        revenueChangePercent: this.calculatePercentChange(
+          latest.revenue,
+          previous.revenue,
+        ),
+        profitChangePercent: this.calculatePercentChange(
+          latest.profit,
+          previous.profit,
+        ),
+      },
+    };
+  }
+
   private getStoreDateRange(dateInput?: string) {
-    const date =
-      dateInput ??
-      new Intl.DateTimeFormat('en-CA', {
-        timeZone: STORE_TIME_ZONE,
-        year: 'numeric',
-        month: '2-digit',
-        day: '2-digit',
-      }).format(new Date());
+    const date = dateInput ?? this.formatStoreDate(new Date());
 
     if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) {
       throw new BadRequestException('date must use YYYY-MM-DD format');
@@ -295,5 +367,36 @@ export class DashboardService {
     const offset = representedAsUtc - utcGuess.getTime();
 
     return new Date(utcGuess.getTime() - offset);
+  }
+
+  private formatStoreDate(value: Date) {
+    const parts = Object.fromEntries(
+      new Intl.DateTimeFormat('en-CA', {
+        timeZone: STORE_TIME_ZONE,
+        year: 'numeric',
+        month: '2-digit',
+        day: '2-digit',
+      })
+        .formatToParts(value)
+        .filter((part) => part.type !== 'literal')
+        .map((part) => [part.type, part.value]),
+    );
+
+    return `${parts.year}-${parts.month}-${parts.day}`;
+  }
+
+  private calculatePercentChange(currentValue: string, previousValue: string) {
+    const current = new Prisma.Decimal(currentValue);
+    const previous = new Prisma.Decimal(previousValue);
+
+    if (previous.isZero()) {
+      return current.isZero() ? '0.00' : null;
+    }
+
+    return current
+      .minus(previous)
+      .dividedBy(previous.abs())
+      .times(100)
+      .toFixed(2);
   }
 }
