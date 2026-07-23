@@ -1,10 +1,34 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
-import { Button, Card, Divider, InputNumber, message, Select, Space, Statistic, Table } from 'antd';
-import { DeleteOutlined, PlusOutlined, ShoppingCartOutlined } from '@ant-design/icons';
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import {
+  Button,
+  Card,
+  Divider,
+  InputNumber,
+  message,
+  Popconfirm,
+  Select,
+  Space,
+  Statistic,
+  Table,
+  Tag,
+  Typography,
+} from 'antd';
+import {
+  DeleteOutlined,
+  HistoryOutlined,
+  PlusOutlined,
+  ShoppingCartOutlined,
+  UndoOutlined,
+} from '@ant-design/icons';
 import { apiGetProductList, ProductRow } from '@/api/products';
-import { apiCreateSale } from '@/api/sales';
+import {
+  apiCreateSale,
+  apiGetRecentSales,
+  apiVoidSale,
+  SaleRow,
+} from '@/api/sales';
 import { useI18nStore, useT } from '@/lib/i18n';
 import { globalMessage } from '@/lib/message-bridge';
 
@@ -30,8 +54,11 @@ export default function SalesPage() {
   const [quantity, setQuantity] = useState<number>(1);
   const [paymentMethod, setPaymentMethod] = useState<'cash' | 'debit' | 'credit' | 'other'>('cash');
   const [submitting, setSubmitting] = useState(false);
+  const [history, setHistory] = useState<SaleRow[]>([]);
+  const [historyLoading, setHistoryLoading] = useState(true);
+  const [voidingId, setVoidingId] = useState<number | null>(null);
 
-  const loadProducts = async () => {
+  const loadProducts = useCallback(async () => {
     const result = await apiGetProductList({
       pageSize: 500,
       filterActive: 'true',
@@ -39,11 +66,20 @@ export default function SalesPage() {
       sortOrder: 'asc',
     });
     setProducts(result.list);
-  };
+  }, []);
+
+  const loadHistory = useCallback(async () => {
+    try {
+      setHistoryLoading(true);
+      setHistory(await apiGetRecentSales(12));
+    } finally {
+      setHistoryLoading(false);
+    }
+  }, []);
 
   useEffect(() => {
-    loadProducts().catch(() => {});
-  }, []);
+    Promise.all([loadProducts(), loadHistory()]).catch(() => {});
+  }, [loadHistory, loadProducts]);
 
   const selectedProduct = useMemo(
     () => products.find((product) => product.id === selectedProductId) ?? null,
@@ -123,11 +159,43 @@ export default function SalesPage() {
       });
       globalMessage.success(isZh ? `销售单 ${sale.saleNumber} 已创建 - $${parseFloat(sale.total).toFixed(2)}` : isFr ? `Vente ${sale.saleNumber} créée - $${parseFloat(sale.total).toFixed(2)}` : `Sale ${sale.saleNumber} created - $${parseFloat(sale.total).toFixed(2)}`);
       setCart([]);
-      await loadProducts();
+      await Promise.all([loadProducts(), loadHistory()]);
     } catch {
       globalMessage.error(t.common.create_failed);
     } finally {
       setSubmitting(false);
+    }
+  };
+
+  const handleVoidSale = async (sale: SaleRow) => {
+    try {
+      setVoidingId(sale.id);
+      await apiVoidSale(
+        sale.id,
+        isZh
+          ? '收银员撤销误操作'
+          : isFr
+            ? 'Vente annulée par erreur de caisse'
+            : 'Cashier reversed an accidental sale',
+      );
+      globalMessage.success(
+        isZh
+          ? `销售单 ${sale.saleNumber} 已撤销，库存已恢复`
+          : isFr
+            ? `Vente ${sale.saleNumber} annulée et stock restauré`
+            : `Sale ${sale.saleNumber} voided and inventory restored`,
+      );
+      await Promise.all([loadProducts(), loadHistory()]);
+    } catch {
+      globalMessage.error(
+        isZh
+          ? '撤销失败，请刷新后重试'
+          : isFr
+            ? 'Échec de l’annulation'
+            : 'Unable to void the sale',
+      );
+    } finally {
+      setVoidingId(null);
     }
   };
 
@@ -181,6 +249,132 @@ export default function SalesPage() {
           onClick={() => removeFromCart(item.productId)}
         />
       ),
+    },
+  ];
+
+  const paymentLabels = {
+    cash: isZh ? '现金' : isFr ? 'Espèces' : 'Cash',
+    debit: isZh ? '借记卡' : isFr ? 'Débit' : 'Debit',
+    credit: isZh ? '信用卡' : isFr ? 'Crédit' : 'Credit',
+    other: isZh ? '其他' : isFr ? 'Autre' : 'Other',
+  };
+  const dateFormatter = new Intl.DateTimeFormat(
+    isZh ? 'zh-CN' : isFr ? 'fr-CA' : 'en-CA',
+    {
+      timeZone: 'America/Toronto',
+      month: 'short',
+      day: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit',
+    },
+  );
+
+  const historyColumns = [
+    {
+      title: isZh ? '销售单' : isFr ? 'Vente' : 'Sale',
+      key: 'sale',
+      width: 190,
+      render: (_: unknown, sale: SaleRow) => (
+        <Space direction="vertical" size={3}>
+          <Typography.Text code>{sale.saleNumber}</Typography.Text>
+          {sale.isVoided ? (
+            <Tag color="default">
+              {isZh ? '已撤销' : isFr ? 'Annulée' : 'Voided'}
+            </Tag>
+          ) : (
+            <Tag color="green">
+              {isZh ? '已完成' : isFr ? 'Complétée' : 'Completed'}
+            </Tag>
+          )}
+        </Space>
+      ),
+    },
+    {
+      title: isZh ? '时间' : isFr ? 'Heure' : 'Time',
+      dataIndex: 'createdAt',
+      key: 'createdAt',
+      width: 150,
+      render: (value: string) => dateFormatter.format(new Date(value)),
+    },
+    {
+      title: isZh ? '商品明细' : isFr ? 'Articles' : 'Items',
+      key: 'items',
+      render: (_: unknown, sale: SaleRow) => (
+        <Space direction="vertical" size={2}>
+          {sale.items.map((item) => (
+            <Typography.Text key={item.id}>
+              {item.product.name} × {item.quantity}
+            </Typography.Text>
+          ))}
+        </Space>
+      ),
+    },
+    {
+      title: isZh ? '收银员' : isFr ? 'Caissier' : 'Cashier',
+      key: 'cashier',
+      width: 190,
+      render: (_: unknown, sale: SaleRow) => sale.cashier?.email ?? '—',
+    },
+    {
+      title: isZh ? '支付' : isFr ? 'Paiement' : 'Payment',
+      dataIndex: 'paymentMethod',
+      key: 'paymentMethod',
+      width: 100,
+      render: (value: SaleRow['paymentMethod']) => paymentLabels[value],
+    },
+    {
+      title: isZh ? '总计' : isFr ? 'Total' : 'Total',
+      dataIndex: 'total',
+      key: 'total',
+      width: 105,
+      align: 'right' as const,
+      render: (value: string, sale: SaleRow) => (
+        <Typography.Text delete={sale.isVoided}>
+          ${Number(value).toFixed(2)}
+        </Typography.Text>
+      ),
+    },
+    {
+      title: isZh ? '操作' : isFr ? 'Action' : 'Action',
+      key: 'action',
+      width: 120,
+      fixed: 'right' as const,
+      render: (_: unknown, sale: SaleRow) =>
+        sale.isVoided ? (
+          <Typography.Text type="secondary">
+            {isZh ? '库存已恢复' : isFr ? 'Stock restauré' : 'Stock restored'}
+          </Typography.Text>
+        ) : (
+          <Popconfirm
+            title={
+              isZh
+                ? '确认撤销这笔销售？'
+                : isFr
+                  ? 'Annuler cette vente?'
+                  : 'Void this sale?'
+            }
+            description={
+              isZh
+                ? '销售记录会保留，商品库存会自动加回。'
+                : isFr
+                  ? 'La vente restera visible et le stock sera restauré.'
+                  : 'The sale stays in history and inventory is restored.'
+            }
+            okText={isZh ? '确认撤销' : isFr ? 'Confirmer' : 'Void Sale'}
+            cancelText={isZh ? '取消' : isFr ? 'Annuler' : 'Cancel'}
+            okButtonProps={{ danger: true }}
+            onConfirm={() => handleVoidSale(sale)}
+          >
+            <Button
+              danger
+              size="small"
+              icon={<UndoOutlined />}
+              loading={voidingId === sale.id}
+            >
+              {isZh ? '撤销' : isFr ? 'Annuler' : 'Undo'}
+            </Button>
+          </Popconfirm>
+        ),
     },
   ];
 
@@ -263,6 +457,49 @@ export default function SalesPage() {
             </Space>
           </>
         )}
+      </Card>
+
+      <Card
+        style={{ marginTop: 18 }}
+        title={
+          <Space>
+            <HistoryOutlined />
+            {isZh ? '销售历史' : isFr ? 'Historique des ventes' : 'Sales History'}
+          </Space>
+        }
+        extra={
+          <Button type="link" onClick={loadHistory} loading={historyLoading}>
+            {isZh ? '刷新' : isFr ? 'Actualiser' : 'Refresh'}
+          </Button>
+        }
+      >
+        <Table
+          size="small"
+          loading={historyLoading}
+          dataSource={history}
+          columns={historyColumns}
+          rowKey="id"
+          pagination={false}
+          scroll={{ x: 980 }}
+          rowClassName={(sale) => (sale.isVoided ? 'sale-row-voided' : '')}
+          locale={{
+            emptyText: isZh
+              ? '暂无销售历史'
+              : isFr
+                ? 'Aucun historique de vente'
+                : 'No sales history yet',
+          }}
+        />
+        <Typography.Paragraph
+          type="secondary"
+          style={{ margin: '12px 0 0', fontSize: 12 }}
+        >
+          {isZh
+            ? '撤销不会删除销售记录；系统会保留操作人和时间，并自动恢复库存。'
+            : isFr
+              ? 'Une annulation conserve la vente, l’opérateur et l’heure, puis restaure automatiquement le stock.'
+              : 'Undo keeps the sale, operator, and timestamp in history while restoring inventory automatically.'}
+        </Typography.Paragraph>
       </Card>
     </div>
   );

@@ -39,11 +39,15 @@ export class DashboardService {
         },
       }),
       this.prisma.sale.findMany({
-        where: { createdAt: { gte: todayStart, lt: todayEnd } },
+        where: {
+          isVoided: false,
+          createdAt: { gte: todayStart, lt: todayEnd },
+        },
         select: { total: true, profitEstimate: true },
       }),
       this.prisma.saleItem.groupBy({
         by: ['productId'],
+        where: { sale: { isVoided: false } },
         _sum: { quantity: true },
         orderBy: { _sum: { quantity: 'desc' } },
         take: 5,
@@ -129,7 +133,10 @@ export class DashboardService {
   async getDailyCloseout(dateInput?: string) {
     const { date, start, end } = this.getStoreDateRange(dateInput);
     const sales = await this.prisma.sale.findMany({
-      where: { createdAt: { gte: start, lt: end } },
+      where: {
+        isVoided: false,
+        createdAt: { gte: start, lt: end },
+      },
       select: {
         subtotal: true,
         tax: true,

@@ -51,6 +51,7 @@ describe('DashboardService', () => {
     expect(findMany).toHaveBeenCalledWith(
       expect.objectContaining({
         where: {
+          isVoided: false,
           createdAt: {
             gte: new Date('2026-07-23T04:00:00.000Z'),
             lt: new Date('2026-07-24T04:00:00.000Z'),

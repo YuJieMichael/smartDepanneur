@@ -1,6 +1,7 @@
 'use client';
 
-import { Button, Card, Col, Row, Space, Statistic, Tag, Typography } from 'antd';
+import { useEffect, useState } from 'react';
+import { Button, Card, Col, Row, Space, Tag, Typography } from 'antd';
 import {
   ArrowRightOutlined,
   BarChartOutlined,
@@ -11,11 +12,16 @@ import {
   SafetyCertificateOutlined,
   ShoppingCartOutlined,
   ShopOutlined,
-  WarningOutlined,
 } from '@ant-design/icons';
 import { useRouter } from 'next/navigation';
+import {
+  apiGetDailyCloseout,
+  DailyCloseoutReport,
+} from '@/api/dashboard';
+import DonutChart from '@/components/store/donut-chart';
 import { useI18nStore } from '@/lib/i18n';
 import { useAppStore } from '@/lib/store';
+import { localizeStoreCategory } from '@/lib/store-category';
 
 export default function Home() {
   const router = useRouter();
@@ -23,6 +29,26 @@ export default function Home() {
   const currentUser = useAppStore((state) => state.currentUser);
   const isZh = locale === 'zh';
   const isFr = locale === 'fr';
+  const [closeout, setCloseout] = useState<DailyCloseoutReport | null>(null);
+  const canViewDashboard = Boolean(
+    currentUser?.roles.some(
+      (role) =>
+        role.name === 'Admin' ||
+        role.permissions.some(
+          (permission) => permission.name === 'dashboard-view',
+        ),
+    ),
+  );
+
+  useEffect(() => {
+    if (!canViewDashboard) return;
+    apiGetDailyCloseout().then(setCloseout).catch(() => setCloseout(null));
+  }, [canViewDashboard]);
+
+  const currencyFormatter = new Intl.NumberFormat(
+    isZh ? 'zh-CN' : isFr ? 'fr-CA' : 'en-CA',
+    { style: 'currency', currency: 'CAD' },
+  );
 
   const actions = [
     {
@@ -171,28 +197,119 @@ export default function Home() {
         </Row>
       </div>
 
-      <Row gutter={[16, 16]} style={{ marginBottom: 24 }}>
-        <Col xs={12} lg={6}>
-          <Card style={{ border: 0, boxShadow: '0 8px 24px rgba(15, 23, 42, 0.06)' }}>
-            <Statistic title={isZh ? '门店类型' : isFr ? 'Type de commerce' : 'Store Focus'} value={isZh ? '便利店' : 'Dépanneur'} prefix={<ShopOutlined />} />
-          </Card>
-        </Col>
-        <Col xs={12} lg={6}>
-          <Card style={{ border: 0, boxShadow: '0 8px 24px rgba(15, 23, 42, 0.06)' }}>
-            <Statistic title={isZh ? '核心流程' : isFr ? 'Flux principal' : 'Core Workflow'} value={isZh ? '库存' : isFr ? 'Inventaire' : 'Inventory'} prefix={<InboxOutlined />} />
-          </Card>
-        </Col>
-        <Col xs={12} lg={6}>
-          <Card style={{ border: 0, boxShadow: '0 8px 24px rgba(15, 23, 42, 0.06)' }}>
-            <Statistic title={isZh ? '智能模块' : isFr ? 'Module intelligent' : 'Smart Module'} value={isZh ? '门店 Agent' : isFr ? 'Agent du magasin' : 'Store Agent'} prefix={<BulbOutlined />} />
-          </Card>
-        </Col>
-        <Col xs={12} lg={6}>
-          <Card style={{ border: 0, boxShadow: '0 8px 24px rgba(15, 23, 42, 0.06)' }}>
-            <Statistic title={isZh ? '风险检查' : isFr ? 'Contrôles de risque' : 'Risk Checks'} value={isZh ? '过期' : isFr ? 'Expiration' : 'Expiry'} prefix={<WarningOutlined />} />
-          </Card>
-        </Col>
-      </Row>
+      <Card
+        style={{
+          marginBottom: 24,
+          border: 0,
+          boxShadow: '0 8px 24px rgba(15, 23, 42, 0.06)',
+        }}
+        title={
+          <Space>
+            <BarChartOutlined style={{ color: '#1677ff' }} />
+            {isZh
+              ? '今日分类销售'
+              : isFr
+                ? 'Ventes du jour par catégorie'
+                : 'Today’s Sales by Category'}
+          </Space>
+        }
+        extra={
+          canViewDashboard && (
+            <Button type="link" onClick={() => router.push('/dashboard')}>
+              {isZh
+                ? '查看完整仪表盘'
+                : isFr
+                  ? 'Voir le tableau de bord'
+                  : 'View Dashboard'}
+            </Button>
+          )
+        }
+      >
+        <Row gutter={[24, 20]} align="middle">
+          <Col xs={24} md={13}>
+            <DonutChart
+              slices={(closeout?.categories ?? []).map((category) => ({
+                key: String(category.categoryId ?? 'uncategorized'),
+                label: localizeStoreCategory(category.categoryName, locale),
+                value: Number(category.revenue),
+              }))}
+              centerValue={currencyFormatter.format(
+                Number(closeout?.totals.subtotal ?? 0),
+              )}
+              centerLabel={
+                isZh ? '今日税前销售' : isFr ? 'Ventes avant taxes' : 'Sales Before Tax'
+              }
+              emptyText={
+                canViewDashboard
+                  ? isZh
+                    ? '今日暂无销售'
+                    : isFr
+                      ? 'Aucune vente aujourd’hui'
+                      : 'No Sales Today'
+                  : isZh
+                    ? '仅店主可查看'
+                    : isFr
+                      ? 'Réservé au propriétaire'
+                      : 'Owner Access'
+              }
+              valueFormatter={(value) => currencyFormatter.format(value)}
+            />
+          </Col>
+          <Col xs={24} md={11}>
+            <div
+              style={{
+                display: 'grid',
+                gridTemplateColumns: 'repeat(2, minmax(0, 1fr))',
+                gap: 12,
+              }}
+            >
+              {[
+                {
+                  label: isZh ? '订单数' : isFr ? 'Ventes' : 'Sales',
+                  value: String(closeout?.saleCount ?? 0),
+                },
+                {
+                  label: isZh ? '售出商品' : isFr ? 'Articles vendus' : 'Items Sold',
+                  value: String(
+                    closeout?.categories.reduce(
+                      (sum, category) => sum + category.quantity,
+                      0,
+                    ) ?? 0,
+                  ),
+                },
+                {
+                  label: isZh ? '今日收入' : isFr ? 'Revenus' : 'Revenue',
+                  value: currencyFormatter.format(
+                    Number(closeout?.totals.revenue ?? 0),
+                  ),
+                },
+                {
+                  label: isZh ? '毛利' : isFr ? 'Profit brut' : 'Gross Profit',
+                  value: currencyFormatter.format(
+                    Number(closeout?.totals.grossProfit ?? 0),
+                  ),
+                },
+              ].map((metric) => (
+                <div
+                  key={metric.label}
+                  style={{
+                    minHeight: 82,
+                    padding: 14,
+                    border: '1px solid #edf0f5',
+                    borderRadius: 14,
+                    background: '#f8fafc',
+                  }}
+                >
+                  <div style={{ marginBottom: 7, color: '#8c8c8c', fontSize: 12 }}>
+                    {metric.label}
+                  </div>
+                  <strong style={{ fontSize: 18 }}>{metric.value}</strong>
+                </div>
+              ))}
+            </div>
+          </Col>
+        </Row>
+      </Card>
 
       <Card
         style={{ marginBottom: 24, border: 0, boxShadow: '0 8px 24px rgba(15, 23, 42, 0.06)' }}

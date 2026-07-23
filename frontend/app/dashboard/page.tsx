@@ -29,7 +29,9 @@ import {
   DailyCloseoutReport,
   DashboardOverview,
 } from "@/api/dashboard";
+import DonutChart from "@/components/store/donut-chart";
 import { useI18nStore } from "@/lib/i18n";
+import { localizeStoreCategory } from "@/lib/store-category";
 
 export default function DashboardPage() {
   const { message } = App.useApp();
@@ -45,8 +47,12 @@ export default function DashboardPage() {
   const load = useCallback(async () => {
     try {
       setLoading(true);
-      const result = await apiGetDashboardOverview();
-      setData(result);
+      const [overview, report] = await Promise.all([
+        apiGetDashboardOverview(),
+        apiGetDailyCloseout(),
+      ]);
+      setData(overview);
+      setCloseout(report);
     } finally {
       setLoading(false);
     }
@@ -143,7 +149,9 @@ export default function DashboardPage() {
         isZh ? "毛利率" : isFr ? "Marge brute" : "Gross margin",
       ],
       ...closeout.categories.map((row) => [
-        row.categoryId === null ? uncategorized : row.categoryName,
+        row.categoryId === null
+          ? uncategorized
+          : localizeStoreCategory(row.categoryName, locale),
         row.quantity,
         row.revenue,
         row.grossProfit,
@@ -257,7 +265,7 @@ export default function DashboardPage() {
             : isFr
               ? "Non classé"
               : "Uncategorized"
-          : value,
+          : localizeStoreCategory(value, locale),
     },
     {
       title: isZh ? "售出数量" : isFr ? "Quantité vendue" : "Quantity Sold",
@@ -291,6 +299,19 @@ export default function DashboardPage() {
       render: (value: string) => `${Number(value).toFixed(2)}%`,
     },
   ];
+
+  const categorySlices = (metric: "revenue" | "grossProfit" | "quantity") =>
+    (closeout?.categories ?? []).map((category) => ({
+      key: String(category.categoryId ?? "uncategorized"),
+      label: localizeStoreCategory(category.categoryName, locale),
+      value: Number(category[metric]),
+    }));
+
+  const itemsSold =
+    closeout?.categories.reduce(
+      (sum, category) => sum + category.quantity,
+      0,
+    ) ?? 0;
 
   return (
     <div style={{ padding: 24 }}>
@@ -389,6 +410,100 @@ export default function DashboardPage() {
                   ? { content: { color: "#d48806" } }
                   : undefined
               }
+            />
+          </Card>
+        </Col>
+      </Row>
+
+      <Row gutter={[16, 16]} style={{ marginBottom: 24 }}>
+        <Col xs={24} lg={8}>
+          <Card
+            loading={loading}
+            title={
+              isZh
+                ? "分类销售占比"
+                : isFr
+                  ? "Ventes par catégorie"
+                  : "Category Sales Mix"
+            }
+            style={{ height: "100%" }}
+          >
+            <DonutChart
+              slices={categorySlices("revenue")}
+              centerValue={formatCurrency(closeout?.totals.subtotal ?? 0)}
+              centerLabel={
+                isZh
+                  ? "税前销售额"
+                  : isFr
+                    ? "Ventes avant taxes"
+                    : "Sales Before Tax"
+              }
+              emptyText={
+                isZh
+                  ? "今日暂无销售"
+                  : isFr
+                    ? "Aucune vente"
+                    : "No Sales Today"
+              }
+              valueFormatter={formatCurrency}
+            />
+          </Card>
+        </Col>
+        <Col xs={24} lg={8}>
+          <Card
+            loading={loading}
+            title={
+              isZh
+                ? "分类毛利占比"
+                : isFr
+                  ? "Profit par catégorie"
+                  : "Category Gross Profit"
+            }
+            style={{ height: "100%" }}
+          >
+            <DonutChart
+              slices={categorySlices("grossProfit")}
+              centerValue={formatCurrency(closeout?.totals.grossProfit ?? 0)}
+              centerLabel={
+                isZh ? "今日毛利" : isFr ? "Profit brut" : "Gross Profit"
+              }
+              emptyText={
+                isZh
+                  ? "暂无毛利数据"
+                  : isFr
+                    ? "Aucune donnée"
+                    : "No Profit Data"
+              }
+              valueFormatter={formatCurrency}
+            />
+          </Card>
+        </Col>
+        <Col xs={24} lg={8}>
+          <Card
+            loading={loading}
+            title={
+              isZh
+                ? "售出数量占比"
+                : isFr
+                  ? "Articles vendus"
+                  : "Units Sold Mix"
+            }
+            style={{ height: "100%" }}
+          >
+            <DonutChart
+              slices={categorySlices("quantity")}
+              centerValue={String(itemsSold)}
+              centerLabel={
+                isZh ? "售出商品" : isFr ? "Articles vendus" : "Items Sold"
+              }
+              emptyText={
+                isZh
+                  ? "今日暂无销售"
+                  : isFr
+                    ? "Aucune vente"
+                    : "No Sales Today"
+              }
+              valueFormatter={(value) => String(value)}
             />
           </Card>
         </Col>

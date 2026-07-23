@@ -1,4 +1,10 @@
-import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  ConflictException,
+  ForbiddenException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import { InventoryMovementType, PaymentMethod, Prisma } from '@prisma/client';
 import { randomUUID } from 'node:crypto';
 import { AuditTrailService } from '../audit-trail/audit-trail.service';
@@ -10,6 +16,7 @@ const DEFAULT_TAX_RATE = 0.14975; // QC TPS + TVQ
 
 const saleInclude = {
   cashier: { select: { id: true, email: true } },
+  voidedBy: { select: { id: true, email: true } },
   items: {
     include: {
       product: {
@@ -67,6 +74,23 @@ export class SalesService {
     return sale;
   }
 
+  async getRecentSales(
+    operator: { id: number; email: string },
+    requestedLimit = 10,
+  ) {
+    const limit = Number.isInteger(requestedLimit)
+      ? Math.min(Math.max(requestedLimit, 1), 50)
+      : 10;
+    const canManageAllSales = await this.canManageAllSales(operator.id);
+
+    return this.prisma.sale.findMany({
+      where: canManageAllSales ? undefined : { cashierId: operator.id },
+      include: saleInclude,
+      orderBy: { createdAt: 'desc' },
+      take: limit,
+    });
+  }
+
   async getDailySummary(date?: string) {
     const targetDate = date ? new Date(date) : new Date();
     const start = new Date(targetDate);
@@ -75,7 +99,10 @@ export class SalesService {
 
     const [sales, topProducts] = await this.prisma.$transaction([
       this.prisma.sale.findMany({
-        where: { createdAt: { gte: start, lt: end } },
+        where: {
+          isVoided: false,
+          createdAt: { gte: start, lt: end },
+        },
         select: {
           subtotal: true,
           tax: true,
@@ -86,14 +113,22 @@ export class SalesService {
       }),
       this.prisma.saleItem.groupBy({
         by: ['productId'],
-        where: { sale: { createdAt: { gte: start, lt: end } } },
+        where: {
+          sale: {
+            isVoided: false,
+            createdAt: { gte: start, lt: end },
+          },
+        },
         _sum: { quantity: true, lineTotal: true },
         orderBy: { _sum: { quantity: 'desc' } },
         take: 5,
       }),
     ]);
 
-    const totalRevenue = sales.reduce((sum, s) => sum.plus(s.total), new Prisma.Decimal(0));
+    const totalRevenue = sales.reduce(
+      (sum, s) => sum.plus(s.total),
+      new Prisma.Decimal(0),
+    );
     const totalProfit = sales.reduce(
       (sum, s) => sum.plus(s.profitEstimate ?? 0),
       new Prisma.Decimal(0),
@@ -123,7 +158,10 @@ export class SalesService {
     };
   }
 
-  async createSale(data: CreateSaleDto, operator: { id: number; email: string }) {
+  async createSale(
+    data: CreateSaleDto,
+    operator: { id: number; email: string },
+  ) {
     if (!data.items || data.items.length === 0) {
       throw new BadRequestException('Sale must have at least one item');
     }
@@ -223,6 +261,86 @@ export class SalesService {
     return sale;
   }
 
+  async voidSale(
+    id: number,
+    reasonInput: string | undefined,
+    operator: { id: number; email: string },
+  ) {
+    const sale = await this.prisma.sale.findUnique({
+      where: { id },
+      include: saleInclude,
+    });
+
+    if (!sale) {
+      throw new NotFoundException(`Sale ${id} not found`);
+    }
+    if (sale.isVoided) {
+      throw new ConflictException(`Sale ${sale.saleNumber} is already voided`);
+    }
+
+    const canManageAllSales = await this.canManageAllSales(operator.id);
+    if (sale.cashierId !== operator.id && !canManageAllSales) {
+      throw new ForbiddenException('You can only void your own sales');
+    }
+
+    const reason =
+      reasonInput?.trim().slice(0, 200) || 'Reversed accidental sale';
+    const voidedAt = new Date();
+    const voidedSale = await this.prisma.$transaction(async (tx) => {
+      const updateResult = await tx.sale.updateMany({
+        where: { id, isVoided: false },
+        data: {
+          isVoided: true,
+          voidedAt,
+          voidReason: reason,
+          voidedById: operator.id,
+        },
+      });
+
+      if (updateResult.count !== 1) {
+        throw new ConflictException(
+          `Sale ${sale.saleNumber} is already voided`,
+        );
+      }
+
+      for (const item of sale.items) {
+        await tx.product.update({
+          where: { id: item.productId },
+          data: { currentStock: { increment: item.quantity } },
+        });
+        await tx.inventoryMovement.create({
+          data: {
+            type: InventoryMovementType.return_item,
+            quantity: item.quantity,
+            unitCost: item.unitCost,
+            reason: `Voided sale ${sale.saleNumber}: ${reason}`,
+            referenceType: 'sale_void',
+            referenceId: sale.id,
+            product: { connect: { id: item.productId } },
+            user: { connect: { id: operator.id } },
+          },
+        });
+      }
+
+      return tx.sale.findUniqueOrThrow({
+        where: { id },
+        include: saleInclude,
+      });
+    });
+
+    await this.auditTrailService.create({
+      table: 'sales',
+      recordId: sale.id,
+      field: 'isVoided',
+      oldValue: 'false',
+      newValue: `true - ${reason}`,
+      userId: operator.id,
+      userEmail: operator.email,
+    });
+
+    return voidedSale;
+  }
+
   // ------------------------------------------------------------------
   // Private helpers
   // ------------------------------------------------------------------
@@ -244,12 +362,16 @@ export class SalesService {
 
     return items.map((item) => {
       if (!Number.isInteger(item.quantity) || item.quantity <= 0) {
-        throw new BadRequestException(`quantity must be a positive integer for product ${item.productId}`);
+        throw new BadRequestException(
+          `quantity must be a positive integer for product ${item.productId}`,
+        );
       }
 
       const product = productMap.get(item.productId);
       if (!product) {
-        throw new NotFoundException(`Product ${item.productId} not found or inactive`);
+        throw new NotFoundException(
+          `Product ${item.productId} not found or inactive`,
+        );
       }
 
       const unitPrice =
@@ -258,12 +380,17 @@ export class SalesService {
           : product.sellingPrice;
 
       if (unitPrice.isNegative()) {
-        throw new BadRequestException(`unitPrice must be zero or greater for product ${item.productId}`);
+        throw new BadRequestException(
+          `unitPrice must be zero or greater for product ${item.productId}`,
+        );
       }
 
       const unitCost = product.costPrice;
       const lineTotal = unitPrice.times(item.quantity).toDecimalPlaces(2);
-      const lineProfit = unitPrice.minus(unitCost).times(item.quantity).toDecimalPlaces(2);
+      const lineProfit = unitPrice
+        .minus(unitCost)
+        .times(item.quantity)
+        .toDecimalPlaces(2);
 
       return {
         productId: item.productId,
@@ -293,7 +420,10 @@ export class SalesService {
     }
 
     if (query.filterCreatedDates) {
-      const dates = query.filterCreatedDates.split(',').map((v) => v.trim()).filter(Boolean);
+      const dates = query.filterCreatedDates
+        .split(',')
+        .map((v) => v.trim())
+        .filter(Boolean);
       if (dates.length) {
         and.push({
           OR: dates.map((date) => {
@@ -306,6 +436,30 @@ export class SalesService {
     }
 
     return and.length ? { AND: and } : {};
+  }
+
+  private async canManageAllSales(userId: number) {
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId },
+      select: {
+        roles: {
+          select: {
+            name: true,
+            permissions: { select: { name: true } },
+          },
+        },
+      },
+    });
+
+    return Boolean(
+      user?.roles.some(
+        (role) =>
+          role.name === 'Admin' ||
+          role.permissions.some(
+            (permission) => permission.name === 'dashboard-view',
+          ),
+      ),
+    );
   }
 
   private normalizeTaxRate(rate: number) {

@@ -23,10 +23,15 @@ export interface SaleRow {
   total: string;
   profitEstimate: string | null;
   paymentMethod: 'cash' | 'debit' | 'credit' | 'other';
+  isVoided: boolean;
+  voidedAt: string | null;
+  voidReason: string | null;
   createdAt: string;
   updatedAt: string;
   cashierId: number | null;
   cashier: { id: number; email: string } | null;
+  voidedById: number | null;
+  voidedBy: { id: number; email: string } | null;
   items: SaleItemRow[];
 }
 
@@ -94,5 +99,16 @@ export function apiCreateSale(data: CreateSalePayload) {
   return request<SaleRow>('/api/sales', {
     method: 'POST',
     body: JSON.stringify(data),
+  });
+}
+
+export function apiGetRecentSales(limit = 10) {
+  return request<SaleRow[]>(`/api/sales/recent?limit=${limit}`);
+}
+
+export function apiVoidSale(id: number, reason: string) {
+  return request<SaleRow>(`/api/sales/${id}/void`, {
+    method: 'POST',
+    body: JSON.stringify({ reason }),
   });
 }
