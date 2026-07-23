@@ -81,35 +81,45 @@ async function main() {
     });
   }
 
-  // Assign store permissions to operational roles.
-  for (const perm of ['product-edit', 'inventory-edit', 'sales-edit', 'dashboard-view', 'insights-view']) {
-    await prisma.permission.update({
-      where: { name: perm },
-      data: { roles: { connect: [{ name: 'Store Owner' }] } },
-    });
-  }
+  // Set complete permission lists so rerunning the seed also removes stale access.
+  await prisma.role.update({
+    where: { name: 'Store Owner' },
+    data: {
+      permissions: {
+        set: ['product-edit', 'inventory-edit', 'sales-edit', 'dashboard-view', 'insights-view']
+          .map((name) => ({ name })),
+      },
+    },
+  });
 
-  for (const perm of ['sales-edit', 'dashboard-view']) {
-    await prisma.permission.update({
-      where: { name: perm },
-      data: { roles: { connect: [{ name: 'Cashier' }] } },
-    });
-  }
+  await prisma.role.update({
+    where: { name: 'Cashier' },
+    data: {
+      // Checkout automatically decrements stock and creates a sale inventory movement.
+      // Cashiers do not receive dashboard, inventory-management, or reporting access.
+      permissions: { set: [{ name: 'sales-edit' }] },
+    },
+  });
 
-  for (const perm of ['product-edit', 'inventory-edit', 'dashboard-view', 'insights-view']) {
-    await prisma.permission.update({
-      where: { name: perm },
-      data: { roles: { connect: [{ name: 'Inventory Staff' }] } },
-    });
-  }
+  await prisma.role.update({
+    where: { name: 'Inventory Staff' },
+    data: {
+      permissions: {
+        set: ['product-edit', 'inventory-edit', 'dashboard-view', 'insights-view']
+          .map((name) => ({ name })),
+      },
+    },
+  });
 
-  // Keep the legacy recruitment demo roles usable for old routes.
-  for (const perm of ['post-view', 'post-edit', 'template-edit']) {
-    await prisma.permission.update({
-      where: { name: perm },
-      data: { roles: { connect: { name: 'Project Owner' } } },
-    });
-  }
+  // Keep the legacy recruitment demo role usable for old routes.
+  await prisma.role.update({
+    where: { name: 'Project Owner' },
+    data: {
+      permissions: {
+        set: ['post-view', 'post-edit', 'template-edit'].map((name) => ({ name })),
+      },
+    },
+  });
 
   console.log('Seeded permissions:', permissions);
 

@@ -1,4 +1,6 @@
 import { Body, Controller, Get, Param, Post, Query, Request, UseGuards } from '@nestjs/common';
+import { PermissionGuard } from '../access-control/permission.guard';
+import { RequirePermissions } from '../access-control/require-permissions.decorator';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { CreateSaleDto } from './dto/create-sale.dto';
 import type { SaleSortField } from './dto/query-sales.dto';
@@ -8,7 +10,8 @@ import { SalesService } from './sales.service';
 export class SalesController {
   constructor(private readonly salesService: SalesService) {}
 
-  @UseGuards(JwtAuthGuard)
+  @UseGuards(JwtAuthGuard, PermissionGuard)
+  @RequirePermissions('dashboard-view')
   @Get('list')
   async getSales(
     @Query('filterPaymentMethods') filterPaymentMethods?: string,
@@ -28,19 +31,22 @@ export class SalesController {
     });
   }
 
-  @UseGuards(JwtAuthGuard)
+  @UseGuards(JwtAuthGuard, PermissionGuard)
+  @RequirePermissions('dashboard-view')
   @Get('summary/daily')
   async getDailySummary(@Query('date') date?: string) {
     return this.salesService.getDailySummary(date);
   }
 
-  @UseGuards(JwtAuthGuard)
+  @UseGuards(JwtAuthGuard, PermissionGuard)
+  @RequirePermissions('dashboard-view')
   @Get(':id')
   async getSaleById(@Param('id') id: string) {
     return this.salesService.findById(parseInt(id, 10));
   }
 
-  @UseGuards(JwtAuthGuard)
+  @UseGuards(JwtAuthGuard, PermissionGuard)
+  @RequirePermissions('sales-edit')
   @Post()
   async createSale(
     @Body() body: CreateSaleDto,

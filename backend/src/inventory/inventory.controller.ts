@@ -1,4 +1,6 @@
 import { Body, Controller, Get, Post, Query, Request, UseGuards } from '@nestjs/common';
+import { PermissionGuard } from '../access-control/permission.guard';
+import { RequirePermissions } from '../access-control/require-permissions.decorator';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { AdjustStockDto } from './dto/adjust-stock.dto';
 import type { InventoryMovementSortField } from './dto/query-inventory-movements.dto';
@@ -7,10 +9,11 @@ import { WasteStockDto } from './dto/waste-stock.dto';
 import { InventoryService } from './inventory.service';
 
 @Controller('api/inventory')
+@UseGuards(JwtAuthGuard, PermissionGuard)
+@RequirePermissions('inventory-edit')
 export class InventoryController {
   constructor(private readonly inventoryService: InventoryService) {}
 
-  @UseGuards(JwtAuthGuard)
   @Get('filter-options')
   async getFilterOptions(
     @Query('field') field: string,
@@ -27,7 +30,6 @@ export class InventoryController {
     });
   }
 
-  @UseGuards(JwtAuthGuard)
   @Get('movements')
   async getInventoryMovements(
     @Query('productName') productName?: string,
@@ -51,7 +53,6 @@ export class InventoryController {
     });
   }
 
-  @UseGuards(JwtAuthGuard)
   @Post('stock-in')
   async stockIn(
     @Body() body: StockInDto,
@@ -60,7 +61,6 @@ export class InventoryController {
     return this.inventoryService.stockIn(body, req.user);
   }
 
-  @UseGuards(JwtAuthGuard)
   @Post('adjust')
   async adjustStock(
     @Body() body: AdjustStockDto,
@@ -69,7 +69,6 @@ export class InventoryController {
     return this.inventoryService.adjustStock(body, req.user);
   }
 
-  @UseGuards(JwtAuthGuard)
   @Post('waste')
   async wasteStock(
     @Body() body: WasteStockDto,
@@ -78,13 +77,11 @@ export class InventoryController {
     return this.inventoryService.wasteStock(body, req.user);
   }
 
-  @UseGuards(JwtAuthGuard)
   @Get('low-stock')
   async getLowStockProducts() {
     return this.inventoryService.getLowStockProducts();
   }
 
-  @UseGuards(JwtAuthGuard)
   @Get('expiration-alerts')
   async getExpirationAlerts(@Query('days') days?: string) {
     return this.inventoryService.getExpirationAlerts(days ? parseInt(days, 10) : undefined);

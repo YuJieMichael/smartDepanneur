@@ -1,9 +1,13 @@
 import { Body, Controller, Delete, Get, Param, Patch, Post, Query, Request, UseGuards } from '@nestjs/common';
 import { DictionaryService } from './dictionary.service';
 import { DictionaryPageService } from './dictionary-page.service';
+import { PermissionGuard } from '../access-control/permission.guard';
+import { RequirePermissions } from '../access-control/require-permissions.decorator';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 
 @Controller('api/dictionary')
+@UseGuards(JwtAuthGuard, PermissionGuard)
+@RequirePermissions('view-admin')
 export class DictionaryController {
   constructor(
     private readonly dictionaryService: DictionaryService,
@@ -11,7 +15,6 @@ export class DictionaryController {
   ) {}
 
   // GET /api/dictionary/filter-options — authenticated
-  @UseGuards(JwtAuthGuard)
   @Get('filter-options')
   async getFilterOptions(
     @Query('field') field: string,
@@ -31,7 +34,6 @@ export class DictionaryController {
   }
 
   // GET /api/dictionary/list — paginated list (authenticated)
-  @UseGuards(JwtAuthGuard)
   @Get('list')
   async getDictionaries(
     @Query('key') key?: string,
@@ -58,7 +60,6 @@ export class DictionaryController {
   }
 
   // POST /api/dictionary — create (authenticated)
-  @UseGuards(JwtAuthGuard)
   @Post()
   async createDictionary(
     @Body() body: { key: string; value: string[]; category?: string },
@@ -68,14 +69,12 @@ export class DictionaryController {
   }
 
   // GET /api/dictionary/detail/:id — get by id (authenticated)
-  @UseGuards(JwtAuthGuard)
   @Get('detail/:id')
   async getDictionaryById(@Param('id') id: string) {
     return this.dictionaryPageService.findById(parseInt(id, 10));
   }
 
   // PATCH /api/dictionary/:id — update (authenticated)
-  @UseGuards(JwtAuthGuard)
   @Patch(':id')
   async updateDictionary(
     @Param('id') id: string,
@@ -90,7 +89,6 @@ export class DictionaryController {
   }
 
   // DELETE /api/dictionary/:id — delete (authenticated)
-  @UseGuards(JwtAuthGuard)
   @Delete(':id')
   async deleteDictionary(
     @Param('id') id: string,

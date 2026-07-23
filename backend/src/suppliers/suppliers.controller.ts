@@ -1,4 +1,6 @@
 import { Body, Controller, Delete, Get, Param, Patch, Post, Query, Request, UseGuards } from '@nestjs/common';
+import { PermissionGuard } from '../access-control/permission.guard';
+import { RequirePermissions } from '../access-control/require-permissions.decorator';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { CreateSupplierDto } from './dto/create-supplier.dto';
 import type { SupplierSortField } from './dto/query-suppliers.dto';
@@ -6,10 +8,11 @@ import { UpdateSupplierDto } from './dto/update-supplier.dto';
 import { SuppliersService } from './suppliers.service';
 
 @Controller('api/suppliers')
+@UseGuards(JwtAuthGuard, PermissionGuard)
+@RequirePermissions('product-edit')
 export class SuppliersController {
   constructor(private readonly suppliersService: SuppliersService) {}
 
-  @UseGuards(JwtAuthGuard)
   @Get('filter-options')
   async getFilterOptions(
     @Query('field') field: string,
@@ -28,7 +31,6 @@ export class SuppliersController {
     });
   }
 
-  @UseGuards(JwtAuthGuard)
   @Get('list')
   async getSuppliers(
     @Query('name') name?: string,
@@ -54,7 +56,6 @@ export class SuppliersController {
     });
   }
 
-  @UseGuards(JwtAuthGuard)
   @Post()
   async createSupplier(
     @Body() body: CreateSupplierDto,
@@ -63,13 +64,11 @@ export class SuppliersController {
     return this.suppliersService.createSupplier(body, req.user);
   }
 
-  @UseGuards(JwtAuthGuard)
   @Get('detail/:id')
   async getSupplierById(@Param('id') id: string) {
     return this.suppliersService.findById(parseInt(id, 10));
   }
 
-  @UseGuards(JwtAuthGuard)
   @Patch(':id')
   async updateSupplier(
     @Param('id') id: string,
@@ -79,7 +78,6 @@ export class SuppliersController {
     return this.suppliersService.updateSupplier(parseInt(id, 10), body, req.user);
   }
 
-  @UseGuards(JwtAuthGuard)
   @Delete(':id')
   async deleteSupplier(
     @Param('id') id: string,

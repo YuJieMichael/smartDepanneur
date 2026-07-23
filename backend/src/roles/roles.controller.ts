@@ -1,9 +1,13 @@
 import { Body, Controller, Delete, Get, Param, Patch, Post, Query, Request, UseGuards } from '@nestjs/common';
 import { RolesService } from './roles.service';
 import { RolesPageService } from './roles-page.service';
+import { PermissionGuard } from '../access-control/permission.guard';
+import { RequirePermissions } from '../access-control/require-permissions.decorator';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 
 @Controller('api/roles')
+@UseGuards(JwtAuthGuard, PermissionGuard)
+@RequirePermissions('view-admin')
 export class RolesController {
   constructor(
     private readonly rolesService: RolesService,
@@ -11,7 +15,6 @@ export class RolesController {
   ) {}
 
   // GET /api/roles/filter-options — 需要认证（必须放在 :id 之前）
-  @UseGuards(JwtAuthGuard)
   @Get('filter-options')
   async getFilterOptions(
     @Query('field') field: string,
@@ -31,7 +34,6 @@ export class RolesController {
   }
 
   // GET /api/roles/list — 分页列表（需要认证）
-  @UseGuards(JwtAuthGuard)
   @Get('list')
   async getRoles(
     @Query('name') name?: string,
@@ -58,7 +60,6 @@ export class RolesController {
   }
 
   // POST /api/roles — 创建角色（需要认证）
-  @UseGuards(JwtAuthGuard)
   @Post()
   async createRole(
     @Body() body: { name: string; permissionNames: string[] },
@@ -71,14 +72,12 @@ export class RolesController {
   }
 
   // GET /api/roles/detail/:id — 获取单个角色（需要认证）
-  @UseGuards(JwtAuthGuard)
   @Get('detail/:id')
   async getRole(@Param('id') id: string) {
     return this.rolesPageService.findById(parseInt(id, 10));
   }
 
   // PATCH /api/roles/:id — 更新角色（需要认证）
-  @UseGuards(JwtAuthGuard)
   @Patch(':id')
   async updateRole(
     @Param('id') id: string,
@@ -93,7 +92,6 @@ export class RolesController {
   }
 
   // DELETE /api/roles/:id — 删除角色（需要认证）
-  @UseGuards(JwtAuthGuard)
   @Delete(':id')
   async deleteRole(
     @Param('id') id: string,

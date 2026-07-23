@@ -2,32 +2,21 @@
 
 import { useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { App, Button, Checkbox, Form, Input, Space, Tabs, Tour, Typography } from 'antd';
+import { App, Button, Form, Input, Radio, Space, Tabs, Tour, Typography } from 'antd';
 import { apiCheckEmailExists, apiLogin, apiRegister, fetchCurrentUser } from '@/api/auth';
-import { useT } from '@/lib/i18n';
+import { useI18nStore, useT } from '@/lib/i18n';
 
 const TOUR_KEY = 'smartdepanneur_tour_seen_login';
 
 const demoAccounts = [
   { label: 'Store Owner', email: 'owner@smartdepanneur.local', password: '123456' },
   { label: 'Cashier', email: 'cashier@smartdepanneur.local', password: '123456' },
-  { label: 'Inventory', email: 'inventory@smartdepanneur.local', password: '123456' },
 ];
 
-export interface RoleWithPermissions {
-  role: string;
-  permissions: string[];
-}
-
-interface Props {
-  rolesWithPermissions: RoleWithPermissions[];
-  isLoadingRoles?: boolean;
-  rolesError?: string | null;
-}
-
-export default function LoginForm({ rolesWithPermissions, isLoadingRoles = false, rolesError = null }: Props) {
+export default function LoginForm() {
   const router = useRouter();
   const t = useT();
+  const { locale, setLocale } = useI18nStore();
   const { message } = App.useApp();
   const [signInFormInstance] = Form.useForm<{ email: string; password: string }>();
   const [loading, setLoading] = useState(false);
@@ -48,10 +37,15 @@ export default function LoginForm({ rolesWithPermissions, isLoadingRoles = false
     try {
       const { access_token } = await apiLogin(values.email, values.password);
       sessionStorage.setItem('access_token', access_token);
-      await fetchCurrentUser();
+      const user = await fetchCurrentUser();
       const params = new URLSearchParams(window.location.search);
       const redirect = params.get('redirect');
-      router.replace(redirect && redirect.startsWith('/') && !redirect.startsWith('//') ? redirect : '/');
+      const isCashierOnly =
+        user?.roles.some((role) => role.name === 'Cashier') &&
+        !user.roles.some((role) => role.name === 'Admin' || role.name === 'Store Owner');
+      const safeRedirect =
+        redirect && redirect.startsWith('/') && !redirect.startsWith('//') ? redirect : null;
+      router.replace(isCashierOnly ? '/sales' : safeRedirect ?? '/');
     } catch {
       message.error(t.auth.login_failed);
     } finally {
@@ -59,10 +53,10 @@ export default function LoginForm({ rolesWithPermissions, isLoadingRoles = false
     }
   }
 
-  async function onSignUp(values: { email: string; password: string; roles: string[] }) {
+  async function onSignUp(values: { email: string; password: string; role: string }) {
     setLoading(true);
     try {
-      await apiRegister(values.email, values.password, values.roles ?? []);
+      await apiRegister(values.email, values.password, [values.role]);
       message.success(t.auth.register_success);
       setActiveKey('signin');
     } catch {
@@ -174,19 +168,23 @@ export default function LoginForm({ rolesWithPermissions, isLoadingRoles = false
       </Form.Item>
       <Form.Item
         label={t.auth.roles_label}
-        name="roles"
+        name="role"
         rules={[{ required: true, message: t.auth.roles_required }]}
       >
-        <div>
-          <Checkbox.Group
-            disabled={isLoadingRoles}
-            options={rolesWithPermissions.map(({ role }) => ({
-              label: role,
-              value: role,
-            }))}
-          />
-          {rolesError && <div style={{ color: '#ff4d4f', marginTop: 8, fontSize: 12 }}>{rolesError}</div>}
-        </div>
+        <Radio.Group
+          optionType="button"
+          buttonStyle="solid"
+          options={[
+            {
+              label: locale === 'zh' ? '店主' : locale === 'fr' ? 'Propriétaire' : 'Store Owner',
+              value: 'Store Owner',
+            },
+            {
+              label: locale === 'zh' ? '收银员' : locale === 'fr' ? 'Caissier' : 'Cashier',
+              value: 'Cashier',
+            },
+          ]}
+        />
       </Form.Item>
       <Form.Item className="mb-0 mt-6">
         <Button type="primary" htmlType="submit" size="large" block loading={loading}>
@@ -200,6 +198,18 @@ export default function LoginForm({ rolesWithPermissions, isLoadingRoles = false
     <div className="min-h-screen flex items-center justify-center bg-gray-50">
       <div ref={cardRef} className="bg-white p-10 rounded-2xl shadow-md w-full max-w-sm">
         <h1 className="text-2xl font-semibold text-center mb-6">SmartDepanneur</h1>
+        <Space size={4} style={{ width: '100%', justifyContent: 'center', marginBottom: 12 }}>
+          {(['en', 'fr', 'zh'] as const).map((language) => (
+            <Button
+              key={language}
+              size="small"
+              type={locale === language ? 'primary' : 'default'}
+              onClick={() => setLocale(language)}
+            >
+              {language.toUpperCase()}
+            </Button>
+          ))}
+        </Space>
         <Tabs
           activeKey={activeKey}
           onChange={setActiveKey}

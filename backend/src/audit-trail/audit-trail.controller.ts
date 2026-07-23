@@ -1,12 +1,15 @@
 import { Controller, Get, Param, Query, UseGuards } from '@nestjs/common';
 import { AuditTrailService } from './audit-trail.service';
+import { PermissionGuard } from '../access-control/permission.guard';
+import { RequirePermissions } from '../access-control/require-permissions.decorator';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 
 @Controller('api/audit-trail')
+@UseGuards(JwtAuthGuard, PermissionGuard)
+@RequirePermissions('view-admin')
 export class AuditTrailController {
   constructor(private readonly auditTrailService: AuditTrailService) {}
 
-  @UseGuards(JwtAuthGuard)
   @Get(':table/:recordId')
   async getByRecord(
     @Param('table') table: string,

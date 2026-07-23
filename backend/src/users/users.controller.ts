@@ -1,12 +1,15 @@
 import { Body, Controller, Delete, Get, Param, Patch, Query, Request, UseGuards } from '@nestjs/common';
 import { UsersService } from './users.service';
+import { PermissionGuard } from '../access-control/permission.guard';
+import { RequirePermissions } from '../access-control/require-permissions.decorator';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 
 @Controller('api/users')
+@UseGuards(JwtAuthGuard, PermissionGuard)
+@RequirePermissions('view-admin')
 export class UsersController {
   constructor(private readonly usersService: UsersService) {}
 
-  @UseGuards(JwtAuthGuard)
   @Get('filter-options')
   async getFilterOptions(
     @Query('field') field: string,
@@ -25,7 +28,6 @@ export class UsersController {
     });
   }
 
-  @UseGuards(JwtAuthGuard)
   @Get()
   async getUsers(
     @Query('email') email?: string,
@@ -51,13 +53,11 @@ export class UsersController {
     });
   }
 
-  @UseGuards(JwtAuthGuard)
   @Get(':id')
   async getUser(@Param('id') id: string) {
     return this.usersService.findById(parseInt(id, 10));
   }
 
-  @UseGuards(JwtAuthGuard)
   @Patch(':id')
   async updateUser(
     @Param('id') id: string,
@@ -71,7 +71,6 @@ export class UsersController {
     );
   }
 
-  @UseGuards(JwtAuthGuard)
   @Delete(':id')
   async deleteUser(
     @Param('id') id: string,

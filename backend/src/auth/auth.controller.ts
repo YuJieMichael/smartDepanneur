@@ -1,4 +1,6 @@
 import { Body, Controller, Get, Post, Request, UseGuards } from '@nestjs/common';
+import { PermissionGuard } from '../access-control/permission.guard';
+import { RequirePermissions } from '../access-control/require-permissions.decorator';
 import { AuthService } from './auth.service';
 import { JwtAuthGuard } from './jwt-auth.guard';
 
@@ -17,7 +19,8 @@ export class AuthController {
     return this.authService.register(body.email, body.password, body.roles ?? []);
   }
 
-  @UseGuards(JwtAuthGuard)
+  @UseGuards(JwtAuthGuard, PermissionGuard)
+  @RequirePermissions('create-user')
   @Post('createUser')
   async createUser(
     @Body() body: { email: string; password: string; roles?: string[] },
