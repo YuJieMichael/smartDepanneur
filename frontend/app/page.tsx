@@ -255,10 +255,17 @@ export default function Home() {
       </Typography.Title>
       <Row gutter={[16, 16]}>
         {actions.map((item) => (
-          <Col xs={24} md={12} xl={6} key={item.path}>
+          <Col xs={12} key={item.path}>
             <Card
               hoverable
-              style={{ height: '100%', border: 0, boxShadow: '0 8px 24px rgba(15, 23, 42, 0.06)' }}
+              onClick={() => router.push(item.path)}
+              style={{
+                height: '100%',
+                minHeight: 176,
+                border: 0,
+                cursor: 'pointer',
+                boxShadow: '0 8px 24px rgba(15, 23, 42, 0.06)',
+              }}
               title={
                 <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
                   {item.icon}
@@ -266,12 +273,22 @@ export default function Home() {
                 </span>
               }
               actions={[
-                <Button type="link" key="open" onClick={() => router.push(item.path)}>
+                <Button
+                  type="link"
+                  key="open"
+                  onClick={(event) => {
+                    event.stopPropagation();
+                    router.push(item.path);
+                  }}
+                >
                   {isZh ? '打开' : isFr ? 'Ouvrir' : 'Open'}
                 </Button>,
               ]}
             >
-              <Typography.Paragraph style={{ minHeight: 66, marginBottom: 0, color: '#5f6b7a' }}>
+              <Typography.Paragraph
+                ellipsis={{ rows: 2 }}
+                style={{ minHeight: 44, marginBottom: 0, color: '#5f6b7a' }}
+              >
                 {item.description}
               </Typography.Paragraph>
             </Card>
