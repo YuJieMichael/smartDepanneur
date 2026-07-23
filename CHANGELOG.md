@@ -1,5 +1,29 @@
 # Changelog
 
+## Unreleased - Store Operations and Controls
+
+- Persisted the selected English, French, or Chinese locale across navigation.
+- Restricted public registration and login demo shortcuts to Store Owner and
+  Cashier.
+- Restricted cashier navigation and API access to checkout while preserving
+  automatic inventory deduction.
+- Added dashboard category mix, seven-day revenue/profit trends, category
+  comparisons, and a two-by-two quick-action grid.
+- Added a one-click daily closeout table and CSV with revenue, estimated gross
+  profit, sale count, and per-category performance.
+- Added recent sale history and auditable voids that atomically restore stock.
+- Required a structured void reason, limited cashiers to their own last ten
+  minutes of sales, and allowed Owners to void any sale.
+- Added server-verified Owner confirmation for cashier voids of CAD 100 or
+  more, including approver audit data.
+- Added today's void count and amount to the dashboard.
+- Localized reorder guidance and removed the unused decorative store-flow
+  section.
+- Added one-click, supplier-grouped purchase-order drafts generated from
+  reorder recommendations; repeated daily generation updates existing drafts.
+- Added Prisma migrations and tests for sale voids, void approvals, dashboard
+  metrics, and purchase-order generation.
+
 ## v1.2.0 - Multilingual Store Agent
 
 - Replaced the one-shot AI context prompt with a read-only Responses API

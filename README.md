@@ -8,6 +8,17 @@ workflows. A cashier can complete a sale, inventory is deducted atomically,
 the dashboard updates store metrics, and the insight engine turns recent
 sales and stock levels into practical reorder recommendations.
 
+## Latest project update
+
+The current branch adds persistent EN/FR/ZH selection, Owner/Cashier
+onboarding, dashboard charts, a one-click daily closeout report, controlled
+sale voids, localized Store Agent guidance, and one-click supplier-grouped
+purchase-order drafts.
+
+See [Current project updates](docs/PROJECT_UPDATES.md) for the implemented
+workflow, permission rules, database migrations, validation evidence, demo
+steps, known boundaries, and resume positioning.
+
 ## What it demonstrates
 
 - Real retail-domain modelling instead of generic CRUD
@@ -41,8 +52,14 @@ flowchart LR
 - Stock-in, manual adjustment, waste, return, and sales movement history
 - POS-style checkout with Quebec tax, payment method, estimated profit, and
   automatic inventory deduction
+- Recent sale history with reason-required, auditable voids that restore stock
+- Cashier void ownership and ten-minute controls, plus Owner approval for
+  cashier voids of CAD 100 or more
 - Low-stock, out-of-stock, and expiration alerts
-- Daily revenue, profit, sale count, and top-seller dashboard
+- Dashboard sales mix, seven-day trend, category comparison, void metrics, and
+  operational alerts
+- One-click daily closeout table and CSV with revenue, gross profit, sale
+  count, and category performance
 - Audit records for important operational changes
 
 ### Store Agent
@@ -59,11 +76,17 @@ flowchart LR
 - Logged provider, model, selected language, tools used, result, and fallback
   reason
 - Twelve-second timeout so an OpenAI outage does not block store operations
+- One-click generation of idempotent supplier-grouped purchase-order drafts
+  from the current reorder plan
 
 ### Security and reliability
 
 - JWT-protected store APIs
 - Role and permission management
+- Public self-registration restricted to Store Owner or Cashier
+- Cashier access restricted to checkout; sales update inventory automatically
+- Server-enforced sale void ownership, time window, reason, and large-void
+  approval rules
 - Required environment validation at startup
 - No hard-coded production JWT fallback
 - Conditional database updates that prevent concurrent sales or adjustments
@@ -142,8 +165,6 @@ Demo credentials exist only in seeded demo environments.
 | --- | --- | --- |
 | Store Owner | `owner@smartdepanneur.local` | `123456` |
 | Cashier | `cashier@smartdepanneur.local` | `123456` |
-| Inventory Staff | `inventory@smartdepanneur.local` | `123456` |
-| Administrator | `admin@smartdepanneur.local` | `admin123` |
 
 Never run `seed:demo` against a production database.
 
@@ -163,8 +184,11 @@ Current backend tests cover:
 - Required environment and secret validation
 - Database health behaviour
 - Atomic sale stock reservation
+- Controlled sale voids, stock restoration, and large-void Owner approval
 - Negative-stock prevention for inventory movements
 - Reorder quantity calculation
+- Idempotent supplier-grouped purchase-order draft generation
+- Dashboard closeout, trends, and void metrics
 - AI local fallback and question validation
 
 GitHub Actions runs backend and frontend typechecking, linting, tests and
@@ -195,16 +219,18 @@ production builds. A final job validates Compose and builds both images.
 ## Documentation
 
 - [Architecture](docs/ARCHITECTURE.md)
+- [Current project updates](docs/PROJECT_UPDATES.md)
 - [AWS deployment](docs/DEPLOYMENT_AWS.md)
 - [Interview demo script](docs/DEMO_SCRIPT.md)
 - [Product roadmap](docs/ROADMAP.md)
 
 ## Current scope
 
-The portfolio release is intentionally a single-store system. Multi-store
-tenant isolation, lot-level expiration, purchase orders, POS imports, invoice
-OCR, and shelf vision are documented future increments rather than claimed as
-finished functionality.
+The portfolio release is intentionally a single-store system. Draft purchase
+orders are implemented; sending, receiving, and lot-level expiration remain
+future increments. Multi-store tenant isolation, POS imports, invoice OCR, and
+shelf vision are also documented future work rather than claimed as finished
+functionality.
 
 ## Resume summary
 
@@ -219,6 +245,8 @@ finished functionality.
 - Developed data-driven reorder recommendations from sales velocity, minimum
   stock thresholds, and procurement cost, with OpenAI explanations and a
   resilient deterministic fallback.
+- Added audited sale void controls, dashboard closeout and trend analytics, and
+  idempotent supplier-grouped purchase-order drafts.
 - Automated TypeScript validation, linting, Jest tests, application builds, and
   Docker image validation through GitHub Actions.
 
