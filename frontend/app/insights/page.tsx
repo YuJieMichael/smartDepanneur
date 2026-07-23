@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Alert, Button, Card, Col, Input, Row, Space, Table, Tag } from 'antd';
 import { BulbOutlined, SendOutlined } from '@ant-design/icons';
 import {
@@ -8,32 +8,36 @@ import {
   apiGetReorderSuggestions,
   apiGetSlowMovers,
   apiGetTopSellers,
+  InsightAgentTool,
   ReorderSuggestion,
   SlowMover,
   TopSeller,
 } from '@/api/insights';
-import { useI18nStore } from '@/lib/i18n';
+import { Locale, useI18nStore } from '@/lib/i18n';
 
-const suggestedQuestions = [
-  'What should I restock today?',
-  '今天应该补什么货？',
-  "Que dois-je reapprovisionner aujourd'hui ?",
-  'Show me top sellers',
-  '哪些商品卖得最好？',
-  'Quels produits se vendent le mieux ?',
-  'Which products are not selling?',
-  '哪些商品卖不动？',
-  'Quels produits se vendent mal ?',
-];
+const suggestedQuestions: Record<Locale, string[]> = {
+  en: [
+    'What should I restock today?',
+    'Show me the top sellers',
+    'Which products are not selling?',
+  ],
+  fr: [
+    'Que dois-je réapprovisionner aujourd’hui?',
+    'Quels produits se vendent le mieux?',
+    'Quels produits se vendent mal?',
+  ],
+  zh: ['今天应该补什么货？', '哪些商品卖得最好？', '哪些商品卖不动？'],
+};
 
 const labels = {
   en: {
-    title: 'AI Insights',
-    askTitle: 'Ask AI',
-    placeholder: 'Ask in English, French, or Chinese, e.g. What should I restock today?',
+    title: 'Store Agent',
+    askTitle: 'Ask the Store Agent',
+    placeholder: 'Ask in English, e.g. What should I restock today?',
     ask: 'Ask',
     error: 'Unable to get an answer. Please try again.',
-    local: 'Local fallback',
+    local: 'Local Agent',
+    tools: 'Tools used',
     product: 'Product',
     urgency: 'Urgency',
     stock: 'Stock',
@@ -56,12 +60,13 @@ const labels = {
     loadSlow: 'Load Slow Movers',
   },
   fr: {
-    title: 'Analyses IA',
-    askTitle: "Demander a l'IA",
-    placeholder: 'Posez une question en francais, anglais ou chinois',
+    title: 'Agent du magasin',
+    askTitle: 'Demander à l’agent du magasin',
+    placeholder: 'Posez votre question en français',
     ask: 'Demander',
-    error: 'Impossible d’obtenir une reponse. Veuillez reessayer.',
-    local: 'Analyse locale',
+    error: 'Impossible d’obtenir une réponse. Veuillez réessayer.',
+    local: 'Agent local',
+    tools: 'Outils utilisés',
     product: 'Produit',
     urgency: 'Urgence',
     stock: 'Stock',
@@ -84,12 +89,13 @@ const labels = {
     loadSlow: 'Charger les produits lents',
   },
   zh: {
-    title: 'AI 分析',
-    askTitle: '询问 AI',
-    placeholder: '可以用中文、英文或法语提问，例如：今天应该补什么货？',
+    title: '门店 Agent',
+    askTitle: '询问门店 Agent',
+    placeholder: '请使用中文提问，例如：今天应该补什么货？',
     ask: '询问',
     error: '暂时无法获取回答，请稍后重试。',
-    local: '本地分析',
+    local: '本地 Agent',
+    tools: '已调用工具',
     product: '商品',
     urgency: '紧急程度',
     stock: '库存',
@@ -113,6 +119,27 @@ const labels = {
   },
 };
 
+const toolLabels: Record<Locale, Record<InsightAgentTool, string>> = {
+  en: {
+    get_reorder_suggestions: 'Reorder suggestions',
+    get_top_sellers: 'Top sellers',
+    get_slow_movers: 'Slow movers',
+    get_store_summary: 'Store summary',
+  },
+  fr: {
+    get_reorder_suggestions: 'Réapprovisionnement',
+    get_top_sellers: 'Meilleures ventes',
+    get_slow_movers: 'Produits lents',
+    get_store_summary: 'Résumé du magasin',
+  },
+  zh: {
+    get_reorder_suggestions: '补货建议',
+    get_top_sellers: '热销商品',
+    get_slow_movers: '滞销商品',
+    get_store_summary: '门店概况',
+  },
+};
+
 export default function InsightsPage() {
   const locale = useI18nStore((state) => state.locale);
   const text = labels[locale];
@@ -124,8 +151,16 @@ export default function InsightsPage() {
   const [loadingSlow, setLoadingSlow] = useState(false);
   const [question, setQuestion] = useState('');
   const [answer, setAnswer] = useState('');
-  const [provider, setProvider] = useState<'openai' | 'local-fallback' | ''>('');
+  const [provider, setProvider] = useState<'openai-agent' | 'local-agent' | ''>('');
+  const [toolsUsed, setToolsUsed] = useState<InsightAgentTool[]>([]);
   const [loadingAsk, setLoadingAsk] = useState(false);
+
+  useEffect(() => {
+    setQuestion('');
+    setAnswer('');
+    setProvider('');
+    setToolsUsed([]);
+  }, [locale]);
 
   const loadReorder = async () => {
     setLoadingReorder(true);
@@ -160,12 +195,14 @@ export default function InsightsPage() {
     setQuestion(value);
     setLoadingAsk(true);
     try {
-      const result = await apiAskInsight(value);
+      const result = await apiAskInsight(value, locale);
       setAnswer(result.answer);
       setProvider(result.provider);
+      setToolsUsed(result.toolsUsed);
     } catch {
       setAnswer(text.error);
       setProvider('');
+      setToolsUsed([]);
     } finally {
       setLoadingAsk(false);
     }
@@ -267,7 +304,7 @@ export default function InsightsPage() {
           </Button>
         </div>
         <Space wrap style={{ marginBottom: answer ? 12 : 0 }}>
-          {suggestedQuestions.map((item) => (
+          {suggestedQuestions[locale].map((item) => (
             <Button key={item} size="small" onClick={() => handleAsk(item)}>
               {item}
             </Button>
@@ -279,9 +316,17 @@ export default function InsightsPage() {
             message={
               <>
                 {provider && (
-                  <Tag color={provider === 'openai' ? 'green' : 'gold'} style={{ marginBottom: 8 }}>
-                    {provider === 'openai' ? 'OpenAI API' : text.local}
+                  <Tag color={provider === 'openai-agent' ? 'green' : 'gold'} style={{ marginBottom: 8 }}>
+                    {provider === 'openai-agent' ? 'OpenAI Agent' : text.local}
                   </Tag>
+                )}
+                {toolsUsed.length > 0 && (
+                  <div style={{ marginBottom: 8 }}>
+                    <span style={{ marginRight: 6 }}>{text.tools}:</span>
+                    {toolsUsed.map((tool) => (
+                      <Tag key={tool}>{toolLabels[locale][tool]}</Tag>
+                    ))}
+                  </div>
                 )}
                 <pre style={{ whiteSpace: 'pre-wrap', fontFamily: 'inherit', margin: 0 }}>{answer}</pre>
               </>

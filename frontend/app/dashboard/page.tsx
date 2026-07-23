@@ -79,7 +79,7 @@ export default function DashboardPage() {
   return (
     <div style={{ padding: 24 }}>
       <h2 style={{ marginBottom: 20, fontSize: 20, fontWeight: 700 }}>
-        {isZh ? 'SmartDepanneur AI - 仪表盘' : isFr ? 'SmartDepanneur AI - Tableau de bord' : 'SmartDepanneur AI - Dashboard'}
+        {isZh ? 'SmartDepanneur Agent - 仪表盘' : isFr ? 'SmartDepanneur Agent - Tableau de bord' : 'SmartDepanneur Agent - Dashboard'}
       </h2>
 
       <Row gutter={[16, 16]} style={{ marginBottom: 24 }}>

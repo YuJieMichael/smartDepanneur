@@ -31,6 +31,6 @@ export class InsightsController {
     @Body() body: AskInsightDto,
     @Request() req: { user: { id: number; email: string } },
   ) {
-    return this.insightsService.ask(body.question, req.user);
+    return this.insightsService.ask(body.question, body.language, req.user);
   }
 }

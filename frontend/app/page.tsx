@@ -38,7 +38,7 @@ export default function Home() {
       path: '/sales',
     },
     {
-      title: isZh ? 'AI 分析' : isFr ? 'Analyses IA' : 'AI Insights',
+      title: isZh ? '门店 Agent' : isFr ? 'Agent du magasin' : 'Store Agent',
       description: isZh ? '询问补货建议、热销商品和滞销商品。' : isFr ? 'Demandez quoi réapprovisionner, ce qui se vend bien et quels produits stagnent.' : 'Ask what to restock, what is selling well, and which products are slow movers.',
       icon: <BulbOutlined />,
       path: '/insights',
@@ -49,14 +49,14 @@ export default function Home() {
     <div style={{ padding: 24 }}>
       <div style={{ marginBottom: 24 }}>
         <Typography.Title level={2} style={{ marginBottom: 8 }}>
-          SmartDepanneur AI
+          SmartDepanneur Agent
         </Typography.Title>
         <Typography.Paragraph style={{ color: '#5f6b7a', maxWidth: 760, marginBottom: 0 }}>
           {isZh
-            ? '面向便利店的 AI 管理系统，支持库存、销售、过期检查、补货决策和店主易懂的业务分析。'
+            ? '面向便利店的智能 Agent，支持库存、销售、过期检查、补货决策和店主易懂的业务分析。'
             : isFr
-              ? 'Gestion de dépanneur propulsée par l’IA pour l’inventaire, les ventes, les expirations, le réapprovisionnement et les analyses métier.'
-            : 'AI-powered convenience store management for inventory, sales, expiration checks, restocking decisions, and owner-friendly business insights.'}
+              ? 'Un agent de gestion pour dépanneur qui aide avec l’inventaire, les ventes, les expirations, le réapprovisionnement et les analyses métier.'
+              : 'An agent-powered convenience store platform for inventory, sales, expiration checks, restocking decisions, and owner-friendly business insights.'}
         </Typography.Paragraph>
       </div>
 
@@ -73,7 +73,7 @@ export default function Home() {
         </Col>
         <Col xs={12} lg={6}>
           <Card>
-            <Statistic title={isZh ? '智能模块' : isFr ? 'Module intelligent' : 'Smart Module'} value={isZh ? 'AI 分析' : isFr ? 'Analyses IA' : 'AI Insights'} prefix={<BulbOutlined />} />
+            <Statistic title={isZh ? '智能模块' : isFr ? 'Module intelligent' : 'Smart Module'} value={isZh ? '门店 Agent' : isFr ? 'Agent du magasin' : 'Store Agent'} prefix={<BulbOutlined />} />
           </Card>
         </Col>
         <Col xs={12} lg={6}>

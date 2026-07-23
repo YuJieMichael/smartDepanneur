@@ -8,12 +8,12 @@ flowchart TB
   Next["Next.js server :3100"]
   API["NestJS API :3101"]
   DB[("PostgreSQL 16")]
-  AI["OpenAI Responses API"]
+  Agent["OpenAI Store Agent"]
 
   Browser --> Next
   Next -->|/api rewrite| API
   API --> DB
-  API -->|optional| AI
+  API -->|optional tool-calling loop| Agent
 ```
 
 The browser uses relative `/api` URLs by default. Next.js proxies those calls
@@ -30,12 +30,18 @@ the stock, the update count is zero and the entire transaction rolls back.
 
 Inventory waste and adjustments use the same conditional-update pattern.
 
-## AI boundary
+## Agent boundary
 
-The insight engine calculates business facts before calling an LLM. OpenAI
-receives a bounded JSON context and instructions not to invent products or
-sales. A timeout or API failure returns the already-computed local answer.
-Provider, model, answer, and fallback reason are stored in `AiInsightLog`.
+The Store Agent exposes four read-only tools: reorder suggestions, top sellers,
+slow movers, and store summary. OpenAI first selects one or more tools, the
+backend executes them against PostgreSQL, and a second Responses API call
+turns only those tool results into an owner-friendly answer.
+
+The UI sends `en`, `fr`, or `zh` explicitly, so the answer language follows
+the user's selected interface rather than guessing from the question. A
+timeout or API failure runs the same workflow through a deterministic local
+Agent. Provider, model, selected language, tools used, answer, and fallback
+reason are stored in `AiInsightLog`.
 
 ## Configuration
 

@@ -1,7 +1,7 @@
 {
   "name": "@smartdepanneur/frontend",
   "version": "1.0.0",
-  "description": "Next.js frontend for SmartDepanneur AI.",
+  "description": "Next.js frontend for SmartDepanneur Agent.",
   "private": true,
   "scripts": {
     "dev": "next dev -p 3100",

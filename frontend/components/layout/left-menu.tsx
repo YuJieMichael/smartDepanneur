@@ -5,7 +5,7 @@ import { usePathname, useRouter } from 'next/navigation';
 import { Menu, Tour } from 'antd';
 import { HomeOutlined, ShopOutlined, TeamOutlined } from '@ant-design/icons';
 import { useAppStore } from '@/lib/store';
-import { useT } from '@/lib/i18n';
+import { useI18nStore, useT } from '@/lib/i18n';
 
 const NO_MENU_PATHS = ['/login', '/register'];
 const TOUR_KEY = 'SmartDepanneur_tour_seen_admin';
@@ -14,6 +14,7 @@ export default function LeftMenu() {
   const pathname = usePathname();
   const router = useRouter();
   const t = useT();
+  const locale = useI18nStore((state) => state.locale);
   const currentUser = useAppStore((s) => s.currentUser);
 
   const isAdmin = currentUser?.roles.some((r) => r.name === 'Admin') ?? false;
@@ -58,7 +59,15 @@ export default function LeftMenu() {
         { key: '/categories', label: t.nav.categories },
         { key: '/suppliers', label: t.nav.suppliers },
         { key: '/inventory', label: t.nav.inventory },
-        { key: '/insights', label: 'AI Insights' },
+        {
+          key: '/insights',
+          label:
+            locale === 'zh'
+              ? '门店 Agent'
+              : locale === 'fr'
+                ? 'Agent du magasin'
+                : 'Store Agent',
+        },
       ],
     },
   ];
