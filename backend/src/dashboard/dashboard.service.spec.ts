@@ -4,6 +4,64 @@ import { PrismaService } from '../prisma/prisma.service';
 import { DashboardService } from './dashboard.service';
 
 describe('DashboardService', () => {
+  it('includes today void count and amount in the overview', async () => {
+    const productCount = jest
+      .fn()
+      .mockResolvedValueOnce(10)
+      .mockResolvedValueOnce(9)
+      .mockResolvedValueOnce(2)
+      .mockResolvedValueOnce(1);
+    const productFindMany = jest
+      .fn()
+      .mockResolvedValueOnce([])
+      .mockResolvedValueOnce([])
+      .mockResolvedValueOnce([]);
+    const saleFindMany = jest
+      .fn()
+      .mockResolvedValueOnce([
+        {
+          total: new Prisma.Decimal('20.00'),
+          profitEstimate: new Prisma.Decimal('8.00'),
+        },
+      ])
+      .mockResolvedValueOnce([
+        { total: new Prisma.Decimal('25.00') },
+        { total: new Prisma.Decimal('75.00') },
+      ]);
+    const prisma = {
+      product: {
+        fields: { minStock: 'minStock' },
+        count: productCount,
+        findMany: productFindMany,
+      },
+      sale: { findMany: saleFindMany },
+      saleItem: { groupBy: jest.fn().mockResolvedValue([]) },
+      $transaction: jest.fn((promises: Array<Promise<unknown>>) =>
+        Promise.all(promises),
+      ),
+    } as unknown as PrismaService;
+    const service = new DashboardService(prisma);
+
+    const result = await service.getOverview();
+
+    expect(result.today).toMatchObject({
+      saleCount: 1,
+      revenue: new Prisma.Decimal('20.00'),
+      profit: new Prisma.Decimal('8.00'),
+      voidCount: 2,
+      voidAmount: new Prisma.Decimal('100.00'),
+    });
+    expect(saleFindMany).toHaveBeenNthCalledWith(
+      2,
+      expect.objectContaining({
+        where: expect.objectContaining({
+          isVoided: true,
+          voidedAt: expect.any(Object),
+        }),
+      }),
+    );
+  });
+
   it('creates a daily closeout grouped by category in the store time zone', async () => {
     const findMany = jest.fn().mockResolvedValue([
       {

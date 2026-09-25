@@ -32,6 +32,15 @@ export interface SaleRow {
   cashier: { id: number; email: string } | null;
   voidedById: number | null;
   voidedBy: { id: number; email: string } | null;
+  voidApprovedById: number | null;
+  voidApprovedBy: { id: number; email: string } | null;
+  voidPolicy: {
+    canVoid: boolean;
+    restriction: 'already_voided' | 'not_own_sale' | 'window_expired' | null;
+    requiresOwnerApproval: boolean;
+    windowEndsAt: string | null;
+    largeVoidThreshold: string;
+  };
   items: SaleItemRow[];
 }
 
@@ -106,9 +115,23 @@ export function apiGetRecentSales(limit = 10) {
   return request<SaleRow[]>(`/api/sales/recent?limit=${limit}`);
 }
 
-export function apiVoidSale(id: number, reason: string) {
+export type VoidReasonCode =
+  | 'wrong_item'
+  | 'wrong_quantity'
+  | 'duplicate_sale'
+  | 'customer_cancelled'
+  | 'payment_error'
+  | 'other';
+
+export interface VoidSalePayload {
+  reason: VoidReasonCode;
+  ownerEmail?: string;
+  ownerPassword?: string;
+}
+
+export function apiVoidSale(id: number, data: VoidSalePayload) {
   return request<SaleRow>(`/api/sales/${id}/void`, {
     method: 'POST',
-    body: JSON.stringify({ reason }),
+    body: JSON.stringify(data),
   });
 }

@@ -25,7 +25,9 @@ model User {
   inventoryMovements InventoryMovement[]
   sales              Sale[]                @relation("SaleCashier")
   voidedSales        Sale[]                @relation("SaleVoider")
+  approvedSaleVoids  Sale[]                @relation("SaleVoidApprover")
   aiInsightLogs      AiInsightLog[]
+  purchaseOrders     PurchaseOrder[]
 
   @@map("users")
 }
@@ -175,6 +177,13 @@ enum InsightType {
   top_sellers
 }
 
+enum PurchaseOrderStatus {
+  draft
+  sent
+  received
+  cancelled
+}
+
 // Application 模型 — 职位申请
 model Application {
   id        Int              @id @default(autoincrement())
@@ -215,7 +224,8 @@ model Supplier {
   createdAt   DateTime @default(now()) @map("created_at")
   updatedAt   DateTime @updatedAt @map("updated_at")
 
-  products Product[]
+  products       Product[]
+  purchaseOrders PurchaseOrder[]
 
   @@map("suppliers")
 }
@@ -247,6 +257,7 @@ model Product {
 
   inventoryMovements InventoryMovement[]
   saleItems          SaleItem[]
+  purchaseOrderItems PurchaseOrderItem[]
 
   @@index([name])
   @@index([categoryId])
@@ -296,11 +307,16 @@ model Sale {
   voidedById Int?  @map("voided_by_id")
   voidedBy   User? @relation("SaleVoider", fields: [voidedById], references: [id])
 
+  voidApprovedById Int?  @map("void_approved_by_id")
+  voidApprovedBy   User? @relation("SaleVoidApprover", fields: [voidApprovedById], references: [id])
+
   items SaleItem[]
 
   @@index([createdAt])
   @@index([isVoided, createdAt])
+  @@index([isVoided, voidedAt])
   @@index([cashierId, createdAt])
+  @@index([voidApprovedById])
   @@map("sales")
 }
 
@@ -334,6 +350,48 @@ model AiInsightLog {
 
   @@index([type, createdAt])
   @@map("ai_insight_logs")
+}
+
+model PurchaseOrder {
+  id             Int                 @id @default(autoincrement())
+  orderNumber    String              @unique @map("order_number")
+  businessDate   String              @map("business_date")
+  status         PurchaseOrderStatus @default(draft)
+  estimatedTotal Decimal             @default(0) @map("estimated_total") @db.Decimal(10, 2)
+  createdAt      DateTime            @default(now()) @map("created_at")
+  updatedAt      DateTime            @updatedAt @map("updated_at")
+
+  supplierId Int?      @map("supplier_id")
+  supplier   Supplier? @relation(fields: [supplierId], references: [id])
+
+  createdById Int  @map("created_by_id")
+  createdBy   User @relation(fields: [createdById], references: [id])
+
+  items PurchaseOrderItem[]
+
+  @@index([businessDate, status])
+  @@index([supplierId, businessDate])
+  @@map("purchase_orders")
+}
+
+model PurchaseOrderItem {
+  id          Int     @id @default(autoincrement())
+  productName String  @map("product_name")
+  sku         String?
+  unit        String
+  quantity    Int
+  unitCost    Decimal @map("unit_cost") @db.Decimal(10, 2)
+  lineTotal   Decimal @map("line_total") @db.Decimal(10, 2)
+
+  purchaseOrderId Int           @map("purchase_order_id")
+  purchaseOrder   PurchaseOrder @relation(fields: [purchaseOrderId], references: [id], onDelete: Cascade)
+
+  productId Int     @map("product_id")
+  product   Product @relation(fields: [productId], references: [id])
+
+  @@unique([purchaseOrderId, productId])
+  @@index([productId])
+  @@map("purchase_order_items")
 }
 
 // Notification 模型 — 通知

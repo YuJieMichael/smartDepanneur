@@ -43,6 +43,24 @@ timeout or API failure runs the same workflow through a deterministic local
 Agent. Provider, model, selected language, tools used, answer, and fallback
 reason are stored in `AiInsightLog`.
 
+## Sale exception boundary
+
+The original sale is preserved when a transaction is voided. The backend
+requires a structured reason, enforces cashier ownership and a ten-minute
+window, and verifies Store Owner credentials for cashier voids of CAD 100 or
+more. Sale status, stock restoration, and `return_item` movements are committed
+in one transaction. The operator and optional approver are retained for audit
+history and dashboard exception reporting.
+
+## Purchase-order boundary
+
+Reorder calculations remain in the deterministic insight service.
+`PurchaseOrdersService` groups those recommendations by supplier and upserts
+one draft per Toronto business date and supplier. A repeated same-day action
+refreshes items and totals rather than adding a duplicate order. The current
+boundary stops at draft generation; supplier sending and inventory receiving
+are future increments.
+
 ## Configuration
 
 The backend refuses to start without:

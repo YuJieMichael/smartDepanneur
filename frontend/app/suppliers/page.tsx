@@ -5,20 +5,14 @@ import { Button, Form, Input, Modal, Popconfirm } from 'antd';
 import { DeleteOutlined, FileSearchOutlined, PlusOutlined } from '@ant-design/icons';
 import DataTable, { DataTableColumnConfig, DataTableParams, DataTableResult } from '@/components/table/data-table';
 import AuditTrailDialog from '@/components/common/audit-trail-dialog';
-import {
-  apiGetSupplierList,
-  apiGetSupplierFilterOptions,
-  apiGetSupplierById,
-  apiCreateSupplier,
-  apiUpdateSupplier,
-  apiDeleteSupplier,
-  SupplierRow,
-} from '@/api/suppliers';
+import { apiGetSupplierList, apiGetSupplierFilterOptions, apiGetSupplierById, apiCreateSupplier, apiUpdateSupplier, apiDeleteSupplier, SupplierRow } from '@/api/suppliers';
 import { useT } from '@/lib/i18n';
 import { globalMessage } from '@/lib/message-bridge';
+import { checkPermissionCode } from '@/lib/utils';
 
 export default function SuppliersPage() {
   const t = useT();
+  const canViewAudit = checkPermissionCode('audit-view-store');
   const [auditOpen, setAuditOpen] = useState(false);
   const [auditRecordId, setAuditRecordId] = useState<number>(0);
   const [createOpen, setCreateOpen] = useState(false);
@@ -26,44 +20,35 @@ export default function SuppliersPage() {
   const [refreshFlag, setRefreshFlag] = useState(0);
   const [form] = Form.useForm();
 
-  const fetchData = useCallback(
-    async (params: DataTableParams): Promise<DataTableResult<SupplierRow>> => {
-      return apiGetSupplierList({
-        name: params.search || undefined,
-        filterNames: params.filters.filterNames,
-        filterContactNames: params.filters.filterContactNames,
-        filterEmails: params.filters.filterEmails,
-        filterCreatedDates: params.filters.filterCreatedDates,
-        sortField: params.sortField as any,
-        sortOrder: params.sortOrder,
-        page: params.page,
-        pageSize: params.pageSize,
-      });
-    },
-    [],
-  );
+  const fetchData = useCallback(async (params: DataTableParams): Promise<DataTableResult<SupplierRow>> => {
+    return apiGetSupplierList({
+      name: params.search || undefined,
+      filterNames: params.filters.filterNames,
+      filterContactNames: params.filters.filterContactNames,
+      filterEmails: params.filters.filterEmails,
+      filterCreatedDates: params.filters.filterCreatedDates,
+      sortField: params.sortField as any,
+      sortOrder: params.sortOrder,
+      page: params.page,
+      pageSize: params.pageSize,
+    });
+  }, []);
 
-  const fetchFilterOptions = useCallback(
-    async (field: string, context: Record<string, string | undefined>) => {
-      return apiGetSupplierFilterOptions(field, {
-        name: context.search,
-        filterNames: context.filterNames,
-        filterContactNames: context.filterContactNames,
-        filterEmails: context.filterEmails,
-        filterCreatedDates: context.filterCreatedDates,
-      });
-    },
-    [],
-  );
+  const fetchFilterOptions = useCallback(async (field: string, context: Record<string, string | undefined>) => {
+    return apiGetSupplierFilterOptions(field, {
+      name: context.search,
+      filterNames: context.filterNames,
+      filterContactNames: context.filterContactNames,
+      filterEmails: context.filterEmails,
+      filterCreatedDates: context.filterCreatedDates,
+    });
+  }, []);
 
   const fetchRow = useCallback(async (id: string | number) => apiGetSupplierById(id), []);
 
-  const onCellUpdate = useCallback(
-    async (rowId: string | number, dataIndex: string, newValue: any) => {
-      await apiUpdateSupplier(rowId, { [dataIndex]: newValue });
-    },
-    [],
-  );
+  const onCellUpdate = useCallback(async (rowId: string | number, dataIndex: string, newValue: any) => {
+    await apiUpdateSupplier(rowId, { [dataIndex]: newValue });
+  }, []);
 
   const handleDelete = useCallback(
     async (id: number) => {
@@ -149,11 +134,19 @@ export default function SuppliersPage() {
       width: 100,
       render: (_: any, record: SupplierRow) => (
         <div style={{ display: 'flex', gap: 4 }}>
-          <Button type="link" size="small" icon={<FileSearchOutlined />}
-            onClick={() => { setAuditRecordId(record.id); setAuditOpen(true); }}
-            style={{ padding: 0 }} />
-          <Popconfirm title={t.common.delete_confirm} onConfirm={() => handleDelete(record.id)}
-            okText={t.common.submit} cancelText={t.common.cancel}>
+          {canViewAudit && (
+            <Button
+              type="link"
+              size="small"
+              icon={<FileSearchOutlined />}
+              onClick={() => {
+                setAuditRecordId(record.id);
+                setAuditOpen(true);
+              }}
+              style={{ padding: 0 }}
+            />
+          )}
+          <Popconfirm title={t.common.delete_confirm} onConfirm={() => handleDelete(record.id)} okText={t.common.submit} cancelText={t.common.cancel}>
             <Button type="link" size="small" danger icon={<DeleteOutlined />} style={{ padding: 0 }} />
           </Popconfirm>
         </div>
@@ -186,7 +179,10 @@ export default function SuppliersPage() {
         title="Create Supplier"
         open={createOpen}
         onOk={handleCreate}
-        onCancel={() => { form.resetFields(); setCreateOpen(false); }}
+        onCancel={() => {
+          form.resetFields();
+          setCreateOpen(false);
+        }}
         confirmLoading={createLoading}
         okText={t.common.submit}
         cancelText={t.common.cancel}
@@ -197,10 +193,18 @@ export default function SuppliersPage() {
           <Form.Item label="Name" name="name" rules={[{ required: true, message: 'Please enter a supplier name' }]}>
             <Input />
           </Form.Item>
-          <Form.Item label="Contact Name" name="contactName"><Input /></Form.Item>
-          <Form.Item label="Phone" name="phone"><Input /></Form.Item>
-          <Form.Item label="Email" name="email"><Input type="email" /></Form.Item>
-          <Form.Item label="Notes" name="notes"><Input.TextArea rows={2} /></Form.Item>
+          <Form.Item label="Contact Name" name="contactName">
+            <Input />
+          </Form.Item>
+          <Form.Item label="Phone" name="phone">
+            <Input />
+          </Form.Item>
+          <Form.Item label="Email" name="email">
+            <Input type="email" />
+          </Form.Item>
+          <Form.Item label="Notes" name="notes">
+            <Input.TextArea rows={2} />
+          </Form.Item>
         </Form>
       </Modal>
     </>

@@ -13,6 +13,7 @@ import { RequirePermissions } from '../access-control/require-permissions.decora
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { CreateSaleDto } from './dto/create-sale.dto';
 import type { SaleSortField } from './dto/query-sales.dto';
+import { VoidSaleDto } from './dto/void-sale.dto';
 import { SalesService } from './sales.service';
 
 @Controller('api/sales')
@@ -82,9 +83,9 @@ export class SalesController {
   @Post(':id/void')
   async voidSale(
     @Param('id') id: string,
-    @Body() body: { reason?: string },
+    @Body() body: VoidSaleDto,
     @Request() req: { user: { id: number; email: string } },
   ) {
-    return this.salesService.voidSale(parseInt(id, 10), body.reason, req.user);
+    return this.salesService.voidSale(parseInt(id, 10), body, req.user);
   }
 }

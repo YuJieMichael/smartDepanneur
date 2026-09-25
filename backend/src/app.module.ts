@@ -22,6 +22,7 @@ import { InventoryModule } from './inventory/inventory.module';
 import { SalesModule } from './sales/sales.module';
 import { DashboardModule } from './dashboard/dashboard.module';
 import { InsightsModule } from './insights/insights.module';
+import { PurchaseOrdersModule } from './purchase-orders/purchase-orders.module';
 import { validateEnvironment } from './config/validate-environment';
 import { AccessControlModule } from './access-control/access-control.module';
 
@@ -52,6 +53,7 @@ import { AccessControlModule } from './access-control/access-control.module';
     SalesModule,
     DashboardModule,
     InsightsModule,
+    PurchaseOrdersModule,
   ],
   controllers: [AppController],
   providers: [AppService],

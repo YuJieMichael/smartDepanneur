@@ -10,6 +10,7 @@ export interface ReorderSuggestion {
   minStock: number;
   soldLast7Days: number;
   suggestedReorderQty: number;
+  unitCost: string;
   estimatedCost: string;
   urgency: 'critical' | 'high' | 'medium';
   reason: string;
@@ -41,8 +42,51 @@ export interface SlowMover {
   category: { id: number; name: string } | null;
 }
 
-export function apiGetReorderSuggestions() {
-  return request<{ suggestions: ReorderSuggestion[]; summary: string }>('/api/insights/reorder');
+export function apiGetReorderSuggestions(language: Locale) {
+  return request<{ suggestions: ReorderSuggestion[]; summary: string }>(
+    `/api/insights/reorder?language=${encodeURIComponent(language)}`,
+  );
+}
+
+export interface GeneratedPurchaseOrderItem {
+  id: number;
+  productId: number;
+  productName: string;
+  sku: string | null;
+  unit: string;
+  quantity: number;
+  unitCost: string;
+  lineTotal: string;
+}
+
+export interface GeneratedPurchaseOrder {
+  id: number;
+  orderNumber: string;
+  businessDate: string;
+  status: 'draft' | 'sent' | 'received' | 'cancelled';
+  estimatedTotal: string;
+  supplier: {
+    id: number;
+    name: string;
+    contactName: string | null;
+    phone: string | null;
+    email: string | null;
+  } | null;
+  items: GeneratedPurchaseOrderItem[];
+}
+
+export interface GeneratedPurchaseOrderBatch {
+  businessDate: string;
+  createdCount: number;
+  updatedCount: number;
+  orders: GeneratedPurchaseOrder[];
+}
+
+export function apiGeneratePurchaseOrders(language: Locale) {
+  return request<GeneratedPurchaseOrderBatch>(
+    `/api/purchase-orders/generate-from-reorder?language=${encodeURIComponent(language)}`,
+    { method: 'POST' },
+  );
 }
 
 export function apiGetTopSellers() {

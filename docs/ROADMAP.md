@@ -12,10 +12,12 @@
 - EN / FR / ZH interfaces
 - Docker stack, tests, CI, and deployment documentation
 
-## Phase 1: purchasing and expiration lots
+## Phase 1: purchasing and expiration lots - in progress
 
-- Add `PurchaseOrder` and `PurchaseOrderItem`
-- Convert a reorder suggestion into a draft order
+- [x] Add `PurchaseOrder` and `PurchaseOrderItem`
+- [x] Convert reorder suggestions into supplier-grouped draft orders
+- [x] Make same-day draft generation idempotent
+- [ ] Add draft review, edit, send, and cancellation screens
 - Receive an order into `InventoryLot`
 - Move expiration date and unit cost from product-level state to lots
 - Deduct inventory using first-expiring-first-out

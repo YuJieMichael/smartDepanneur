@@ -2,12 +2,14 @@
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
+  Alert,
   Button,
   Card,
   Divider,
+  Input,
   InputNumber,
   message,
-  Popconfirm,
+  Modal,
   Select,
   Space,
   Statistic,
@@ -28,9 +30,12 @@ import {
   apiGetRecentSales,
   apiVoidSale,
   SaleRow,
+  VoidReasonCode,
 } from '@/api/sales';
 import { useI18nStore, useT } from '@/lib/i18n';
 import { globalMessage } from '@/lib/message-bridge';
+import { ApiError } from '@/lib/request';
+import { localizeStoreCategory } from '@/lib/store-category';
 
 interface CartItem {
   productId: number;
@@ -41,6 +46,8 @@ interface CartItem {
   lineTotal: number;
 }
 
+type CategoryFilter = 'all' | 'uncategorized' | `category:${number}`;
+
 const TAX_RATE = 0.14975;
 
 export default function SalesPage() {
@@ -50,6 +57,7 @@ export default function SalesPage() {
   const isFr = locale === 'fr';
   const [products, setProducts] = useState<ProductRow[]>([]);
   const [cart, setCart] = useState<CartItem[]>([]);
+  const [categoryFilter, setCategoryFilter] = useState<CategoryFilter>('all');
   const [selectedProductId, setSelectedProductId] = useState<number | null>(null);
   const [quantity, setQuantity] = useState<number>(1);
   const [paymentMethod, setPaymentMethod] = useState<'cash' | 'debit' | 'credit' | 'other'>('cash');
@@ -57,6 +65,11 @@ export default function SalesPage() {
   const [history, setHistory] = useState<SaleRow[]>([]);
   const [historyLoading, setHistoryLoading] = useState(true);
   const [voidingId, setVoidingId] = useState<number | null>(null);
+  const [voidTarget, setVoidTarget] = useState<SaleRow | null>(null);
+  const [voidReason, setVoidReason] = useState<VoidReasonCode | undefined>();
+  const [ownerEmail, setOwnerEmail] = useState('');
+  const [ownerPassword, setOwnerPassword] = useState('');
+  const [policyClock, setPolicyClock] = useState(Date.now());
 
   const loadProducts = useCallback(async () => {
     const result = await apiGetProductList({
@@ -81,9 +94,90 @@ export default function SalesPage() {
     Promise.all([loadProducts(), loadHistory()]).catch(() => {});
   }, [loadHistory, loadProducts]);
 
+  useEffect(() => {
+    const timer = window.setInterval(() => setPolicyClock(Date.now()), 15000);
+    return () => window.clearInterval(timer);
+  }, []);
+
   const selectedProduct = useMemo(
     () => products.find((product) => product.id === selectedProductId) ?? null,
     [products, selectedProductId],
+  );
+
+  const categoryOptions = useMemo(() => {
+    const categoryCounts = new Map<
+      number,
+      { id: number; name: string; count: number }
+    >();
+    let uncategorizedCount = 0;
+
+    for (const product of products) {
+      if (!product.category) {
+        uncategorizedCount += 1;
+        continue;
+      }
+      const existing = categoryCounts.get(product.category.id);
+      categoryCounts.set(product.category.id, {
+        id: product.category.id,
+        name: product.category.name,
+        count: (existing?.count ?? 0) + 1,
+      });
+    }
+
+    const allLabel = isZh ? '全部分类' : isFr ? 'Toutes les catégories' : 'All categories';
+    const options: Array<{ label: string; value: CategoryFilter }> = [
+      { label: `${allLabel} (${products.length})`, value: 'all' },
+      ...[...categoryCounts.values()]
+        .sort((left, right) =>
+          localizeStoreCategory(left.name, locale).localeCompare(
+            localizeStoreCategory(right.name, locale),
+            locale === 'zh' ? 'zh-CN' : locale === 'fr' ? 'fr-CA' : 'en-CA',
+          ),
+        )
+        .map((category) => ({
+          label: `${localizeStoreCategory(category.name, locale)} (${category.count})`,
+          value: `category:${category.id}` as CategoryFilter,
+        })),
+    ];
+
+    if (uncategorizedCount > 0) {
+      options.push({
+        label: `${localizeStoreCategory('Uncategorized', locale)} (${uncategorizedCount})`,
+        value: 'uncategorized',
+      });
+    }
+
+    return options;
+  }, [isFr, isZh, locale, products]);
+
+  const filteredProducts = useMemo(() => {
+    if (categoryFilter === 'all') return products;
+    if (categoryFilter === 'uncategorized') {
+      return products.filter((product) => product.category === null);
+    }
+    const categoryId = Number(categoryFilter.replace('category:', ''));
+    return products.filter((product) => product.categoryId === categoryId);
+  }, [categoryFilter, products]);
+
+  const productSearchIndex = useMemo(
+    () =>
+      new Map(
+        products.map((product) => [
+          product.id,
+          [
+            product.name,
+            product.sku,
+            product.barcode,
+            product.category
+              ? localizeStoreCategory(product.category.name, locale)
+              : localizeStoreCategory('Uncategorized', locale),
+          ]
+            .filter(Boolean)
+            .join(' ')
+            .toLocaleLowerCase(),
+        ]),
+      ),
+    [locale, products],
   );
 
   const subtotal = cart.reduce((sum, item) => sum + item.lineTotal, 0);
@@ -167,50 +261,94 @@ export default function SalesPage() {
     }
   };
 
-  const handleVoidSale = async (sale: SaleRow) => {
+  const closeVoidModal = () => {
+    if (voidingId !== null) return;
+    setVoidTarget(null);
+    setVoidReason(undefined);
+    setOwnerEmail('');
+    setOwnerPassword('');
+  };
+
+  const openVoidModal = (sale: SaleRow) => {
+    setVoidTarget(sale);
+    setVoidReason(undefined);
+    setOwnerEmail('');
+    setOwnerPassword('');
+  };
+
+  const handleVoidSale = async () => {
+    if (!voidTarget || !voidReason) return;
     try {
-      setVoidingId(sale.id);
-      await apiVoidSale(
-        sale.id,
-        isZh
-          ? '收银员撤销误操作'
-          : isFr
-            ? 'Vente annulée par erreur de caisse'
-            : 'Cashier reversed an accidental sale',
-      );
+      setVoidingId(voidTarget.id);
+      await apiVoidSale(voidTarget.id, {
+        reason: voidReason,
+        ...(voidTarget.voidPolicy.requiresOwnerApproval
+          ? { ownerEmail, ownerPassword }
+          : {}),
+      });
       globalMessage.success(
         isZh
-          ? `销售单 ${sale.saleNumber} 已撤销，库存已恢复`
+          ? `销售单 ${voidTarget.saleNumber} 已撤销，库存已恢复`
           : isFr
-            ? `Vente ${sale.saleNumber} annulée et stock restauré`
-            : `Sale ${sale.saleNumber} voided and inventory restored`,
+            ? `Vente ${voidTarget.saleNumber} annulée et stock restauré`
+            : `Sale ${voidTarget.saleNumber} voided and inventory restored`,
       );
+      setVoidTarget(null);
+      setVoidReason(undefined);
+      setOwnerEmail('');
+      setOwnerPassword('');
       await Promise.all([loadProducts(), loadHistory()]);
-    } catch {
+    } catch (error) {
       globalMessage.error(
-        isZh
-          ? '撤销失败，请刷新后重试'
-          : isFr
-            ? 'Échec de l’annulation'
-            : 'Unable to void the sale',
+        error instanceof ApiError && error.status === 401
+          ? isZh
+            ? 'Owner 账号或密码验证失败'
+            : isFr
+              ? 'Échec de la confirmation du propriétaire'
+              : 'Owner confirmation failed'
+          : isZh
+            ? '撤销失败，可能已超过 10 分钟，请刷新后重试'
+            : isFr
+              ? 'Échec de l’annulation. Le délai de 10 minutes est peut-être dépassé.'
+              : 'Unable to void the sale. The 10-minute window may have expired.',
       );
     } finally {
       setVoidingId(null);
     }
   };
 
+  const reasonLabels: Record<VoidReasonCode, string> = {
+    wrong_item: isZh ? '商品选错' : isFr ? 'Mauvais article' : 'Wrong item',
+    wrong_quantity: isZh ? '数量错误' : isFr ? 'Mauvaise quantité' : 'Wrong quantity',
+    duplicate_sale: isZh ? '重复销售' : isFr ? 'Vente en double' : 'Duplicate sale',
+    customer_cancelled: isZh ? '顾客取消' : isFr ? 'Annulation du client' : 'Customer cancelled',
+    payment_error: isZh ? '支付错误' : isFr ? 'Erreur de paiement' : 'Payment error',
+    other: isZh ? '其他' : isFr ? 'Autre' : 'Other',
+  };
+  const reasonOptions = Object.entries(reasonLabels).map(([value, label]) => ({
+    value: value as VoidReasonCode,
+    label,
+  }));
+
   const cartColumns = [
-    { title: isZh ? '商品' : isFr ? 'Produit' : 'Product', dataIndex: 'productName', key: 'name' },
+    {
+      title: isZh ? '商品' : isFr ? 'Produit' : 'Product',
+      dataIndex: 'productName',
+      key: 'name',
+      ellipsis: true,
+    },
     {
       title: isZh ? '数量' : isFr ? 'Qté' : 'Qty',
       key: 'qty',
-      width: 120,
+      width: 128,
       render: (_: unknown, item: CartItem) => (
         <InputNumber
+          className="sales-cart-quantity"
           min={1}
           max={products.find((product) => product.id === item.productId)?.currentStock ?? 999}
           value={item.quantity}
           size="small"
+          style={{ width: 84 }}
           onChange={(value) => {
             if (!value) return;
             setCart((prev) =>
@@ -228,18 +366,23 @@ export default function SalesPage() {
       title: isZh ? '单价' : isFr ? 'Prix unitaire' : 'Unit Price',
       dataIndex: 'unitPrice',
       key: 'price',
+      width: 140,
+      align: 'right' as const,
       render: (value: number) => `$${value.toFixed(2)}`,
     },
     {
       title: isZh ? '小计' : isFr ? 'Total ligne' : 'Line Total',
       dataIndex: 'lineTotal',
       key: 'total',
+      width: 150,
+      align: 'right' as const,
       render: (value: number) => `$${value.toFixed(2)}`,
     },
     {
       title: '',
       key: 'remove',
       width: 48,
+      align: 'center' as const,
       render: (_: unknown, item: CartItem) => (
         <Button
           type="link"
@@ -278,9 +421,25 @@ export default function SalesPage() {
         <Space direction="vertical" size={3}>
           <Typography.Text code>{sale.saleNumber}</Typography.Text>
           {sale.isVoided ? (
-            <Tag color="default">
-              {isZh ? '已撤销' : isFr ? 'Annulée' : 'Voided'}
-            </Tag>
+            <>
+              <Tag color="default">
+                {isZh ? '已撤销' : isFr ? 'Annulée' : 'Voided'}
+              </Tag>
+              {sale.voidReason && sale.voidReason in reasonLabels && (
+                <Typography.Text type="secondary" style={{ fontSize: 12 }}>
+                  {reasonLabels[sale.voidReason as VoidReasonCode]}
+                </Typography.Text>
+              )}
+              {sale.voidApprovedBy && (
+                <Typography.Text type="secondary" style={{ fontSize: 12 }}>
+                  {isZh
+                    ? `Owner 确认：${sale.voidApprovedBy.email}`
+                    : isFr
+                      ? `Confirmée par : ${sale.voidApprovedBy.email}`
+                      : `Owner approval: ${sale.voidApprovedBy.email}`}
+                </Typography.Text>
+              )}
+            </>
           ) : (
             <Tag color="green">
               {isZh ? '已完成' : isFr ? 'Complétée' : 'Completed'}
@@ -344,36 +503,32 @@ export default function SalesPage() {
           <Typography.Text type="secondary">
             {isZh ? '库存已恢复' : isFr ? 'Stock restauré' : 'Stock restored'}
           </Typography.Text>
+        ) : !sale.voidPolicy.canVoid ||
+          (sale.voidPolicy.windowEndsAt !== null &&
+            new Date(sale.voidPolicy.windowEndsAt).getTime() <= policyClock) ? (
+          <Typography.Text type="secondary">
+            {sale.voidPolicy.restriction === 'not_own_sale'
+              ? isZh
+                ? '仅限本人'
+                : isFr
+                  ? 'Vente personnelle'
+                  : 'Own sales only'
+              : isZh
+                ? '已超过 10 分钟'
+                : isFr
+                  ? 'Délai de 10 min dépassé'
+                  : '10-minute window expired'}
+          </Typography.Text>
         ) : (
-          <Popconfirm
-            title={
-              isZh
-                ? '确认撤销这笔销售？'
-                : isFr
-                  ? 'Annuler cette vente?'
-                  : 'Void this sale?'
-            }
-            description={
-              isZh
-                ? '销售记录会保留，商品库存会自动加回。'
-                : isFr
-                  ? 'La vente restera visible et le stock sera restauré.'
-                  : 'The sale stays in history and inventory is restored.'
-            }
-            okText={isZh ? '确认撤销' : isFr ? 'Confirmer' : 'Void Sale'}
-            cancelText={isZh ? '取消' : isFr ? 'Annuler' : 'Cancel'}
-            okButtonProps={{ danger: true }}
-            onConfirm={() => handleVoidSale(sale)}
+          <Button
+            danger
+            size="small"
+            icon={<UndoOutlined />}
+            loading={voidingId === sale.id}
+            onClick={() => openVoidModal(sale)}
           >
-            <Button
-              danger
-              size="small"
-              icon={<UndoOutlined />}
-              loading={voidingId === sale.id}
-            >
-              {isZh ? '撤销' : isFr ? 'Annuler' : 'Undo'}
-            </Button>
-          </Popconfirm>
+            {isZh ? '撤销' : isFr ? 'Annuler' : 'Void'}
+          </Button>
         ),
     },
   ];
@@ -387,14 +542,43 @@ export default function SalesPage() {
 
       <Card title={isZh ? '添加商品到购物车' : isFr ? 'Ajouter un article au panier' : 'Add Item to Cart'} style={{ marginBottom: 16 }}>
         <Space wrap>
+          <Select<CategoryFilter>
+            aria-label={isZh ? '商品分类' : isFr ? 'Catégorie de produit' : 'Product category'}
+            value={categoryFilter}
+            onChange={(value) => {
+              setCategoryFilter(value);
+              setSelectedProductId(null);
+              setQuantity(1);
+            }}
+            options={categoryOptions}
+            style={{ width: 220 }}
+          />
           <Select
             showSearch
-            placeholder={isZh ? '搜索商品' : isFr ? 'Rechercher un produit' : 'Search product'}
-            style={{ width: 320 }}
+            aria-label={isZh ? '选择商品' : isFr ? 'Choisir un produit' : 'Choose product'}
+            placeholder={
+              isZh
+                ? '按名称、条码或 SKU 搜索'
+                : isFr
+                  ? 'Rechercher par nom, code-barres ou UGS'
+                  : 'Search by name, barcode, or SKU'
+            }
+            style={{ width: 380 }}
             value={selectedProductId}
             onChange={setSelectedProductId}
-            optionFilterProp="label"
-            options={products.map((product) => ({
+            filterOption={(input, option) =>
+              productSearchIndex
+                .get(Number(option?.value))
+                ?.includes(input.trim().toLocaleLowerCase()) ?? false
+            }
+            notFoundContent={
+              isZh
+                ? '该分类没有匹配商品'
+                : isFr
+                  ? 'Aucun produit correspondant dans cette catégorie'
+                  : 'No matching products in this category'
+            }
+            options={filteredProducts.map((product) => ({
               label: `${product.name}${product.sku ? ` (${product.sku})` : ''} - ${isZh ? '库存' : isFr ? 'stock' : 'stock'}: ${product.currentStock}`,
               value: product.id,
               disabled: product.currentStock === 0,
@@ -426,6 +610,8 @@ export default function SalesPage() {
           columns={cartColumns}
           rowKey="productId"
           pagination={false}
+          tableLayout="fixed"
+          scroll={{ x: 640 }}
           locale={{ emptyText: isZh ? '购物车为空，请先添加商品' : isFr ? 'Le panier est vide - ajoutez des produits ci-dessus' : 'Cart is empty - add products above' }}
         />
 
@@ -495,12 +681,130 @@ export default function SalesPage() {
           style={{ margin: '12px 0 0', fontSize: 12 }}
         >
           {isZh
-            ? '撤销不会删除销售记录；系统会保留操作人和时间，并自动恢复库存。'
+            ? 'Cashier 只能撤销自己最近 10 分钟的销售；$100 及以上需要 Owner 确认。Owner 可以撤销所有销售。'
             : isFr
-              ? 'Une annulation conserve la vente, l’opérateur et l’heure, puis restaure automatiquement le stock.'
-              : 'Undo keeps the sale, operator, and timestamp in history while restoring inventory automatically.'}
+              ? 'Un caissier peut annuler ses propres ventes dans les 10 minutes. À partir de 100 $, la confirmation du propriétaire est requise. Le propriétaire peut annuler toute vente.'
+              : 'Cashiers can void their own sales within 10 minutes. Voids of $100 or more require Owner confirmation. Owners can void any sale.'}
         </Typography.Paragraph>
       </Card>
+
+      <Modal
+        open={voidTarget !== null}
+        title={
+          voidTarget
+            ? isZh
+              ? `撤销销售 ${voidTarget.saleNumber}`
+              : isFr
+                ? `Annuler la vente ${voidTarget.saleNumber}`
+                : `Void Sale ${voidTarget.saleNumber}`
+            : undefined
+        }
+        onCancel={closeVoidModal}
+        closable={voidingId === null}
+        maskClosable={voidingId === null}
+        footer={
+          <Space>
+            <Button onClick={closeVoidModal} disabled={voidingId !== null}>
+              {isZh ? '取消' : isFr ? 'Fermer' : 'Cancel'}
+            </Button>
+            <Button
+              danger
+              type="primary"
+              icon={<UndoOutlined />}
+              loading={voidingId !== null}
+              disabled={
+                !voidReason ||
+                Boolean(
+                  voidTarget?.voidPolicy.requiresOwnerApproval &&
+                    (!ownerEmail.trim() || !ownerPassword),
+                )
+              }
+              onClick={handleVoidSale}
+            >
+              {isZh ? '确认撤销' : isFr ? 'Confirmer l’annulation' : 'Confirm Void'}
+            </Button>
+          </Space>
+        }
+      >
+        {voidTarget && (
+          <Space direction="vertical" size={16} style={{ width: '100%' }}>
+            <Alert
+              type="warning"
+              showIcon
+              message={
+                isZh
+                  ? `销售总额 $${Number(voidTarget.total).toFixed(2)}`
+                  : isFr
+                    ? `Total de la vente : ${Number(voidTarget.total).toFixed(2)} $`
+                    : `Sale total: $${Number(voidTarget.total).toFixed(2)}`
+              }
+              description={
+                isZh
+                  ? '撤销后库存会自动恢复，销售记录和操作人仍会保留。'
+                  : isFr
+                    ? 'Le stock sera restauré; la vente et l’opérateur resteront dans l’historique.'
+                    : 'Inventory will be restored while the sale and operator remain in history.'
+              }
+            />
+
+            <div>
+              <Typography.Text strong>
+                {isZh ? '撤销原因（必选）' : isFr ? 'Motif (obligatoire)' : 'Void reason (required)'}
+              </Typography.Text>
+              <Select<VoidReasonCode>
+                value={voidReason}
+                onChange={setVoidReason}
+                options={reasonOptions}
+                placeholder={
+                  isZh
+                    ? '请选择撤销原因'
+                    : isFr
+                      ? 'Sélectionner un motif'
+                      : 'Select a void reason'
+                }
+                style={{ width: '100%', marginTop: 8 }}
+              />
+            </div>
+
+            {voidTarget.voidPolicy.requiresOwnerApproval && (
+              <>
+                <Alert
+                  type="error"
+                  showIcon
+                  message={
+                    isZh
+                      ? `大额撤销：$${voidTarget.voidPolicy.largeVoidThreshold} 及以上需要 Owner 确认`
+                      : isFr
+                        ? `Annulation importante : confirmation requise à partir de ${voidTarget.voidPolicy.largeVoidThreshold} $`
+                        : `Large void: Owner confirmation is required at $${voidTarget.voidPolicy.largeVoidThreshold} or more`
+                  }
+                />
+                <Input
+                  value={ownerEmail}
+                  onChange={(event) => setOwnerEmail(event.target.value)}
+                  placeholder={
+                    isZh ? 'Owner 邮箱' : isFr ? 'Courriel du propriétaire' : 'Owner email'
+                  }
+                  autoComplete="username"
+                />
+                <Input.Password
+                  value={ownerPassword}
+                  onChange={(event) => setOwnerPassword(event.target.value)}
+                  placeholder={
+                    isZh ? 'Owner 密码' : isFr ? 'Mot de passe du propriétaire' : 'Owner password'
+                  }
+                  autoComplete="current-password"
+                  onPressEnter={() => {
+                    if (voidReason && ownerEmail.trim() && ownerPassword) {
+                      void handleVoidSale();
+                    }
+                  }}
+                />
+              </>
+            )}
+          </Space>
+        )}
+      </Modal>
     </div>
   );
 }

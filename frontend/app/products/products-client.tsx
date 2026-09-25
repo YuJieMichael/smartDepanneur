@@ -3,25 +3,17 @@
 import { useCallback, useState } from 'react';
 import { Button, Popconfirm, Tag } from 'antd';
 import { DeleteOutlined, FileSearchOutlined, PlusOutlined, WarningOutlined } from '@ant-design/icons';
-import DataTable, {
-  DataTableColumnConfig,
-  DataTableParams,
-  DataTableResult,
-} from '@/components/table/data-table';
+import DataTable, { DataTableColumnConfig, DataTableParams, DataTableResult } from '@/components/table/data-table';
 import AuditTrailDialog from '@/components/common/audit-trail-dialog';
 import CreateProductDialog from '@/components/common/create-product-dialog';
-import {
-  apiDeleteProduct,
-  apiGetProductById,
-  apiGetProductFilterOptions,
-  apiGetProductList,
-  ProductRow,
-} from '@/api/products';
+import { apiDeleteProduct, apiGetProductById, apiGetProductFilterOptions, apiGetProductList, ProductRow } from '@/api/products';
 import { useI18nStore, useT } from '@/lib/i18n';
 import { globalMessage } from '@/lib/message-bridge';
+import { checkPermissionCode } from '@/lib/utils';
 
 export default function ProductsClient() {
   const t = useT();
+  const canViewAudit = checkPermissionCode('audit-view-store');
   const locale = useI18nStore((state) => state.locale);
   const isZh = locale === 'zh';
   const isFr = locale === 'fr';
@@ -30,44 +22,35 @@ export default function ProductsClient() {
   const [createOpen, setCreateOpen] = useState(false);
   const [refreshFlag, setRefreshFlag] = useState(0);
 
-  const fetchData = useCallback(
-    async (params: DataTableParams): Promise<DataTableResult<ProductRow>> => {
-      return apiGetProductList({
-        name: params.search || undefined,
-        filterIds: params.filters.filterIds,
-        filterNames: params.filters.filterNames,
-        filterCategories: params.filters.filterCategories,
-        filterSuppliers: params.filters.filterSuppliers,
-        filterActive: params.filters.filterActive,
-        filterCreatedDates: params.filters.filterCreatedDates,
-        sortField: params.sortField as 'id' | 'name' | 'currentStock' | 'sellingPrice' | 'createdAt' | 'updatedAt',
-        sortOrder: params.sortOrder,
-        page: params.page,
-        pageSize: params.pageSize,
-      });
-    },
-    [],
-  );
+  const fetchData = useCallback(async (params: DataTableParams): Promise<DataTableResult<ProductRow>> => {
+    return apiGetProductList({
+      name: params.search || undefined,
+      filterIds: params.filters.filterIds,
+      filterNames: params.filters.filterNames,
+      filterCategories: params.filters.filterCategories,
+      filterSuppliers: params.filters.filterSuppliers,
+      filterActive: params.filters.filterActive,
+      filterCreatedDates: params.filters.filterCreatedDates,
+      sortField: params.sortField as 'id' | 'name' | 'currentStock' | 'sellingPrice' | 'createdAt' | 'updatedAt',
+      sortOrder: params.sortOrder,
+      page: params.page,
+      pageSize: params.pageSize,
+    });
+  }, []);
 
-  const fetchFilterOptions = useCallback(
-    async (field: string, context: Record<string, string | undefined>) => {
-      return apiGetProductFilterOptions(field, {
-        name: context.search,
-        filterIds: context.filterIds,
-        filterNames: context.filterNames,
-        filterCategories: context.filterCategories,
-        filterSuppliers: context.filterSuppliers,
-        filterActive: context.filterActive,
-        filterCreatedDates: context.filterCreatedDates,
-      });
-    },
-    [],
-  );
+  const fetchFilterOptions = useCallback(async (field: string, context: Record<string, string | undefined>) => {
+    return apiGetProductFilterOptions(field, {
+      name: context.search,
+      filterIds: context.filterIds,
+      filterNames: context.filterNames,
+      filterCategories: context.filterCategories,
+      filterSuppliers: context.filterSuppliers,
+      filterActive: context.filterActive,
+      filterCreatedDates: context.filterCreatedDates,
+    });
+  }, []);
 
-  const fetchRow = useCallback(
-    async (id: string | number) => apiGetProductById(id),
-    [],
-  );
+  const fetchRow = useCallback(async (id: string | number) => apiGetProductById(id), []);
 
   const handleDelete = useCallback(
     async (id: number) => {
@@ -110,8 +93,7 @@ export default function ProductsClient() {
       editable: false,
       filterKey: 'filterCategories',
       filterField: 'category',
-      render: (category: ProductRow['category']) =>
-        category ? <Tag>{category.name}</Tag> : <span style={{ color: '#bbb' }}>-</span>,
+      render: (category: ProductRow['category']) => (category ? <Tag>{category.name}</Tag> : <span style={{ color: '#bbb' }}>-</span>),
     },
     {
       title: t.products.supplier,
@@ -119,8 +101,7 @@ export default function ProductsClient() {
       editable: false,
       filterKey: 'filterSuppliers',
       filterField: 'supplier',
-      render: (supplier: ProductRow['supplier']) =>
-        supplier ? <span>{supplier.name}</span> : <span style={{ color: '#bbb' }}>-</span>,
+      render: (supplier: ProductRow['supplier']) => (supplier ? <span>{supplier.name}</span> : <span style={{ color: '#bbb' }}>-</span>),
     },
     {
       title: t.products.selling_price,
@@ -157,8 +138,7 @@ export default function ProductsClient() {
       dataIndex: 'expirationDate',
       editable: false,
       width: 150,
-      render: (_: unknown, record: ProductRow) =>
-        getExpirationStatus(record) ?? <span style={{ color: '#bbb' }}>-</span>,
+      render: (_: unknown, record: ProductRow) => getExpirationStatus(record) ?? <span style={{ color: '#bbb' }}>-</span>,
     },
     {
       title: t.products.is_active,
@@ -167,8 +147,7 @@ export default function ProductsClient() {
       width: 90,
       filterKey: 'filterActive',
       filterField: 'isActive',
-      render: (active: boolean) =>
-        active ? <Tag color="green">{isZh ? '启用' : isFr ? 'Actif' : 'Active'}</Tag> : <Tag color="default">{isZh ? '停用' : isFr ? 'Inactif' : 'Inactive'}</Tag>,
+      render: (active: boolean) => (active ? <Tag color="green">{isZh ? '启用' : isFr ? 'Actif' : 'Active'}</Tag> : <Tag color="default">{isZh ? '停用' : isFr ? 'Inactif' : 'Inactive'}</Tag>),
     },
     {
       title: isZh ? '操作' : isFr ? 'Action' : 'Action',
@@ -178,22 +157,19 @@ export default function ProductsClient() {
       width: 100,
       render: (_: unknown, record: ProductRow) => (
         <div style={{ display: 'flex', gap: 4 }}>
-          <Button
-            type="link"
-            size="small"
-            icon={<FileSearchOutlined />}
-            onClick={() => {
-              setAuditRecordId(record.id);
-              setAuditOpen(true);
-            }}
-            style={{ padding: 0 }}
-          />
-          <Popconfirm
-            title={t.common.delete_confirm}
-            onConfirm={() => handleDelete(record.id)}
-            okText={t.common.submit}
-            cancelText={t.common.cancel}
-          >
+          {canViewAudit && (
+            <Button
+              type="link"
+              size="small"
+              icon={<FileSearchOutlined />}
+              onClick={() => {
+                setAuditRecordId(record.id);
+                setAuditOpen(true);
+              }}
+              style={{ padding: 0 }}
+            />
+          )}
+          <Popconfirm title={t.common.delete_confirm} onConfirm={() => handleDelete(record.id)} okText={t.common.submit} cancelText={t.common.cancel}>
             <Button type="link" size="small" danger icon={<DeleteOutlined />} style={{ padding: 0 }} />
           </Popconfirm>
         </div>
@@ -220,12 +196,7 @@ export default function ProductsClient() {
         }
         refreshFlag={refreshFlag}
       />
-      <AuditTrailDialog
-        open={auditOpen}
-        table="products"
-        recordId={auditRecordId}
-        onClose={() => setAuditOpen(false)}
-      />
+      <AuditTrailDialog open={auditOpen} table="products" recordId={auditRecordId} onClose={() => setAuditOpen(false)} />
       <CreateProductDialog
         open={createOpen}
         onClose={() => setCreateOpen(false)}

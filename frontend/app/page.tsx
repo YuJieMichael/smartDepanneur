@@ -3,13 +3,11 @@
 import { useEffect, useState } from 'react';
 import { Button, Card, Col, Row, Space, Tag, Typography } from 'antd';
 import {
-  ArrowRightOutlined,
   BarChartOutlined,
   BulbOutlined,
   CheckCircleOutlined,
   InboxOutlined,
   RocketOutlined,
-  SafetyCertificateOutlined,
   ShoppingCartOutlined,
   ShopOutlined,
 } from '@ant-design/icons';
@@ -308,62 +306,6 @@ export default function Home() {
               ))}
             </div>
           </Col>
-        </Row>
-      </Card>
-
-      <Card
-        style={{ marginBottom: 24, border: 0, boxShadow: '0 8px 24px rgba(15, 23, 42, 0.06)' }}
-        title={
-          <Space>
-            <SafetyCertificateOutlined style={{ color: '#0f766e' }} />
-            {isZh ? '今日门店流程' : isFr ? 'Flux de travail du jour' : 'Today’s store workflow'}
-          </Space>
-        }
-      >
-        <Row gutter={[16, 16]} align="middle">
-          {[
-            {
-              number: '01',
-              title: isZh ? '完成收银' : isFr ? 'Encaisser' : 'Checkout',
-              text: isZh ? '扫描商品并完成付款。' : isFr ? 'Scannez les produits et finalisez le paiement.' : 'Scan items and complete payment.',
-            },
-            {
-              number: '02',
-              title: isZh ? '库存自动同步' : isFr ? 'Stock synchronisé' : 'Inventory sync',
-              text: isZh ? '销售完成后库存自动扣减。' : isFr ? 'Le stock est déduit après chaque vente.' : 'Stock is deducted after every sale.',
-            },
-            {
-              number: '03',
-              title: isZh ? 'Agent 给出建议' : isFr ? 'Conseils de l’agent' : 'Agent guidance',
-              text: isZh ? '检查缺货、热销和滞销商品。' : isFr ? 'Vérifiez les ruptures, meilleures ventes et produits lents.' : 'Review shortages, top sellers, and slow movers.',
-            },
-          ].map((step, index) => (
-            <Col xs={24} md={8} key={step.number}>
-              <div style={{ display: 'flex', alignItems: 'flex-start', gap: 14 }}>
-                <div
-                  style={{
-                    minWidth: 42,
-                    height: 42,
-                    display: 'grid',
-                    placeItems: 'center',
-                    borderRadius: 12,
-                    background: index === 0 ? '#e6f4ff' : index === 1 ? '#e8fff5' : '#f0edff',
-                    color: index === 0 ? '#1677ff' : index === 1 ? '#0f766e' : '#4338ca',
-                    fontWeight: 800,
-                  }}
-                >
-                  {step.number}
-                </div>
-                <div style={{ flex: 1 }}>
-                  <Typography.Text strong>{step.title}</Typography.Text>
-                  <Typography.Paragraph type="secondary" style={{ margin: '4px 0 0' }}>
-                    {step.text}
-                  </Typography.Paragraph>
-                </div>
-                {index < 2 && <ArrowRightOutlined style={{ color: '#b5bdc9', marginTop: 12 }} />}
-              </div>
-            </Col>
-          ))}
         </Row>
       </Card>
 

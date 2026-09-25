@@ -17,6 +17,7 @@ export class DashboardService {
       lowStockProducts,
       expiringProducts,
       todaySales,
+      todayVoidedSales,
       topSellersRaw,
       expiringList,
     ] = await this.prisma.$transaction([
@@ -44,6 +45,13 @@ export class DashboardService {
           createdAt: { gte: todayStart, lt: todayEnd },
         },
         select: { total: true, profitEstimate: true },
+      }),
+      this.prisma.sale.findMany({
+        where: {
+          isVoided: true,
+          voidedAt: { gte: todayStart, lt: todayEnd },
+        },
+        select: { total: true },
       }),
       this.prisma.saleItem.groupBy({
         by: ['productId'],
@@ -82,6 +90,10 @@ export class DashboardService {
       new Prisma.Decimal(0),
     );
     const todaySaleCount = todaySales.length;
+    const todayVoidAmount = todayVoidedSales.reduce(
+      (sum, sale) => sum.plus(sale.total),
+      new Prisma.Decimal(0),
+    );
 
     const topProductIds = topSellersRaw.map((r) => r.productId);
     const topProducts = await this.prisma.product.findMany({
@@ -123,6 +135,8 @@ export class DashboardService {
         saleCount: todaySaleCount,
         revenue: todayRevenue,
         profit: todayProfit,
+        voidCount: todayVoidedSales.length,
+        voidAmount: todayVoidAmount,
       },
       topSellers,
       lowStockList,

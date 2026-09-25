@@ -1,9 +1,18 @@
-import { Controller, Get, Post, Body, UseGuards, Request } from '@nestjs/common';
+import {
+  Controller,
+  Get,
+  Post,
+  Body,
+  UseGuards,
+  Request,
+  Query,
+} from '@nestjs/common';
 import { PermissionGuard } from '../access-control/permission.guard';
 import { RequirePermissions } from '../access-control/require-permissions.decorator';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { AskInsightDto } from './dto/ask-insight.dto';
 import { InsightsService } from './insights.service';
+import type { InsightLanguage } from './insights.service';
 
 @Controller('api/insights')
 @UseGuards(JwtAuthGuard, PermissionGuard)
@@ -12,8 +21,8 @@ export class InsightsController {
   constructor(private readonly insightsService: InsightsService) {}
 
   @Get('reorder')
-  async getReorderSuggestions() {
-    return this.insightsService.getReorderSuggestions();
+  async getReorderSuggestions(@Query('language') language?: InsightLanguage) {
+    return this.insightsService.getReorderSuggestions(language ?? 'en');
   }
 
   @Get('top-sellers')

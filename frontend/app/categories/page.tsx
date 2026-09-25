@@ -5,20 +5,14 @@ import { Button, Modal, Form, Input, Popconfirm } from 'antd';
 import { DeleteOutlined, FileSearchOutlined, PlusOutlined } from '@ant-design/icons';
 import DataTable, { DataTableColumnConfig, DataTableParams, DataTableResult } from '@/components/table/data-table';
 import AuditTrailDialog from '@/components/common/audit-trail-dialog';
-import {
-  apiGetCategoryList,
-  apiGetCategoryFilterOptions,
-  apiGetCategoryById,
-  apiCreateCategory,
-  apiUpdateCategory,
-  apiDeleteCategory,
-  CategoryRow,
-} from '@/api/categories';
+import { apiGetCategoryList, apiGetCategoryFilterOptions, apiGetCategoryById, apiCreateCategory, apiUpdateCategory, apiDeleteCategory, CategoryRow } from '@/api/categories';
 import { useT } from '@/lib/i18n';
 import { globalMessage } from '@/lib/message-bridge';
+import { checkPermissionCode } from '@/lib/utils';
 
 export default function CategoriesPage() {
   const t = useT();
+  const canViewAudit = checkPermissionCode('audit-view-store');
   const [auditOpen, setAuditOpen] = useState(false);
   const [auditRecordId, setAuditRecordId] = useState<number>(0);
   const [createOpen, setCreateOpen] = useState(false);
@@ -26,42 +20,33 @@ export default function CategoriesPage() {
   const [refreshFlag, setRefreshFlag] = useState(0);
   const [form] = Form.useForm();
 
-  const fetchData = useCallback(
-    async (params: DataTableParams): Promise<DataTableResult<CategoryRow>> => {
-      return apiGetCategoryList({
-        name: params.search || undefined,
-        filterNames: params.filters.filterNames,
-        filterCodes: params.filters.filterCodes,
-        filterCreatedDates: params.filters.filterCreatedDates,
-        sortField: params.sortField as any,
-        sortOrder: params.sortOrder,
-        page: params.page,
-        pageSize: params.pageSize,
-      });
-    },
-    [],
-  );
+  const fetchData = useCallback(async (params: DataTableParams): Promise<DataTableResult<CategoryRow>> => {
+    return apiGetCategoryList({
+      name: params.search || undefined,
+      filterNames: params.filters.filterNames,
+      filterCodes: params.filters.filterCodes,
+      filterCreatedDates: params.filters.filterCreatedDates,
+      sortField: params.sortField as any,
+      sortOrder: params.sortOrder,
+      page: params.page,
+      pageSize: params.pageSize,
+    });
+  }, []);
 
-  const fetchFilterOptions = useCallback(
-    async (field: string, context: Record<string, string | undefined>) => {
-      return apiGetCategoryFilterOptions(field, {
-        name: context.search,
-        filterNames: context.filterNames,
-        filterCodes: context.filterCodes,
-        filterCreatedDates: context.filterCreatedDates,
-      });
-    },
-    [],
-  );
+  const fetchFilterOptions = useCallback(async (field: string, context: Record<string, string | undefined>) => {
+    return apiGetCategoryFilterOptions(field, {
+      name: context.search,
+      filterNames: context.filterNames,
+      filterCodes: context.filterCodes,
+      filterCreatedDates: context.filterCreatedDates,
+    });
+  }, []);
 
   const fetchRow = useCallback(async (id: string | number) => apiGetCategoryById(id), []);
 
-  const onCellUpdate = useCallback(
-    async (rowId: string | number, dataIndex: string, newValue: any) => {
-      await apiUpdateCategory(rowId, { [dataIndex]: newValue });
-    },
-    [],
-  );
+  const onCellUpdate = useCallback(async (rowId: string | number, dataIndex: string, newValue: any) => {
+    await apiUpdateCategory(rowId, { [dataIndex]: newValue });
+  }, []);
 
   const handleDelete = useCallback(
     async (id: number) => {
@@ -127,11 +112,19 @@ export default function CategoriesPage() {
       width: 100,
       render: (_: any, record: CategoryRow) => (
         <div style={{ display: 'flex', gap: 4 }}>
-          <Button type="link" size="small" icon={<FileSearchOutlined />}
-            onClick={() => { setAuditRecordId(record.id); setAuditOpen(true); }}
-            style={{ padding: 0 }} />
-          <Popconfirm title={t.common.delete_confirm} onConfirm={() => handleDelete(record.id)}
-            okText={t.common.submit} cancelText={t.common.cancel}>
+          {canViewAudit && (
+            <Button
+              type="link"
+              size="small"
+              icon={<FileSearchOutlined />}
+              onClick={() => {
+                setAuditRecordId(record.id);
+                setAuditOpen(true);
+              }}
+              style={{ padding: 0 }}
+            />
+          )}
+          <Popconfirm title={t.common.delete_confirm} onConfirm={() => handleDelete(record.id)} okText={t.common.submit} cancelText={t.common.cancel}>
             <Button type="link" size="small" danger icon={<DeleteOutlined />} style={{ padding: 0 }} />
           </Popconfirm>
         </div>
@@ -164,7 +157,10 @@ export default function CategoriesPage() {
         title="Create Category"
         open={createOpen}
         onOk={handleCreate}
-        onCancel={() => { form.resetFields(); setCreateOpen(false); }}
+        onCancel={() => {
+          form.resetFields();
+          setCreateOpen(false);
+        }}
         confirmLoading={createLoading}
         okText={t.common.submit}
         cancelText={t.common.cancel}

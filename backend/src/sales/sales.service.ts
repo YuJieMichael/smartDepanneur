@@ -4,19 +4,29 @@ import {
   ForbiddenException,
   Injectable,
   NotFoundException,
+  UnauthorizedException,
 } from '@nestjs/common';
 import { InventoryMovementType, PaymentMethod, Prisma } from '@prisma/client';
+import * as bcrypt from 'bcrypt';
 import { randomUUID } from 'node:crypto';
 import { AuditTrailService } from '../audit-trail/audit-trail.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateSaleDto, SaleItemInput } from './dto/create-sale.dto';
 import { QuerySalesDto } from './dto/query-sales.dto';
+import {
+  VOID_REASON_CODES,
+  VoidReasonCode,
+  VoidSaleDto,
+} from './dto/void-sale.dto';
 
 const DEFAULT_TAX_RATE = 0.14975; // QC TPS + TVQ
+const CASHIER_VOID_WINDOW_MS = 10 * 60 * 1000;
+const LARGE_VOID_THRESHOLD = new Prisma.Decimal(100);
 
 const saleInclude = {
   cashier: { select: { id: true, email: true } },
   voidedBy: { select: { id: true, email: true } },
+  voidApprovedBy: { select: { id: true, email: true } },
   items: {
     include: {
       product: {
@@ -81,14 +91,19 @@ export class SalesService {
     const limit = Number.isInteger(requestedLimit)
       ? Math.min(Math.max(requestedLimit, 1), 50)
       : 10;
-    const canManageAllSales = await this.canManageAllSales(operator.id);
-
-    return this.prisma.sale.findMany({
-      where: canManageAllSales ? undefined : { cashierId: operator.id },
+    const isOwner = await this.isStoreOwner(operator.id);
+    const sales = await this.prisma.sale.findMany({
+      where: isOwner ? undefined : { cashierId: operator.id },
       include: saleInclude,
       orderBy: { createdAt: 'desc' },
       take: limit,
     });
+    const now = new Date();
+
+    return sales.map((sale) => ({
+      ...sale,
+      voidPolicy: this.getVoidPolicy(sale, operator.id, isOwner, now),
+    }));
   }
 
   async getDailySummary(date?: string) {
@@ -263,9 +278,10 @@ export class SalesService {
 
   async voidSale(
     id: number,
-    reasonInput: string | undefined,
+    data: VoidSaleDto,
     operator: { id: number; email: string },
   ) {
+    const reason = this.normalizeVoidReason(data.reason);
     const sale = await this.prisma.sale.findUnique({
       where: { id },
       include: saleInclude,
@@ -278,14 +294,24 @@ export class SalesService {
       throw new ConflictException(`Sale ${sale.saleNumber} is already voided`);
     }
 
-    const canManageAllSales = await this.canManageAllSales(operator.id);
-    if (sale.cashierId !== operator.id && !canManageAllSales) {
+    const isOwner = await this.isStoreOwner(operator.id);
+    if (sale.cashierId !== operator.id && !isOwner) {
       throw new ForbiddenException('You can only void your own sales');
     }
 
-    const reason =
-      reasonInput?.trim().slice(0, 200) || 'Reversed accidental sale';
     const voidedAt = new Date();
+    if (
+      !isOwner &&
+      voidedAt.getTime() - sale.createdAt.getTime() > CASHIER_VOID_WINDOW_MS
+    ) {
+      throw new ForbiddenException(
+        'Cashiers can only void their own sales within 10 minutes',
+      );
+    }
+
+    const approvedBy = isOwner
+      ? null
+      : await this.verifyLargeVoidApproval(sale.total, data);
     const voidedSale = await this.prisma.$transaction(async (tx) => {
       const updateResult = await tx.sale.updateMany({
         where: { id, isVoided: false },
@@ -294,6 +320,7 @@ export class SalesService {
           voidedAt,
           voidReason: reason,
           voidedById: operator.id,
+          voidApprovedById: approvedBy?.id ?? null,
         },
       });
 
@@ -333,7 +360,9 @@ export class SalesService {
       recordId: sale.id,
       field: 'isVoided',
       oldValue: 'false',
-      newValue: `true - ${reason}`,
+      newValue: approvedBy
+        ? `true - ${reason} - approved by ${approvedBy.email}`
+        : `true - ${reason}`,
       userId: operator.id,
       userEmail: operator.email,
     });
@@ -438,14 +467,13 @@ export class SalesService {
     return and.length ? { AND: and } : {};
   }
 
-  private async canManageAllSales(userId: number) {
+  private async isStoreOwner(userId: number) {
     const user = await this.prisma.user.findUnique({
       where: { id: userId },
       select: {
         roles: {
           select: {
             name: true,
-            permissions: { select: { name: true } },
           },
         },
       },
@@ -453,13 +481,96 @@ export class SalesService {
 
     return Boolean(
       user?.roles.some(
-        (role) =>
-          role.name === 'Admin' ||
-          role.permissions.some(
-            (permission) => permission.name === 'dashboard-view',
-          ),
+        (role) => role.name === 'Admin' || role.name === 'Store Owner',
       ),
     );
+  }
+
+  private getVoidPolicy(
+    sale: {
+      isVoided: boolean;
+      cashierId: number | null;
+      createdAt: Date;
+      total: Prisma.Decimal;
+    },
+    operatorId: number,
+    isOwner: boolean,
+    now: Date,
+  ) {
+    const windowEndsAt = new Date(
+      sale.createdAt.getTime() + CASHIER_VOID_WINDOW_MS,
+    );
+    let restriction:
+      | 'already_voided'
+      | 'not_own_sale'
+      | 'window_expired'
+      | null = null;
+
+    if (sale.isVoided) {
+      restriction = 'already_voided';
+    } else if (!isOwner && sale.cashierId !== operatorId) {
+      restriction = 'not_own_sale';
+    } else if (!isOwner && now > windowEndsAt) {
+      restriction = 'window_expired';
+    }
+
+    return {
+      canVoid: restriction === null,
+      restriction,
+      requiresOwnerApproval:
+        !isOwner &&
+        restriction === null &&
+        new Prisma.Decimal(sale.total).greaterThanOrEqualTo(
+          LARGE_VOID_THRESHOLD,
+        ),
+      windowEndsAt: isOwner ? null : windowEndsAt.toISOString(),
+      largeVoidThreshold: LARGE_VOID_THRESHOLD.toFixed(2),
+    };
+  }
+
+  private normalizeVoidReason(reason: VoidReasonCode | undefined) {
+    if (!reason || !VOID_REASON_CODES.includes(reason)) {
+      throw new BadRequestException('A void reason must be selected');
+    }
+    return reason;
+  }
+
+  private async verifyLargeVoidApproval(
+    total: Prisma.Decimal,
+    data: VoidSaleDto,
+  ) {
+    if (new Prisma.Decimal(total).lessThan(LARGE_VOID_THRESHOLD)) {
+      return null;
+    }
+    const ownerEmail = data.ownerEmail?.trim().toLowerCase();
+    if (!ownerEmail || !data.ownerPassword) {
+      throw new ForbiddenException(
+        `Owner confirmation is required for voids of $${LARGE_VOID_THRESHOLD.toFixed(2)} or more`,
+      );
+    }
+
+    const owner = await this.prisma.user.findUnique({
+      where: { email: ownerEmail },
+      select: {
+        id: true,
+        email: true,
+        password: true,
+        roles: { select: { name: true } },
+      },
+    });
+    const hasOwnerRole = owner?.roles.some(
+      (role) => role.name === 'Store Owner' || role.name === 'Admin',
+    );
+    const passwordMatches =
+      owner && hasOwnerRole
+        ? await bcrypt.compare(data.ownerPassword, owner.password)
+        : false;
+
+    if (!owner || !hasOwnerRole || !passwordMatches) {
+      throw new UnauthorizedException('Owner confirmation failed');
+    }
+
+    return { id: owner.id, email: owner.email };
   }
 
   private normalizeTaxRate(rate: number) {

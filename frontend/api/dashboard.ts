@@ -11,6 +11,8 @@ export interface DashboardOverview {
     saleCount: number;
     revenue: string;
     profit: string;
+    voidCount: number;
+    voidAmount: string;
   };
   topSellers: Array<{
     productId: number;

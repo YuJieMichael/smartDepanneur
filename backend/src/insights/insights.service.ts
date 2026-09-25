@@ -7,7 +7,7 @@ const SLOW_MOVER_DAYS_WINDOW = 30;
 const TOP_SELLER_LIMIT = 10;
 const SLOW_MOVER_LIMIT = 10;
 
-type InsightLanguage = 'en' | 'fr' | 'zh';
+export type InsightLanguage = 'en' | 'fr' | 'zh';
 type InsightProvider = 'openai-agent' | 'local-agent';
 type InsightAgentTool =
   | 'get_reorder_suggestions'
@@ -113,7 +113,8 @@ const RESPONSE_TOOL_DEFINITIONS = [
 export class InsightsService {
   constructor(private readonly prisma: PrismaService) {}
 
-  async getReorderSuggestions() {
+  async getReorderSuggestions(language: InsightLanguage = 'en') {
+    const normalizedLanguage = this.normalizeLanguage(language);
     const since = new Date(Date.now() - REORDER_DAYS_WINDOW * 86400000);
 
     const lowStockProducts = await this.prisma.product.findMany({
@@ -140,7 +141,12 @@ export class InsightsService {
     if (lowStockProducts.length === 0) {
       return {
         suggestions: [],
-        summary: 'All products are above their minimum stock threshold. No reorders needed.',
+        summary:
+          normalizedLanguage === 'zh'
+            ? '所有商品都高于最低库存线，暂时无需补货。'
+            : normalizedLanguage === 'fr'
+              ? 'Tous les produits sont au-dessus du stock minimum. Aucun réapprovisionnement nécessaire.'
+              : 'All products are above their minimum stock threshold. No reorders needed.',
       };
     }
 
@@ -167,11 +173,23 @@ export class InsightsService {
         product.currentStock === 0 ? 'critical' : soldLast7Days > 0 ? 'high' : 'medium';
 
       const reason =
-        product.currentStock === 0
-          ? `${product.name} is out of stock.`
-          : soldLast7Days > 0
-            ? `${product.name} sold ${soldLast7Days} units in the last 7 days and is below minimum stock.`
-            : `${product.name} is below minimum stock threshold (${product.currentStock}/${product.minStock}).`;
+        normalizedLanguage === 'zh'
+          ? product.currentStock === 0
+            ? `${product.name} 已缺货。`
+            : soldLast7Days > 0
+              ? `${product.name} 过去 7 天卖出 ${soldLast7Days} 件，且库存低于最低线。`
+              : `${product.name} 低于最低库存线（${product.currentStock}/${product.minStock}）。`
+          : normalizedLanguage === 'fr'
+            ? product.currentStock === 0
+              ? `${product.name} est en rupture de stock.`
+              : soldLast7Days > 0
+                ? `${product.name} a vendu ${soldLast7Days} unité(s) en 7 jours et se trouve sous le stock minimum.`
+                : `${product.name} est sous le stock minimum (${product.currentStock}/${product.minStock}).`
+            : product.currentStock === 0
+              ? `${product.name} is out of stock.`
+              : soldLast7Days > 0
+                ? `${product.name} sold ${soldLast7Days} units in the last 7 days and is below minimum stock.`
+                : `${product.name} is below minimum stock threshold (${product.currentStock}/${product.minStock}).`;
 
       return {
         productId: product.id,
@@ -182,6 +200,7 @@ export class InsightsService {
         minStock: product.minStock,
         soldLast7Days,
         suggestedReorderQty,
+        unitCost: new Prisma.Decimal(product.costPrice),
         estimatedCost: new Prisma.Decimal(product.costPrice).times(suggestedReorderQty),
         urgency,
         reason,
@@ -193,10 +212,28 @@ export class InsightsService {
     const criticalCount = suggestions.filter((item) => item.urgency === 'critical').length;
     const highCount = suggestions.filter((item) => item.urgency === 'high').length;
     const summary =
-      `${suggestions.length} product(s) need restocking. ` +
-      (criticalCount > 0 ? `${criticalCount} are out of stock. ` : '') +
-      (highCount > 0 ? `${highCount} have recent sales and are running low. ` : '') +
-      'Reorder before the next busy period.';
+      normalizedLanguage === 'zh'
+        ? `${suggestions.length} 个商品需要补货。` +
+          (criticalCount > 0 ? `${criticalCount} 个已经缺货。` : '') +
+          (highCount > 0 ? `${highCount} 个近期有销量且库存偏低。` : '') +
+          '建议在下一个繁忙时段前完成补货。'
+        : normalizedLanguage === 'fr'
+          ? `${suggestions.length} produit(s) doivent être réapprovisionnés. ` +
+            (criticalCount > 0
+              ? `${criticalCount} ${criticalCount === 1 ? 'est' : 'sont'} en rupture de stock. `
+              : '') +
+            (highCount > 0
+              ? `${highCount} ${highCount === 1 ? 'se vend récemment et a' : 'se vendent récemment et ont'} un stock faible. `
+              : '') +
+            'Réapprovisionnez avant la prochaine période achalandée.'
+          : `${suggestions.length} product(s) need restocking. ` +
+            (criticalCount > 0
+              ? `${criticalCount} ${criticalCount === 1 ? 'is' : 'are'} out of stock. `
+              : '') +
+            (highCount > 0
+              ? `${highCount} ${highCount === 1 ? 'has' : 'have'} recent sales and ${highCount === 1 ? 'is' : 'are'} running low. `
+              : '') +
+            'Reorder before the next busy period.';
 
     return { suggestions, summary };
   }
