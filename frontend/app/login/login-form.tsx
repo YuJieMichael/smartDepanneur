@@ -48,8 +48,15 @@ export default function LoginForm() {
       const safeRedirect =
         redirect && redirect.startsWith('/') && !redirect.startsWith('//') ? redirect : null;
       router.replace(isCashierOnly ? '/sales' : safeRedirect ?? '/');
-    } catch {
-      message.error(t.auth.login_failed);
+    } catch (error) {
+      if (DEMO_MODE) {
+        console.error('Demo entry failed', error);
+        const detail = error instanceof Error ? error.message : String(error);
+        const label = locale === 'zh' ? '演示初始化失败' : locale === 'fr' ? 'Échec du démarrage de la démo' : 'Demo could not start';
+        message.error(`${label}: ${detail}`, 10);
+      } else {
+        message.error(t.auth.login_failed);
+      }
     } finally {
       setLoading(false);
     }
