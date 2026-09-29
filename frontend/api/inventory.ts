@@ -2,7 +2,8 @@ import { request } from '@/lib/request';
 
 export interface InventoryMovementRow {
   id: number;
-  type: 'purchase' | 'adjustment' | 'sale' | 'waste' | 'expired' | 'return_item';
+  type:
+    'purchase' | 'adjustment' | 'sale' | 'waste' | 'expired' | 'return_item';
   quantity: number;
   unitCost: string | null;
   reason: string | null;
@@ -68,6 +69,9 @@ export interface GetInventoryMovementListResult {
 
 export interface StockInPayload {
   productId: number;
+  batchId?: number;
+  lotCode?: string;
+  expirationDate?: string | null;
   quantity: number;
   unitCost?: number | string | null;
   reason?: string | null;
@@ -77,6 +81,9 @@ export interface StockInPayload {
 
 export interface AdjustStockPayload {
   productId: number;
+  batchId?: number;
+  lotCode?: string;
+  expirationDate?: string | null;
   quantity: number;
   reason?: string | null;
   referenceType?: string | null;
@@ -85,36 +92,50 @@ export interface AdjustStockPayload {
 
 export interface WasteStockPayload {
   productId: number;
+  batchId?: number;
+  lotCode?: string;
+  expirationDate?: string | null;
   quantity: number;
   reason?: string | null;
   referenceType?: string | null;
   referenceId?: number | null;
 }
 
-export function apiGetInventoryMovementList(params: GetInventoryMovementListParams = {}) {
+export function apiGetInventoryMovementList(
+  params: GetInventoryMovementListParams = {},
+) {
   const query = new URLSearchParams();
   if (params.productName) query.set('productName', params.productName);
   if (params.filterTypes) query.set('filterTypes', params.filterTypes);
-  if (params.filterProductNames) query.set('filterProductNames', params.filterProductNames);
-  if (params.filterCreatedDates) query.set('filterCreatedDates', params.filterCreatedDates);
+  if (params.filterProductNames)
+    query.set('filterProductNames', params.filterProductNames);
+  if (params.filterCreatedDates)
+    query.set('filterCreatedDates', params.filterCreatedDates);
   if (params.sortField) query.set('sortField', params.sortField);
   if (params.sortOrder) query.set('sortOrder', params.sortOrder);
   if (params.page != null) query.set('page', String(params.page));
   if (params.pageSize != null) query.set('pageSize', String(params.pageSize));
   const qs = query.toString();
-  return request<GetInventoryMovementListResult>(`/api/inventory/movements${qs ? `?${qs}` : ''}`);
+  return request<GetInventoryMovementListResult>(
+    `/api/inventory/movements${qs ? `?${qs}` : ''}`,
+  );
 }
 
 export function apiGetInventoryFilterOptions(
   field: string,
-  params: Omit<GetInventoryMovementListParams, 'sortField' | 'sortOrder' | 'page' | 'pageSize'> = {},
+  params: Omit<
+    GetInventoryMovementListParams,
+    'sortField' | 'sortOrder' | 'page' | 'pageSize'
+  > = {},
 ) {
   const query = new URLSearchParams();
   query.set('field', field);
   if (params.productName) query.set('productName', params.productName);
   if (params.filterTypes) query.set('filterTypes', params.filterTypes);
-  if (params.filterProductNames) query.set('filterProductNames', params.filterProductNames);
-  if (params.filterCreatedDates) query.set('filterCreatedDates', params.filterCreatedDates);
+  if (params.filterProductNames)
+    query.set('filterProductNames', params.filterProductNames);
+  if (params.filterCreatedDates)
+    query.set('filterCreatedDates', params.filterCreatedDates);
   return request<string[]>(`/api/inventory/filter-options?${query.toString()}`);
 }
 
@@ -144,5 +165,7 @@ export function apiGetLowStockProducts() {
 }
 
 export function apiGetExpirationAlerts(days = 7) {
-  return request<ExpirationAlertRow[]>(`/api/inventory/expiration-alerts?days=${days}`);
+  return request<ExpirationAlertRow[]>(
+    `/api/inventory/expiration-alerts?days=${days}`,
+  );
 }

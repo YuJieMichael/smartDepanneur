@@ -74,6 +74,8 @@ export interface GetSaleListResult {
 }
 
 export interface CreateSalePayload {
+  requestId: string;
+  shiftId: number;
   items: Array<{
     productId: number;
     quantity: number;
@@ -85,8 +87,10 @@ export interface CreateSalePayload {
 
 export function apiGetSaleList(params: GetSaleListParams = {}) {
   const query = new URLSearchParams();
-  if (params.filterPaymentMethods) query.set('filterPaymentMethods', params.filterPaymentMethods);
-  if (params.filterCreatedDates) query.set('filterCreatedDates', params.filterCreatedDates);
+  if (params.filterPaymentMethods)
+    query.set('filterPaymentMethods', params.filterPaymentMethods);
+  if (params.filterCreatedDates)
+    query.set('filterCreatedDates', params.filterCreatedDates);
   if (params.sortField) query.set('sortField', params.sortField);
   if (params.sortOrder) query.set('sortOrder', params.sortOrder);
   if (params.page != null) query.set('page', String(params.page));

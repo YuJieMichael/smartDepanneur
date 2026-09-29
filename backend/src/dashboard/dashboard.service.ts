@@ -1,4 +1,5 @@
 import { BadRequestException, Injectable } from '@nestjs/common';
+import { calendarDate, dateRange, storeDate } from '../store-operations/common';
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 
@@ -11,6 +12,15 @@ export class DashboardService {
   async getOverview() {
     const { start: todayStart, end: todayEnd } = this.getStoreDateRange();
 
+    const expiryStart = calendarDate(storeDate());
+    const batchExpiry = {
+      quantityRemaining: { gt: 0 },
+      product: { isActive: true },
+      expirationDate: {
+        gte: expiryStart,
+        lte: new Date(expiryStart.getTime() + 7 * 86400000),
+      },
+    };
     const [
       totalProducts,
       activeProducts,
@@ -29,16 +39,7 @@ export class DashboardService {
           currentStock: { lte: this.prisma.product.fields.minStock },
         },
       }),
-      this.prisma.product.count({
-        where: {
-          isActive: true,
-          expirationTracked: true,
-          expirationDate: {
-            gte: todayStart,
-            lte: new Date(todayStart.getTime() + 7 * 86400000),
-          },
-        },
-      }),
+      this.prisma.stockBatch.count({ where: batchExpiry }),
       this.prisma.sale.findMany({
         where: {
           isVoided: false,
@@ -60,21 +61,15 @@ export class DashboardService {
         orderBy: { _sum: { quantity: 'desc' } },
         take: 5,
       }),
-      this.prisma.product.findMany({
-        where: {
-          isActive: true,
-          expirationTracked: true,
-          expirationDate: {
-            gte: todayStart,
-            lte: new Date(todayStart.getTime() + 7 * 86400000),
+      this.prisma.stockBatch.findMany({
+        where: batchExpiry,
+        include: {
+          product: {
+            select: {
+              name: true,
+              supplier: { select: { id: true, name: true } },
+            },
           },
-        },
-        select: {
-          id: true,
-          name: true,
-          currentStock: true,
-          expirationDate: true,
-          supplier: { select: { id: true, name: true } },
         },
         orderBy: { expirationDate: 'asc' },
         take: 10,
@@ -140,7 +135,14 @@ export class DashboardService {
       },
       topSellers,
       lowStockList,
-      expiringList,
+      expiringList: expiringList.map((batch) => ({
+        id: batch.id,
+        productId: batch.productId,
+        name: `${batch.product.name} · ${batch.lotCode}`,
+        currentStock: batch.quantityRemaining,
+        expirationDate: batch.expirationDate,
+        supplier: batch.product.supplier,
+      })),
     };
   }
 
@@ -161,6 +163,9 @@ export class DashboardService {
             quantity: true,
             lineTotal: true,
             unitCost: true,
+            costTotal: true,
+            categoryIdSnapshot: true,
+            categoryNameSnapshot: true,
             product: {
               select: {
                 category: { select: { id: true, name: true } },
@@ -192,8 +197,12 @@ export class DashboardService {
 
     for (const sale of sales) {
       for (const item of sale.items) {
-        const category = item.product.category;
-        const key = category ? String(category.id) : 'uncategorized';
+        const category = {
+          id: item.categoryIdSnapshot,
+          name: item.categoryNameSnapshot,
+        };
+        const key =
+          category.id !== null ? String(category.id) : 'uncategorized';
         const current = categories.get(key) ?? {
           categoryId: category?.id ?? null,
           categoryName: category?.name ?? 'Uncategorized',
@@ -201,9 +210,9 @@ export class DashboardService {
           revenue: new Prisma.Decimal(0),
           grossProfit: new Prisma.Decimal(0),
         };
-        const itemCost = new Prisma.Decimal(item.unitCost ?? 0).times(
-          item.quantity,
-        );
+        const itemCost =
+          item.costTotal ??
+          new Prisma.Decimal(item.unitCost ?? 0).times(item.quantity);
 
         current.quantity += item.quantity;
         current.revenue = current.revenue.plus(item.lineTotal);
@@ -325,78 +334,13 @@ export class DashboardService {
   }
 
   private getStoreDateRange(dateInput?: string) {
-    const date = dateInput ?? this.formatStoreDate(new Date());
-
-    if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) {
-      throw new BadRequestException('date must use YYYY-MM-DD format');
-    }
-
-    const [year, month, day] = date.split('-').map(Number);
-    const calendarDate = new Date(Date.UTC(year, month - 1, day));
-    if (
-      calendarDate.getUTCFullYear() !== year ||
-      calendarDate.getUTCMonth() !== month - 1 ||
-      calendarDate.getUTCDate() !== day
-    ) {
-      throw new BadRequestException('date is not a valid calendar date');
-    }
-
-    const nextCalendarDate = new Date(calendarDate.getTime() + 86400000);
-    const nextDate = nextCalendarDate.toISOString().slice(0, 10);
-
-    return {
-      date,
-      start: this.storeMidnightToUtc(date),
-      end: this.storeMidnightToUtc(nextDate),
-    };
+    return dateRange(dateInput);
   }
-
   private storeMidnightToUtc(date: string) {
-    const [year, month, day] = date.split('-').map(Number);
-    const utcGuess = new Date(Date.UTC(year, month - 1, day));
-    const formatter = new Intl.DateTimeFormat('en-US', {
-      timeZone: STORE_TIME_ZONE,
-      year: 'numeric',
-      month: '2-digit',
-      day: '2-digit',
-      hour: '2-digit',
-      minute: '2-digit',
-      second: '2-digit',
-      hourCycle: 'h23',
-    });
-    const parts = Object.fromEntries(
-      formatter
-        .formatToParts(utcGuess)
-        .filter((part) => part.type !== 'literal')
-        .map((part) => [part.type, Number(part.value)]),
-    );
-    const representedAsUtc = Date.UTC(
-      parts.year,
-      parts.month - 1,
-      parts.day,
-      parts.hour,
-      parts.minute,
-      parts.second,
-    );
-    const offset = representedAsUtc - utcGuess.getTime();
-
-    return new Date(utcGuess.getTime() - offset);
+    return dateRange(date).start;
   }
-
   private formatStoreDate(value: Date) {
-    const parts = Object.fromEntries(
-      new Intl.DateTimeFormat('en-CA', {
-        timeZone: STORE_TIME_ZONE,
-        year: 'numeric',
-        month: '2-digit',
-        day: '2-digit',
-      })
-        .formatToParts(value)
-        .filter((part) => part.type !== 'literal')
-        .map((part) => [part.type, part.value]),
-    );
-
-    return `${parts.year}-${parts.month}-${parts.day}`;
+    return storeDate(value);
   }
 
   private calculatePercentChange(currentValue: string, previousValue: string) {

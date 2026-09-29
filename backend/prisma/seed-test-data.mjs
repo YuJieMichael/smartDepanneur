@@ -1,7 +1,9 @@
+import 'dotenv/config';
+import { PrismaPg } from '@prisma/adapter-pg';
 import { Prisma, PrismaClient } from '@prisma/client';
 import bcrypt from 'bcrypt';
 
-const prisma = new PrismaClient();
+const prisma = new PrismaClient({ adapter: new PrismaPg({ connectionString: process.env.DATABASE_URL }) });
 
 const TAX_RATE = 0.14975;
 
@@ -29,6 +31,10 @@ async function ensureUser(email, roleName) {
 }
 
 async function main() {
+  if (await prisma.stockBatch.count()) {
+    console.log('Demo seeding skipped: batch inventory already exists.');
+    return;
+  }
   const admin = await ensureUser('owner@smartdepanneur.local', 'Store Owner');
   await ensureUser('cashier@smartdepanneur.local', 'Cashier');
   await ensureUser('inventory@smartdepanneur.local', 'Inventory Staff');
@@ -370,6 +376,9 @@ async function main() {
     }
   }
 
+  const openingProducts = await prisma.product.findMany({ where: { currentStock: { gt: 0 } } });
+  for (const product of openingProducts) await prisma.stockBatch.create({ data: { productId: product.id, lotCode: 'DEMO-OPENING-' + product.id, quantityReceived: product.currentStock, quantityRemaining: product.currentStock, unitCost: product.costPrice, expirationDate: product.expirationDate } });
+  await prisma.$executeRaw`UPDATE sale_items si SET category_id_snapshot = p.category_id, category_name_snapshot = COALESCE(c.name, 'Uncategorized'), cost_total = COALESCE(si.unit_cost, 0) * si.quantity FROM products p LEFT JOIN categories c ON c.id = p.category_id WHERE si.product_id = p.id AND si.cost_total IS NULL`;
   console.log('Seeded SmartDepanneur demo users, products, inventory, and sales.');
 }
 

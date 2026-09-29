@@ -1,4 +1,5 @@
 import { Module } from '@nestjs/common';
+import { StoreOperationsModule } from './store-operations/store-operations.module';
 import { ConfigModule } from '@nestjs/config';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
@@ -28,6 +29,7 @@ import { AccessControlModule } from './access-control/access-control.module';
 
 @Module({
   imports: [
+    StoreOperationsModule,
     ConfigModule.forRoot({
       isGlobal: true,
       validate: validateEnvironment,

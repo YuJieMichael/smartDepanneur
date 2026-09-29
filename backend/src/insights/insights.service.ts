@@ -1,3 +1,4 @@
+import { dateRange } from '../store-operations/common';
 import { BadRequestException, Injectable } from '@nestjs/common';
 import { InsightType, Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
@@ -132,7 +133,9 @@ export class InsightsService {
         minStock: true,
         costPrice: true,
         sellingPrice: true,
-        supplier: { select: { id: true, name: true, phone: true, email: true } },
+        supplier: {
+          select: { id: true, name: true, phone: true, email: true },
+        },
         category: { select: { id: true, name: true } },
       },
       orderBy: { currentStock: 'asc' },
@@ -155,11 +158,13 @@ export class InsightsService {
       by: ['productId'],
       where: {
         productId: { in: productIds },
-        sale: { createdAt: { gte: since } },
+        sale: { isVoided: false, createdAt: { gte: since } },
       },
       _sum: { quantity: true },
     });
-    const velocityMap = new Map(salesData.map((row) => [row.productId, row._sum?.quantity ?? 0]));
+    const velocityMap = new Map(
+      salesData.map((row) => [row.productId, row._sum?.quantity ?? 0]),
+    );
 
     const suggestions = lowStockProducts.map((product) => {
       const soldLast7Days = velocityMap.get(product.id) ?? 0;
@@ -170,7 +175,11 @@ export class InsightsService {
       );
 
       const urgency: 'critical' | 'high' | 'medium' =
-        product.currentStock === 0 ? 'critical' : soldLast7Days > 0 ? 'high' : 'medium';
+        product.currentStock === 0
+          ? 'critical'
+          : soldLast7Days > 0
+            ? 'high'
+            : 'medium';
 
       const reason =
         normalizedLanguage === 'zh'
@@ -201,7 +210,9 @@ export class InsightsService {
         soldLast7Days,
         suggestedReorderQty,
         unitCost: new Prisma.Decimal(product.costPrice),
-        estimatedCost: new Prisma.Decimal(product.costPrice).times(suggestedReorderQty),
+        estimatedCost: new Prisma.Decimal(product.costPrice).times(
+          suggestedReorderQty,
+        ),
         urgency,
         reason,
         supplier: product.supplier,
@@ -209,8 +220,12 @@ export class InsightsService {
       };
     });
 
-    const criticalCount = suggestions.filter((item) => item.urgency === 'critical').length;
-    const highCount = suggestions.filter((item) => item.urgency === 'high').length;
+    const criticalCount = suggestions.filter(
+      (item) => item.urgency === 'critical',
+    ).length;
+    const highCount = suggestions.filter(
+      (item) => item.urgency === 'high',
+    ).length;
     const summary =
       normalizedLanguage === 'zh'
         ? `${suggestions.length} 个商品需要补货。` +
@@ -240,6 +255,7 @@ export class InsightsService {
 
   async getTopSellers() {
     const topRaw = await this.prisma.saleItem.groupBy({
+      where: { sale: { isVoided: false } },
       by: ['productId'],
       _sum: { quantity: true, lineTotal: true },
       orderBy: { _sum: { quantity: 'desc' } },
@@ -262,7 +278,9 @@ export class InsightsService {
         category: { select: { id: true, name: true } },
       },
     });
-    const productMap = new Map(products.map((product) => [product.id, product]));
+    const productMap = new Map(
+      products.map((product) => [product.id, product]),
+    );
 
     const topSellers = topRaw.map((row) => {
       const product = productMap.get(row.productId);
@@ -285,7 +303,7 @@ export class InsightsService {
 
     const soldProductIds = await this.prisma.saleItem
       .findMany({
-        where: { sale: { createdAt: { gte: since } } },
+        where: { sale: { isVoided: false, createdAt: { gte: since } } },
         select: { productId: true },
         distinct: ['productId'],
       })
@@ -316,7 +334,9 @@ export class InsightsService {
     return {
       slowMovers: slowMovers.map((product) => ({
         ...product,
-        stockValue: new Prisma.Decimal(product.costPrice).times(product.currentStock),
+        stockValue: new Prisma.Decimal(product.costPrice).times(
+          product.currentStock,
+        ),
       })),
       message:
         slowMovers.length === 0
@@ -542,21 +562,24 @@ export class InsightsService {
   }
 
   private async getStoreSummaryData() {
-    const todayStart = new Date();
-    todayStart.setUTCHours(0, 0, 0, 0);
-    const todayEnd = new Date(todayStart.getTime() + 86400000);
-    const [productCount, todaySales, lowCount] = await this.prisma.$transaction([
-      this.prisma.product.count({ where: { isActive: true } }),
-      this.prisma.sale.count({
-        where: { createdAt: { gte: todayStart, lt: todayEnd } },
-      }),
-      this.prisma.product.count({
-        where: {
-          isActive: true,
-          currentStock: { lte: this.prisma.product.fields.minStock },
-        },
-      }),
-    ]);
+    const { start: todayStart, end: todayEnd } = dateRange();
+    const [productCount, todaySales, lowCount] = await this.prisma.$transaction(
+      [
+        this.prisma.product.count({ where: { isActive: true } }),
+        this.prisma.sale.count({
+          where: {
+            isVoided: false,
+            createdAt: { gte: todayStart, lt: todayEnd },
+          },
+        }),
+        this.prisma.product.count({
+          where: {
+            isActive: true,
+            currentStock: { lte: this.prisma.product.fields.minStock },
+          },
+        }),
+      ],
+    );
 
     return {
       generatedAt: new Date().toISOString(),
@@ -650,19 +673,27 @@ export class InsightsService {
         };
       }
 
-      const lines = suggestions.slice(0, 5).map((suggestion) =>
-        language === 'zh'
-          ? `- ${suggestion.productName}: 当前库存 ${suggestion.currentStock}/${suggestion.minStock}, 建议补 ${suggestion.suggestedReorderQty} ${suggestion.unit}${
-              suggestion.soldLast7Days > 0 ? `，过去 7 天卖出 ${suggestion.soldLast7Days} 件` : ''
-            }`
-          : language === 'fr'
-            ? `- ${suggestion.productName} : stock ${suggestion.currentStock}/${suggestion.minStock}, commander ${suggestion.suggestedReorderQty} ${suggestion.unit}${
-                suggestion.soldLast7Days > 0 ? ` (${suggestion.soldLast7Days} vendus en 7 jours)` : ''
+      const lines = suggestions
+        .slice(0, 5)
+        .map((suggestion) =>
+          language === 'zh'
+            ? `- ${suggestion.productName}: 当前库存 ${suggestion.currentStock}/${suggestion.minStock}, 建议补 ${suggestion.suggestedReorderQty} ${suggestion.unit}${
+                suggestion.soldLast7Days > 0
+                  ? `，过去 7 天卖出 ${suggestion.soldLast7Days} 件`
+                  : ''
               }`
-            : `- ${suggestion.productName}: stock ${suggestion.currentStock}/${suggestion.minStock}, suggest ordering ${suggestion.suggestedReorderQty} ${suggestion.unit}${
-                suggestion.soldLast7Days > 0 ? ` (sold ${suggestion.soldLast7Days} in last 7 days)` : ''
-              }`,
-      );
+            : language === 'fr'
+              ? `- ${suggestion.productName} : stock ${suggestion.currentStock}/${suggestion.minStock}, commander ${suggestion.suggestedReorderQty} ${suggestion.unit}${
+                  suggestion.soldLast7Days > 0
+                    ? ` (${suggestion.soldLast7Days} vendus en 7 jours)`
+                    : ''
+                }`
+              : `- ${suggestion.productName}: stock ${suggestion.currentStock}/${suggestion.minStock}, suggest ordering ${suggestion.suggestedReorderQty} ${suggestion.unit}${
+                  suggestion.soldLast7Days > 0
+                    ? ` (sold ${suggestion.soldLast7Days} in last 7 days)`
+                    : ''
+                }`,
+        );
 
       return {
         type: InsightType.reorder,
@@ -693,13 +724,15 @@ export class InsightsService {
         };
       }
 
-      const lines = topSellers.slice(0, 5).map((seller, index) =>
-        language === 'zh'
-          ? `${index + 1}. ${seller.productName} - 已售 ${seller.totalSold} 件，收入 $${parseFloat(String(seller.totalRevenue)).toFixed(2)}`
-          : language === 'fr'
-            ? `${index + 1}. ${seller.productName} — ${seller.totalSold} unité(s) vendue(s), ${parseFloat(String(seller.totalRevenue)).toFixed(2)} $ de revenus`
-            : `${index + 1}. ${seller.productName} - ${seller.totalSold} units sold, $${parseFloat(String(seller.totalRevenue)).toFixed(2)} revenue`,
-      );
+      const lines = topSellers
+        .slice(0, 5)
+        .map((seller, index) =>
+          language === 'zh'
+            ? `${index + 1}. ${seller.productName} - 已售 ${seller.totalSold} 件，收入 $${parseFloat(String(seller.totalRevenue)).toFixed(2)}`
+            : language === 'fr'
+              ? `${index + 1}. ${seller.productName} — ${seller.totalSold} unité(s) vendue(s), ${parseFloat(String(seller.totalRevenue)).toFixed(2)} $ de revenus`
+              : `${index + 1}. ${seller.productName} - ${seller.totalSold} units sold, $${parseFloat(String(seller.totalRevenue)).toFixed(2)} revenue`,
+        );
 
       return {
         type: InsightType.top_sellers,
@@ -730,13 +763,15 @@ export class InsightsService {
         };
       }
 
-      const lines = slowMovers.slice(0, 5).map((product) =>
-        language === 'zh'
-          ? `- ${product.name}: 当前库存 ${product.currentStock} 件，过去 30 天没有销售`
-          : language === 'fr'
-            ? `- ${product.name} : ${product.currentStock} en stock, aucune vente depuis 30 jours`
-            : `- ${product.name}: ${product.currentStock} units in stock, no sales in 30 days`,
-      );
+      const lines = slowMovers
+        .slice(0, 5)
+        .map((product) =>
+          language === 'zh'
+            ? `- ${product.name}: 当前库存 ${product.currentStock} 件，过去 30 天没有销售`
+            : language === 'fr'
+              ? `- ${product.name} : ${product.currentStock} en stock, aucune vente depuis 30 jours`
+              : `- ${product.name}: ${product.currentStock} units in stock, no sales in 30 days`,
+        );
 
       return {
         type: InsightType.slow_movers,

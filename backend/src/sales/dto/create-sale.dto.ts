@@ -5,6 +5,8 @@ export interface SaleItemInput {
 }
 
 export class CreateSaleDto {
+  requestId!: string;
+  shiftId!: number;
   items!: SaleItemInput[];
   paymentMethod?: 'cash' | 'debit' | 'credit' | 'other';
   taxRate?: number;

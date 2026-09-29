@@ -1,4 +1,6 @@
 import { Injectable } from '@nestjs/common';
+import { randomUUID } from 'node:crypto';
+import { audit, lockKey } from '../store-operations/common';
 import { Prisma } from '@prisma/client';
 import { AuditTrailService } from '../audit-trail/audit-trail.service';
 import {
@@ -53,92 +55,70 @@ export class PurchaseOrdersService {
     }
 
     const groups = this.groupSuggestions(reorder.suggestions, businessDate);
-    const existingOrders = await this.prisma.purchaseOrder.findMany({
-      where: { orderNumber: { in: groups.map((group) => group.orderNumber) } },
-      select: { orderNumber: true },
-    });
-    const existingOrderNumbers = new Set(
-      existingOrders.map((order) => order.orderNumber),
-    );
-
-    const orders = await this.prisma.$transaction(async (tx) => {
-      const savedOrders = [];
-
-      for (const group of groups) {
-        const order = await tx.purchaseOrder.upsert({
-          where: { orderNumber: group.orderNumber },
-          create: {
-            orderNumber: group.orderNumber,
-            businessDate,
-            status: 'draft',
+    return this.prisma.$transaction(
+      async (tx) => {
+        const orders = [];
+        let createdCount = 0;
+        let updatedCount = 0;
+        for (const group of groups) {
+          await lockKey(tx, 'purchase-draft:' + group.orderNumber);
+          const existing = await tx.purchaseOrder.findFirst({
+            where: {
+              businessDate,
+              supplierId: group.supplierId,
+              status: 'draft',
+            },
+            orderBy: { id: 'desc' },
+          });
+          if (existing)
+            await tx.$queryRaw`SELECT id FROM purchase_orders WHERE id = ${existing.id} FOR UPDATE`;
+          const current = existing
+            ? await tx.purchaseOrder.findUnique({ where: { id: existing.id } })
+            : null;
+          const editable = current?.status === 'draft';
+          const data = {
             estimatedTotal: group.estimatedTotal,
             supplierId: group.supplierId,
-            createdById: operator.id,
             items: { create: group.items },
-          },
-          update: {
-            businessDate,
-            status: 'draft',
-            estimatedTotal: group.estimatedTotal,
-            supplierId: group.supplierId,
-            createdById: operator.id,
-            items: {
-              deleteMany: {},
-              create: group.items,
-            },
-          },
-          include: {
-            supplier: {
-              select: {
-                id: true,
-                name: true,
-                contactName: true,
-                phone: true,
-                email: true,
-              },
-            },
-            items: {
-              orderBy: { productName: 'asc' },
-            },
-          },
-        });
-
-        savedOrders.push(order);
-      }
-
-      return savedOrders;
-    });
-
-    await Promise.all(
-      orders.map((order) =>
-        this.auditTrailService.create({
-          table: 'purchase_orders',
-          recordId: order.id,
-          field: existingOrderNumbers.has(order.orderNumber)
-            ? '[draft-updated]'
-            : '[draft-generated]',
-          oldValue: null,
-          newValue: JSON.stringify({
-            orderNumber: order.orderNumber,
-            itemCount: order.items.length,
-            estimatedTotal: order.estimatedTotal.toString(),
-          }),
-          userId: operator.id,
-          userEmail: operator.email,
-        }),
-      ),
+          };
+          const order = editable
+            ? await tx.purchaseOrder.update({
+                where: { id: current.id },
+                data: {
+                  ...data,
+                  items: { deleteMany: {}, create: group.items },
+                },
+                include: { supplier: true, items: true },
+              })
+            : await tx.purchaseOrder.create({
+                data: {
+                  ...data,
+                  orderNumber:
+                    group.orderNumber +
+                    '-' +
+                    randomUUID().slice(0, 8).toUpperCase(),
+                  businessDate,
+                  status: 'draft',
+                  createdById: operator.id,
+                },
+                include: { supplier: true, items: true },
+              });
+          if (editable) updatedCount++;
+          else createdCount++;
+          await audit(
+            tx,
+            operator,
+            'purchase_orders',
+            order.id,
+            editable ? 'draft_updated' : 'draft_created',
+            { orderNumber: order.orderNumber },
+          );
+          orders.push(order);
+        }
+        return { businessDate, createdCount, updatedCount, orders };
+      },
+      { timeout: 30000 },
     );
-
-    return {
-      businessDate,
-      createdCount: orders.filter(
-        (order) => !existingOrderNumbers.has(order.orderNumber),
-      ).length,
-      updatedCount: orders.filter((order) =>
-        existingOrderNumbers.has(order.orderNumber),
-      ).length,
-      orders,
-    };
   }
 
   private groupSuggestions(

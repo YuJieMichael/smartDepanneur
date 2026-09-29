@@ -6,11 +6,26 @@ import {
   NotFoundException,
   UnauthorizedException,
 } from '@nestjs/common';
-import { InventoryMovementType, PaymentMethod, Prisma } from '@prisma/client';
+import { PaymentMethod, Prisma } from '@prisma/client';
 import * as bcrypt from 'bcrypt';
 import { randomUUID } from 'node:crypto';
 import { AuditTrailService } from '../audit-trail/audit-trail.service';
 import { PrismaService } from '../prisma/prisma.service';
+import {
+  amount,
+  audit,
+  dateRange,
+  hash,
+  integer,
+  lockKey,
+  requestKey,
+  storeDate,
+} from '../store-operations/common';
+import {
+  consumeStock,
+  lockProduct,
+  restoreSaleItem,
+} from '../store-operations/stock';
 import { CreateSaleDto, SaleItemInput } from './dto/create-sale.dto';
 import { QuerySalesDto } from './dto/query-sales.dto';
 import {
@@ -24,6 +39,7 @@ const CASHIER_VOID_WINDOW_MS = 10 * 60 * 1000;
 const LARGE_VOID_THRESHOLD = new Prisma.Decimal(100);
 
 const saleInclude = {
+  shift: { select: { closedAt: true } },
   cashier: { select: { id: true, email: true } },
   voidedBy: { select: { id: true, email: true } },
   voidApprovedBy: { select: { id: true, email: true } },
@@ -107,10 +123,7 @@ export class SalesService {
   }
 
   async getDailySummary(date?: string) {
-    const targetDate = date ? new Date(date) : new Date();
-    const start = new Date(targetDate);
-    start.setUTCHours(0, 0, 0, 0);
-    const end = new Date(start.getTime() + 86400000);
+    const { start, end, date: businessDate } = dateRange(date);
 
     const [sales, topProducts] = await this.prisma.$transaction([
       this.prisma.sale.findMany({
@@ -165,7 +178,8 @@ export class SalesService {
     }));
 
     return {
-      date: start.toISOString().split('T')[0],
+      date: businessDate,
+      timeZone: 'America/Toronto',
       saleCount,
       totalRevenue,
       totalProfit,
@@ -177,103 +191,108 @@ export class SalesService {
     data: CreateSaleDto,
     operator: { id: number; email: string },
   ) {
-    if (!data.items || data.items.length === 0) {
-      throw new BadRequestException('Sale must have at least one item');
-    }
-
+    if (
+      !Array.isArray(data.items) ||
+      !data.items.length ||
+      data.items.length > 200
+    )
+      throw new BadRequestException('Provide 1–200 sale lines');
+    const key = requestKey(data.requestId);
+    const fingerprint = hash({ data, userId: operator.id });
     const taxRate = this.normalizeTaxRate(data.taxRate ?? DEFAULT_TAX_RATE);
     const paymentMethod = this.normalizePaymentMethod(data.paymentMethod);
-    const saleNumber = this.generateSaleNumber();
-
-    // Validate and resolve all products before opening the transaction
-    const resolvedItems = await this.resolveItems(data.items);
-
-    const sale = await this.prisma.$transaction(async (tx) => {
-      // The conditional update is atomic, so concurrent checkouts cannot drive
-      // stock below zero even when they target the same product.
-      for (const item of resolvedItems) {
-        const result = await tx.product.updateMany({
-          where: {
-            id: item.productId,
-            isActive: true,
-            currentStock: { gte: item.quantity },
-          },
-          data: { currentStock: { decrement: item.quantity } },
+    return this.prisma.$transaction(
+      async (tx) => {
+        await lockKey(tx, 'sale:' + key);
+        const previous = await tx.sale.findUnique({
+          where: { requestId: key },
+          include: saleInclude,
         });
-
-        if (result.count !== 1) {
-          throw new BadRequestException(
-            `Insufficient stock for ${item.productName}`,
-          );
+        if (previous) {
+          if (previous.requestHash !== fingerprint)
+            throw new ConflictException(
+              'Request ID already used for different sale data',
+            );
+          return previous;
         }
-      }
-
-      // Compute totals
-      const subtotal = resolvedItems.reduce(
-        (sum, item) => sum.plus(item.lineTotal),
-        new Prisma.Decimal(0),
-      );
-      const tax = subtotal.times(taxRate).toDecimalPlaces(2);
-      const total = subtotal.plus(tax);
-      const profitEstimate = resolvedItems.reduce(
-        (sum, item) => sum.plus(item.lineProfit),
-        new Prisma.Decimal(0),
-      );
-
-      // Create sale and items
-      const created = await tx.sale.create({
-        data: {
-          saleNumber,
-          subtotal,
-          tax,
-          total,
-          profitEstimate,
-          paymentMethod,
-          cashier: { connect: { id: operator.id } },
-          items: {
-            create: resolvedItems.map((item) => ({
+        const shiftId = integer(data.shiftId);
+        await tx.$queryRaw`SELECT id FROM register_shifts WHERE id = ${shiftId} FOR UPDATE`;
+        const shift = await tx.registerShift.findUniqueOrThrow({
+          where: { id: shiftId },
+        });
+        if (shift.cashierId !== operator.id || shift.closedAt)
+          throw new BadRequestException(
+            'Open your own register shift before recording sales',
+          );
+        for (const id of [
+          ...new Set(data.items.map((i) => integer(i.productId))),
+        ].sort((a, b) => a - b))
+          await lockProduct(tx, id);
+        const resolvedItems = await this.resolveItems(data.items, tx);
+        const saleNumber = this.generateSaleNumber();
+        const subtotal = resolvedItems.reduce(
+          (sum, i) => sum.plus(i.lineTotal),
+          new Prisma.Decimal(0),
+        );
+        const tax = subtotal.times(taxRate).toDecimalPlaces(2);
+        const sale = await tx.sale.create({
+          data: {
+            saleNumber,
+            requestId: key,
+            requestHash: fingerprint,
+            shiftId,
+            cashierId: operator.id,
+            subtotal,
+            tax,
+            total: subtotal.plus(tax),
+            paymentMethod,
+          },
+        });
+        let profit = new Prisma.Decimal(0);
+        for (const item of resolvedItems) {
+          const stock = await consumeStock(
+            tx,
+            {
+              productId: item.productId,
+              quantity: item.quantity,
+              type: 'sale',
+              referenceType: 'sale',
+              referenceId: sale.id,
+              reason: saleNumber,
+            },
+            operator,
+          );
+          profit = profit.plus(item.lineTotal.minus(stock.costTotal));
+          await tx.saleItem.create({
+            data: {
+              saleId: sale.id,
+              productId: item.productId,
               quantity: item.quantity,
               unitPrice: item.unitPrice,
-              unitCost: item.unitCost,
+              unitCost: stock.costTotal.div(item.quantity).toDecimalPlaces(2),
+              costTotal: stock.costTotal,
               lineTotal: item.lineTotal,
-              product: { connect: { id: item.productId } },
-            })),
-          },
-        },
-        include: saleInclude,
-      });
-
-      // Create inventory movements for each item
-      for (const item of resolvedItems) {
-        await tx.inventoryMovement.create({
-          data: {
-            type: InventoryMovementType.sale,
-            quantity: -item.quantity,
-            unitCost: item.unitCost,
-            reason: `Sale ${saleNumber}`,
-            referenceType: 'sale',
-            referenceId: created.id,
-            product: { connect: { id: item.productId } },
-            user: { connect: { id: operator.id } },
-          },
+              categoryIdSnapshot: item.categoryId,
+              categoryNameSnapshot: item.categoryName,
+              allocations: { create: stock.allocations },
+            },
+          });
+        }
+        await tx.sale.update({
+          where: { id: sale.id },
+          data: { profitEstimate: profit },
         });
-      }
-
-      return created;
-    });
-
-    // Audit log outside the transaction
-    await this.auditTrailService.create({
-      table: 'sales',
-      recordId: sale.id,
-      field: '[created]',
-      oldValue: null,
-      newValue: `${saleNumber} - $${sale.total}`,
-      userId: operator.id,
-      userEmail: operator.email,
-    });
-
-    return sale;
+        await audit(tx, operator, 'sales', sale.id, '[created]', {
+          saleNumber,
+          shiftId,
+        });
+        return tx.sale.findUniqueOrThrow({
+          where: { id: sale.id },
+          include: saleInclude,
+        });
+      },
+      { timeout: 30000 },
+    );
   }
 
   async voidSale(
@@ -313,6 +332,22 @@ export class SalesService {
       ? null
       : await this.verifyLargeVoidApproval(sale.total, data);
     const voidedSale = await this.prisma.$transaction(async (tx) => {
+      if (!sale.shiftId)
+        throw new BadRequestException(
+          'Historical unassigned sales cannot be voided through shift checkout',
+        );
+      await tx.$queryRaw`SELECT id FROM register_shifts WHERE id = ${sale.shiftId} FOR UPDATE`;
+      const shift = await tx.registerShift.findUniqueOrThrow({
+        where: { id: sale.shiftId },
+      });
+      if (shift.closedAt || storeDate(sale.createdAt) !== storeDate())
+        throw new ConflictException(
+          'Closed-shift or prior-day sales require a separate return, not a void',
+        );
+      for (const productId of [
+        ...new Set(sale.items.map((i) => i.productId)),
+      ].sort((a, b) => a - b))
+        await lockProduct(tx, productId);
       const updateResult = await tx.sale.updateMany({
         where: { id, isVoided: false },
         data: {
@@ -330,41 +365,17 @@ export class SalesService {
         );
       }
 
-      for (const item of sale.items) {
-        await tx.product.update({
-          where: { id: item.productId },
-          data: { currentStock: { increment: item.quantity } },
-        });
-        await tx.inventoryMovement.create({
-          data: {
-            type: InventoryMovementType.return_item,
-            quantity: item.quantity,
-            unitCost: item.unitCost,
-            reason: `Voided sale ${sale.saleNumber}: ${reason}`,
-            referenceType: 'sale_void',
-            referenceId: sale.id,
-            product: { connect: { id: item.productId } },
-            user: { connect: { id: operator.id } },
-          },
-        });
-      }
+      for (const item of sale.items)
+        await restoreSaleItem(tx, item.id, operator, sale.id);
+      await audit(tx, operator, 'sales', sale.id, 'isVoided', {
+        reason,
+        approvedBy: approvedBy?.email,
+      });
 
       return tx.sale.findUniqueOrThrow({
         where: { id },
         include: saleInclude,
       });
-    });
-
-    await this.auditTrailService.create({
-      table: 'sales',
-      recordId: sale.id,
-      field: 'isVoided',
-      oldValue: 'false',
-      newValue: approvedBy
-        ? `true - ${reason} - approved by ${approvedBy.email}`
-        : `true - ${reason}`,
-      userId: operator.id,
-      userEmail: operator.email,
     });
 
     return voidedSale;
@@ -374,13 +385,18 @@ export class SalesService {
   // Private helpers
   // ------------------------------------------------------------------
 
-  private async resolveItems(items: SaleItemInput[]) {
+  private async resolveItems(
+    items: SaleItemInput[],
+    tx: Prisma.TransactionClient,
+  ) {
     const productIds = [...new Set(items.map((i) => i.productId))];
-    const products = await this.prisma.product.findMany({
+    const products = await tx.product.findMany({
       where: { id: { in: productIds }, isActive: true },
       select: {
         id: true,
         name: true,
+        categoryId: true,
+        category: { select: { name: true } },
         sellingPrice: true,
         costPrice: true,
         currentStock: true,
@@ -404,9 +420,7 @@ export class SalesService {
       }
 
       const unitPrice =
-        item.unitPrice != null
-          ? new Prisma.Decimal(item.unitPrice)
-          : product.sellingPrice;
+        item.unitPrice != null ? amount(item.unitPrice) : product.sellingPrice;
 
       if (unitPrice.isNegative()) {
         throw new BadRequestException(
@@ -424,6 +438,8 @@ export class SalesService {
       return {
         productId: item.productId,
         productName: product.name,
+        categoryId: product.categoryId,
+        categoryName: product.category?.name ?? 'Uncategorized',
         quantity: item.quantity,
         unitPrice,
         unitCost,
@@ -456,8 +472,7 @@ export class SalesService {
       if (dates.length) {
         and.push({
           OR: dates.map((date) => {
-            const start = new Date(`${date}T00:00:00.000Z`);
-            const end = new Date(start.getTime() + 86400000);
+            const { start, end } = dateRange(date);
             return { createdAt: { gte: start, lt: end } };
           }),
         });
@@ -492,6 +507,7 @@ export class SalesService {
       cashierId: number | null;
       createdAt: Date;
       total: Prisma.Decimal;
+      shift?: { closedAt: Date | null } | null;
     },
     operatorId: number,
     isOwner: boolean,
@@ -501,16 +517,18 @@ export class SalesService {
       sale.createdAt.getTime() + CASHIER_VOID_WINDOW_MS,
     );
     let restriction:
-      | 'already_voided'
-      | 'not_own_sale'
-      | 'window_expired'
-      | null = null;
+      'already_voided' | 'not_own_sale' | 'window_expired' | null = null;
 
     if (sale.isVoided) {
       restriction = 'already_voided';
     } else if (!isOwner && sale.cashierId !== operatorId) {
       restriction = 'not_own_sale';
-    } else if (!isOwner && now > windowEndsAt) {
+    } else if (
+      sale.shift?.closedAt ||
+      !sale.shift ||
+      storeDate(sale.createdAt) !== storeDate(now) ||
+      (!isOwner && now > windowEndsAt)
+    ) {
       restriction = 'window_expired';
     }
 
@@ -574,7 +592,12 @@ export class SalesService {
   }
 
   private normalizeTaxRate(rate: number) {
-    if (typeof rate !== 'number' || rate < 0 || rate > 1) {
+    if (
+      typeof rate !== 'number' ||
+      !Number.isFinite(rate) ||
+      rate < 0 ||
+      rate > 1
+    ) {
       throw new BadRequestException('taxRate must be a number between 0 and 1');
     }
     return new Prisma.Decimal(rate);

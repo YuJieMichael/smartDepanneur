@@ -16,7 +16,7 @@ export default function AuthGuard({ children }: { children: React.ReactNode }) {
     !currentUser.roles.some(
       (role) => role.name === 'Admin' || role.name === 'Store Owner',
     );
-  const cashierCanAccessPath = pathname === '/sales';
+  const cashierCanAccessPath = ['/sales', '/shifts'].includes(pathname);
 
   useEffect(() => {
     // 公开页面，跳过鉴权
@@ -43,13 +43,14 @@ export default function AuthGuard({ children }: { children: React.ReactNode }) {
   // 公开页面直接渲染，不等 currentUser
   if (PUBLIC_PATHS.includes(pathname)) return <>{children}</>;
 
-  if (!currentUser || (isCashierOnly && !cashierCanAccessPath)) return (
-    <div className="min-h-screen flex items-center justify-center bg-gray-50">
-      <div className="flex flex-col items-center gap-4">
-        <div className="w-10 h-10 border-4 border-blue-500 border-t-transparent rounded-full animate-spin" />
+  if (!currentUser || (isCashierOnly && !cashierCanAccessPath))
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gray-50">
+        <div className="flex flex-col items-center gap-4">
+          <div className="w-10 h-10 border-4 border-blue-500 border-t-transparent rounded-full animate-spin" />
+        </div>
       </div>
-    </div>
-  );
+    );
 
   return <>{children}</>;
 }

@@ -4,7 +4,6 @@ generator client {
 
 datasource db {
   provider = "postgresql"
-  url      = env("DATABASE_URL")
 }
 
 // User 模型 — 对应数据库中的 users 表
@@ -28,6 +27,9 @@ model User {
   approvedSaleVoids  Sale[]                @relation("SaleVoidApprover")
   aiInsightLogs      AiInsightLog[]
   purchaseOrders     PurchaseOrder[]
+  shifts             RegisterShift[]
+  receipts           PurchaseReceipt[]
+  imports            ProductImport[]
 
   @@map("users")
 }
@@ -180,6 +182,7 @@ enum InsightType {
 enum PurchaseOrderStatus {
   draft
   sent
+  partially_received
   received
   cancelled
 }
@@ -258,6 +261,7 @@ model Product {
   inventoryMovements InventoryMovement[]
   saleItems          SaleItem[]
   purchaseOrderItems PurchaseOrderItem[]
+  batches            StockBatch[]
 
   @@index([name])
   @@index([categoryId])
@@ -267,6 +271,8 @@ model Product {
 }
 
 model InventoryMovement {
+  batchId Int? @map("batch_id")
+  batch StockBatch? @relation(fields: [batchId], references: [id])
   id            Int                   @id @default(autoincrement())
   type          InventoryMovementType
   quantity      Int
@@ -288,6 +294,10 @@ model InventoryMovement {
 }
 
 model Sale {
+  requestId String? @unique @map("request_id")
+  requestHash String? @map("request_hash")
+  shiftId Int? @map("shift_id")
+  shift RegisterShift? @relation(fields: [shiftId], references: [id])
   id             Int           @id @default(autoincrement())
   saleNumber     String        @unique @map("sale_number")
   subtotal       Decimal       @db.Decimal(10, 2)
@@ -321,6 +331,10 @@ model Sale {
 }
 
 model SaleItem {
+  categoryIdSnapshot Int? @map("category_id_snapshot")
+  categoryNameSnapshot String @default("Uncategorized") @map("category_name_snapshot")
+  costTotal Decimal? @map("cost_total") @db.Decimal(12, 2)
+  allocations SaleBatchAllocation[]
   id        Int      @id @default(autoincrement())
   quantity  Int
   unitPrice Decimal  @map("unit_price") @db.Decimal(10, 2)
@@ -353,6 +367,9 @@ model AiInsightLog {
 }
 
 model PurchaseOrder {
+  sentAt DateTime? @map("sent_at")
+  sentReference String? @map("sent_reference")
+  receipts PurchaseReceipt[]
   id             Int                 @id @default(autoincrement())
   orderNumber    String              @unique @map("order_number")
   businessDate   String              @map("business_date")
@@ -375,6 +392,8 @@ model PurchaseOrder {
 }
 
 model PurchaseOrderItem {
+  receivedQuantity Int @default(0) @map("received_quantity")
+  receiptLines PurchaseReceiptLine[]
   id          Int     @id @default(autoincrement())
   productName String  @map("product_name")
   sku         String?
@@ -407,4 +426,96 @@ model Notification {
   user   User @relation(fields: [userId], references: [id])
 
   @@map("notifications")
+}
+
+model StockBatch {
+  id Int @id @default(autoincrement())
+  productId Int @map("product_id")
+  product Product @relation(fields: [productId], references: [id])
+  lotCode String @map("lot_code")
+  expirationDate DateTime? @map("expiration_date") @db.Date
+  receivedAt DateTime @default(now()) @map("received_at")
+  quantityReceived Int @map("quantity_received")
+  quantityRemaining Int @map("quantity_remaining")
+  unitCost Decimal @map("unit_cost") @db.Decimal(10, 2)
+  movements InventoryMovement[]
+  allocations SaleBatchAllocation[]
+  receiptLines PurchaseReceiptLine[]
+  @@index([productId, expirationDate])
+  @@map("stock_batches")
+}
+model SaleBatchAllocation {
+  id Int @id @default(autoincrement())
+  saleItemId Int @map("sale_item_id")
+  saleItem SaleItem @relation(fields: [saleItemId], references: [id])
+  batchId Int @map("batch_id")
+  batch StockBatch @relation(fields: [batchId], references: [id])
+  quantity Int
+  unitCost Decimal @map("unit_cost") @db.Decimal(10, 2)
+  @@unique([saleItemId, batchId])
+  @@map("sale_batch_allocations")
+}
+model PurchaseReceipt {
+  id Int @id @default(autoincrement())
+  requestId String @unique @map("request_id")
+  requestHash String @map("request_hash")
+  orderId Int @map("order_id")
+  order PurchaseOrder @relation(fields: [orderId], references: [id])
+  receivedById Int @map("received_by_id")
+  receivedBy User @relation(fields: [receivedById], references: [id])
+  receivedAt DateTime @default(now()) @map("received_at")
+  reference String?
+  lines PurchaseReceiptLine[]
+  @@index([orderId])
+  @@map("purchase_receipts")
+}
+model PurchaseReceiptLine {
+  id Int @id @default(autoincrement())
+  receiptId Int @map("receipt_id")
+  receipt PurchaseReceipt @relation(fields: [receiptId], references: [id])
+  orderItemId Int @map("order_item_id")
+  orderItem PurchaseOrderItem @relation(fields: [orderItemId], references: [id])
+  batchId Int @map("batch_id")
+  batch StockBatch @relation(fields: [batchId], references: [id])
+  quantity Int
+  @@map("purchase_receipt_lines")
+}
+model RegisterShift {
+  id Int @id @default(autoincrement())
+  cashierId Int @map("cashier_id")
+  cashier User @relation(fields: [cashierId], references: [id])
+  drawer String @default("Main")
+  openedAt DateTime @default(now()) @map("opened_at")
+  closedAt DateTime? @map("closed_at")
+  openingCash Decimal @map("opening_cash") @db.Decimal(10, 2)
+  countedCash Decimal? @map("counted_cash") @db.Decimal(10, 2)
+  countedDebit Decimal? @map("counted_debit") @db.Decimal(10, 2)
+  countedCredit Decimal? @map("counted_credit") @db.Decimal(10, 2)
+  countedOther Decimal? @map("counted_other") @db.Decimal(10, 2)
+  reconciliation Json?
+  notes String?
+  sales Sale[]
+  cashMovements ShiftCashMovement[]
+  @@index([cashierId, openedAt])
+  @@map("register_shifts")
+}
+model ShiftCashMovement {
+  id Int @id @default(autoincrement())
+  shiftId Int @map("shift_id")
+  shift RegisterShift @relation(fields: [shiftId], references: [id])
+  requestId String @unique @map("request_id")
+  amount Decimal @db.Decimal(10, 2)
+  reason String
+  createdAt DateTime @default(now()) @map("created_at")
+  @@map("shift_cash_movements")
+}
+model ProductImport {
+  id Int @id @default(autoincrement())
+  requestId String @unique @map("request_id")
+  fileHash String @map("file_hash")
+  userId Int @map("user_id")
+  user User @relation(fields: [userId], references: [id])
+  count Int
+  createdAt DateTime @default(now()) @map("created_at")
+  @@map("product_imports")
 }

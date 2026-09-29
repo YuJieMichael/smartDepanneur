@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   Alert,
   Button,
@@ -34,6 +34,8 @@ import {
 } from '@/api/sales';
 import { useI18nStore, useT } from '@/lib/i18n';
 import { globalMessage } from '@/lib/message-bridge';
+import { getShifts, Shift } from '@/api/operations';
+import { useAppStore } from '@/lib/store';
 import { ApiError } from '@/lib/request';
 import { localizeStoreCategory } from '@/lib/store-category';
 
@@ -52,15 +54,32 @@ const TAX_RATE = 0.14975;
 
 export default function SalesPage() {
   const t = useT();
+  const user = useAppStore((s) => s.currentUser);
+  const [shift, setShift] = useState<Shift | null>(null);
+  const [shiftError, setShiftError] = useState('');
+  const attempt = useRef({ signature: '', id: '' });
+  useEffect(() => {
+    getShifts()
+      .then((rows) =>
+        setShift(
+          rows.find((r) => r.cashierId === user?.id && !r.closedAt) ?? null,
+        ),
+      )
+      .catch((e) => setShiftError(e instanceof Error ? e.message : String(e)));
+  }, [user?.id]);
   const locale = useI18nStore((state) => state.locale);
   const isZh = locale === 'zh';
   const isFr = locale === 'fr';
   const [products, setProducts] = useState<ProductRow[]>([]);
   const [cart, setCart] = useState<CartItem[]>([]);
   const [categoryFilter, setCategoryFilter] = useState<CategoryFilter>('all');
-  const [selectedProductId, setSelectedProductId] = useState<number | null>(null);
+  const [selectedProductId, setSelectedProductId] = useState<number | null>(
+    null,
+  );
   const [quantity, setQuantity] = useState<number>(1);
-  const [paymentMethod, setPaymentMethod] = useState<'cash' | 'debit' | 'credit' | 'other'>('cash');
+  const [paymentMethod, setPaymentMethod] = useState<
+    'cash' | 'debit' | 'credit' | 'other'
+  >('cash');
   const [submitting, setSubmitting] = useState(false);
   const [history, setHistory] = useState<SaleRow[]>([]);
   const [historyLoading, setHistoryLoading] = useState(true);
@@ -124,7 +143,11 @@ export default function SalesPage() {
       });
     }
 
-    const allLabel = isZh ? '全部分类' : isFr ? 'Toutes les catégories' : 'All categories';
+    const allLabel = isZh
+      ? '全部分类'
+      : isFr
+        ? 'Toutes les catégories'
+        : 'All categories';
     const options: Array<{ label: string; value: CategoryFilter }> = [
       { label: `${allLabel} (${products.length})`, value: 'all' },
       ...[...categoryCounts.values()]
@@ -190,7 +213,8 @@ export default function SalesPage() {
 
   const getRemainingStock = (productId: number) => {
     const product = products.find((item) => item.id === productId);
-    const inCart = cart.find((item) => item.productId === productId)?.quantity ?? 0;
+    const inCart =
+      cart.find((item) => item.productId === productId)?.quantity ?? 0;
     return Math.max(0, (product?.currentStock ?? 0) - inCart);
   };
 
@@ -199,7 +223,13 @@ export default function SalesPage() {
 
     const remainingStock = getRemainingStock(selectedProduct.id);
     if (quantity > remainingStock) {
-      message.warning(isZh ? `${selectedProduct.name} 只剩 ${remainingStock} 件` : isFr ? `Seulement ${remainingStock} unité(s) disponibles pour ${selectedProduct.name}` : `Only ${remainingStock} unit(s) available for ${selectedProduct.name}`);
+      message.warning(
+        isZh
+          ? `${selectedProduct.name} 只剩 ${remainingStock} 件`
+          : isFr
+            ? `Seulement ${remainingStock} unité(s) disponibles pour ${selectedProduct.name}`
+            : `Only ${remainingStock} unit(s) available for ${selectedProduct.name}`,
+      );
       return;
     }
 
@@ -207,12 +237,18 @@ export default function SalesPage() {
     const costPrice = parseFloat(selectedProduct.costPrice);
 
     setCart((prev) => {
-      const existing = prev.find((item) => item.productId === selectedProduct.id);
+      const existing = prev.find(
+        (item) => item.productId === selectedProduct.id,
+      );
       if (existing) {
         const nextQuantity = existing.quantity + quantity;
         return prev.map((item) =>
           item.productId === selectedProduct.id
-            ? { ...item, quantity: nextQuantity, lineTotal: nextQuantity * unitPrice }
+            ? {
+                ...item,
+                quantity: nextQuantity,
+                lineTotal: nextQuantity * unitPrice,
+              }
             : item,
         );
       }
@@ -240,22 +276,52 @@ export default function SalesPage() {
 
   const handleCheckout = async () => {
     if (cart.length === 0) {
-      message.warning(isZh ? '购物车为空' : isFr ? 'Le panier est vide' : 'Cart is empty');
+      message.warning(
+        isZh ? '购物车为空' : isFr ? 'Le panier est vide' : 'Cart is empty',
+      );
       return;
     }
 
     try {
       setSubmitting(true);
-      const sale = await apiCreateSale({
-        items: cart.map((item) => ({ productId: item.productId, quantity: item.quantity })),
+      if (!shift)
+        throw new Error(
+          isZh
+            ? '请先开班'
+            : isFr
+              ? 'Ouvrez un quart de caisse'
+              : 'Open a register shift first',
+        );
+      const payload = {
+        items: cart.map((item) => ({
+          productId: item.productId,
+          quantity: item.quantity,
+        })),
         paymentMethod,
         taxRate: TAX_RATE,
+        shiftId: shift.id,
+      };
+      const signature = JSON.stringify(payload);
+      if (attempt.current.signature !== signature)
+        attempt.current = { signature, id: crypto.randomUUID() };
+      const sale = await apiCreateSale({
+        ...payload,
+        requestId: attempt.current.id,
       });
-      globalMessage.success(isZh ? `销售单 ${sale.saleNumber} 已创建 - $${parseFloat(sale.total).toFixed(2)}` : isFr ? `Vente ${sale.saleNumber} créée - $${parseFloat(sale.total).toFixed(2)}` : `Sale ${sale.saleNumber} created - $${parseFloat(sale.total).toFixed(2)}`);
+      attempt.current = { signature: '', id: '' };
+      globalMessage.success(
+        isZh
+          ? `销售单 ${sale.saleNumber} 已创建 - $${parseFloat(sale.total).toFixed(2)}`
+          : isFr
+            ? `Vente ${sale.saleNumber} créée - $${parseFloat(sale.total).toFixed(2)}`
+            : `Sale ${sale.saleNumber} created - $${parseFloat(sale.total).toFixed(2)}`,
+      );
       setCart([]);
       await Promise.all([loadProducts(), loadHistory()]);
-    } catch {
-      globalMessage.error(t.common.create_failed);
+    } catch (error) {
+      globalMessage.error(
+        error instanceof Error ? error.message : t.common.create_failed,
+      );
     } finally {
       setSubmitting(false);
     }
@@ -319,10 +385,26 @@ export default function SalesPage() {
 
   const reasonLabels: Record<VoidReasonCode, string> = {
     wrong_item: isZh ? '商品选错' : isFr ? 'Mauvais article' : 'Wrong item',
-    wrong_quantity: isZh ? '数量错误' : isFr ? 'Mauvaise quantité' : 'Wrong quantity',
-    duplicate_sale: isZh ? '重复销售' : isFr ? 'Vente en double' : 'Duplicate sale',
-    customer_cancelled: isZh ? '顾客取消' : isFr ? 'Annulation du client' : 'Customer cancelled',
-    payment_error: isZh ? '支付错误' : isFr ? 'Erreur de paiement' : 'Payment error',
+    wrong_quantity: isZh
+      ? '数量错误'
+      : isFr
+        ? 'Mauvaise quantité'
+        : 'Wrong quantity',
+    duplicate_sale: isZh
+      ? '重复销售'
+      : isFr
+        ? 'Vente en double'
+        : 'Duplicate sale',
+    customer_cancelled: isZh
+      ? '顾客取消'
+      : isFr
+        ? 'Annulation du client'
+        : 'Customer cancelled',
+    payment_error: isZh
+      ? '支付错误'
+      : isFr
+        ? 'Erreur de paiement'
+        : 'Payment error',
     other: isZh ? '其他' : isFr ? 'Autre' : 'Other',
   };
   const reasonOptions = Object.entries(reasonLabels).map(([value, label]) => ({
@@ -345,7 +427,10 @@ export default function SalesPage() {
         <InputNumber
           className="sales-cart-quantity"
           min={1}
-          max={products.find((product) => product.id === item.productId)?.currentStock ?? 999}
+          max={
+            products.find((product) => product.id === item.productId)
+              ?.currentStock ?? 999
+          }
           value={item.quantity}
           size="small"
           style={{ width: 84 }}
@@ -354,7 +439,11 @@ export default function SalesPage() {
             setCart((prev) =>
               prev.map((cartItem) =>
                 cartItem.productId === item.productId
-                  ? { ...cartItem, quantity: value, lineTotal: value * cartItem.unitPrice }
+                  ? {
+                      ...cartItem,
+                      quantity: value,
+                      lineTotal: value * cartItem.unitPrice,
+                    }
                   : cartItem,
               ),
             );
@@ -514,10 +603,10 @@ export default function SalesPage() {
                   ? 'Vente personnelle'
                   : 'Own sales only'
               : isZh
-                ? '已超过 10 分钟'
+                ? '班次已关闭、跨日或超过时限'
                 : isFr
-                  ? 'Délai de 10 min dépassé'
-                  : '10-minute window expired'}
+                  ? 'Quart fermé ou délai dépassé'
+                  : 'Closed shift or void window expired'}
           </Typography.Text>
         ) : (
           <Button
@@ -535,15 +624,58 @@ export default function SalesPage() {
 
   return (
     <div style={{ padding: 24 }}>
+      <Alert
+        style={{ marginBottom: 16 }}
+        type={shift ? 'info' : 'warning'}
+        showIcon
+        title={
+          shift
+            ? (isZh ? '当前班次' : isFr ? 'Quart actuel' : 'Current shift') +
+              ' #' +
+              shift.id +
+              ' · ' +
+              shift.drawer
+            : shiftError ||
+              (isZh
+                ? '请先开班，再开始收银'
+                : isFr
+                  ? 'Ouvrez votre quart avant de vendre'
+                  : 'Open your shift before checkout')
+        }
+        action={
+          <Button href="/shifts">
+            {isZh
+              ? '开班 / 交班对账'
+              : isFr
+                ? 'Quarts et rapprochement'
+                : 'Shifts & reconciliation'}
+          </Button>
+        }
+      />
       <h2 style={{ marginBottom: 20, fontSize: 20, fontWeight: 700 }}>
         <ShoppingCartOutlined style={{ marginRight: 8 }} />
         {isZh ? '新销售' : isFr ? 'Nouvelle vente' : 'New Sale'}
       </h2>
 
-      <Card title={isZh ? '添加商品到购物车' : isFr ? 'Ajouter un article au panier' : 'Add Item to Cart'} style={{ marginBottom: 16 }}>
+      <Card
+        title={
+          isZh
+            ? '添加商品到购物车'
+            : isFr
+              ? 'Ajouter un article au panier'
+              : 'Add Item to Cart'
+        }
+        style={{ marginBottom: 16 }}
+      >
         <Space wrap>
           <Select<CategoryFilter>
-            aria-label={isZh ? '商品分类' : isFr ? 'Catégorie de produit' : 'Product category'}
+            aria-label={
+              isZh
+                ? '商品分类'
+                : isFr
+                  ? 'Catégorie de produit'
+                  : 'Product category'
+            }
             value={categoryFilter}
             onChange={(value) => {
               setCategoryFilter(value);
@@ -555,7 +687,9 @@ export default function SalesPage() {
           />
           <Select
             showSearch
-            aria-label={isZh ? '选择商品' : isFr ? 'Choisir un produit' : 'Choose product'}
+            aria-label={
+              isZh ? '选择商品' : isFr ? 'Choisir un produit' : 'Choose product'
+            }
             placeholder={
               isZh
                 ? '按名称、条码或 SKU 搜索'
@@ -586,7 +720,11 @@ export default function SalesPage() {
           />
           <InputNumber
             min={1}
-            max={selectedProduct ? getRemainingStock(selectedProduct.id) : undefined}
+            max={
+              selectedProduct
+                ? getRemainingStock(selectedProduct.id)
+                : undefined
+            }
             value={quantity}
             onChange={(value) => setQuantity(value ?? 1)}
             placeholder={isZh ? '数量' : isFr ? 'Qté' : 'Qty'}
@@ -596,7 +734,12 @@ export default function SalesPage() {
             type="primary"
             icon={<PlusOutlined />}
             onClick={addToCart}
-            disabled={!selectedProductId || (selectedProduct ? getRemainingStock(selectedProduct.id) <= 0 : false)}
+            disabled={
+              !selectedProductId ||
+              (selectedProduct
+                ? getRemainingStock(selectedProduct.id) <= 0
+                : false)
+            }
           >
             {isZh ? '添加' : isFr ? 'Ajouter' : 'Add'}
           </Button>
@@ -612,33 +755,98 @@ export default function SalesPage() {
           pagination={false}
           tableLayout="fixed"
           scroll={{ x: 640 }}
-          locale={{ emptyText: isZh ? '购物车为空，请先添加商品' : isFr ? 'Le panier est vide - ajoutez des produits ci-dessus' : 'Cart is empty - add products above' }}
+          locale={{
+            emptyText: isZh
+              ? '购物车为空，请先添加商品'
+              : isFr
+                ? 'Le panier est vide - ajoutez des produits ci-dessus'
+                : 'Cart is empty - add products above',
+          }}
         />
 
         {cart.length > 0 && (
           <>
             <Divider />
-            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 24, marginBottom: 16 }}>
-              <Statistic title={isZh ? '小计' : isFr ? 'Sous-total' : 'Subtotal'} value={subtotal.toFixed(2)} prefix="$" />
-              <Statistic title={isZh ? '税费 (QC 14.975%)' : isFr ? 'Taxes (QC 14,975 %)' : 'Tax (QC 14.975%)'} value={tax.toFixed(2)} prefix="$" />
-              <Statistic title={isZh ? '预估利润' : isFr ? 'Profit estimé' : 'Estimated Profit'} value={estimatedProfit.toFixed(2)} prefix="$" />
-              <Statistic title={isZh ? '总计' : isFr ? 'Total' : 'Total'} value={total.toFixed(2)} prefix="$" styles={{ content: { fontWeight: 700 } }} />
+            <div
+              style={{
+                display: 'flex',
+                justifyContent: 'flex-end',
+                gap: 24,
+                marginBottom: 16,
+              }}
+            >
+              <Statistic
+                title={isZh ? '小计' : isFr ? 'Sous-total' : 'Subtotal'}
+                value={subtotal.toFixed(2)}
+                prefix="$"
+              />
+              <Statistic
+                title={
+                  isZh
+                    ? '税费 (QC 14.975%)'
+                    : isFr
+                      ? 'Taxes (QC 14,975 %)'
+                      : 'Tax (QC 14.975%)'
+                }
+                value={tax.toFixed(2)}
+                prefix="$"
+              />
+              <Statistic
+                title={
+                  isZh
+                    ? '预估利润'
+                    : isFr
+                      ? 'Profit estimé'
+                      : 'Estimated Profit'
+                }
+                value={estimatedProfit.toFixed(2)}
+                prefix="$"
+              />
+              <Statistic
+                title={isZh ? '总计' : isFr ? 'Total' : 'Total'}
+                value={total.toFixed(2)}
+                prefix="$"
+                styles={{ content: { fontWeight: 700 } }}
+              />
             </div>
             <Space>
-              <span>{isZh ? '支付方式：' : isFr ? 'Paiement :' : 'Payment:'}</span>
+              <span>
+                {isZh ? '支付方式：' : isFr ? 'Paiement :' : 'Payment:'}
+              </span>
               <Select
                 value={paymentMethod}
                 onChange={setPaymentMethod}
                 style={{ width: 120 }}
                 options={[
-                  { label: isZh ? '现金' : isFr ? 'Espèces' : 'Cash', value: 'cash' },
-                  { label: isZh ? '借记卡' : isFr ? 'Débit' : 'Debit', value: 'debit' },
-                  { label: isZh ? '信用卡' : isFr ? 'Crédit' : 'Credit', value: 'credit' },
-                  { label: isZh ? '其他' : isFr ? 'Autre' : 'Other', value: 'other' },
+                  {
+                    label: isZh ? '现金' : isFr ? 'Espèces' : 'Cash',
+                    value: 'cash',
+                  },
+                  {
+                    label: isZh ? '借记卡' : isFr ? 'Débit' : 'Debit',
+                    value: 'debit',
+                  },
+                  {
+                    label: isZh ? '信用卡' : isFr ? 'Crédit' : 'Credit',
+                    value: 'credit',
+                  },
+                  {
+                    label: isZh ? '其他' : isFr ? 'Autre' : 'Other',
+                    value: 'other',
+                  },
                 ]}
               />
-              <Button type="primary" size="large" loading={submitting} onClick={handleCheckout}>
-                {isZh ? '完成销售' : isFr ? 'Finaliser la vente' : 'Complete Sale'}
+              <Button
+                type="primary"
+                size="large"
+                loading={submitting}
+                onClick={handleCheckout}
+              >
+                {isZh
+                  ? '完成销售'
+                  : isFr
+                    ? 'Finaliser la vente'
+                    : 'Complete Sale'}
               </Button>
             </Space>
           </>
@@ -650,7 +858,11 @@ export default function SalesPage() {
         title={
           <Space>
             <HistoryOutlined />
-            {isZh ? '销售历史' : isFr ? 'Historique des ventes' : 'Sales History'}
+            {isZh
+              ? '销售历史'
+              : isFr
+                ? 'Historique des ventes'
+                : 'Sales History'}
           </Space>
         }
         extra={
@@ -716,12 +928,16 @@ export default function SalesPage() {
                 !voidReason ||
                 Boolean(
                   voidTarget?.voidPolicy.requiresOwnerApproval &&
-                    (!ownerEmail.trim() || !ownerPassword),
+                  (!ownerEmail.trim() || !ownerPassword),
                 )
               }
               onClick={handleVoidSale}
             >
-              {isZh ? '确认撤销' : isFr ? 'Confirmer l’annulation' : 'Confirm Void'}
+              {isZh
+                ? '确认撤销'
+                : isFr
+                  ? 'Confirmer l’annulation'
+                  : 'Confirm Void'}
             </Button>
           </Space>
         }
@@ -749,7 +965,11 @@ export default function SalesPage() {
 
             <div>
               <Typography.Text strong>
-                {isZh ? '撤销原因（必选）' : isFr ? 'Motif (obligatoire)' : 'Void reason (required)'}
+                {isZh
+                  ? '撤销原因（必选）'
+                  : isFr
+                    ? 'Motif (obligatoire)'
+                    : 'Void reason (required)'}
               </Typography.Text>
               <Select<VoidReasonCode>
                 value={voidReason}
@@ -783,7 +1003,11 @@ export default function SalesPage() {
                   value={ownerEmail}
                   onChange={(event) => setOwnerEmail(event.target.value)}
                   placeholder={
-                    isZh ? 'Owner 邮箱' : isFr ? 'Courriel du propriétaire' : 'Owner email'
+                    isZh
+                      ? 'Owner 邮箱'
+                      : isFr
+                        ? 'Courriel du propriétaire'
+                        : 'Owner email'
                   }
                   autoComplete="username"
                 />
@@ -791,7 +1015,11 @@ export default function SalesPage() {
                   value={ownerPassword}
                   onChange={(event) => setOwnerPassword(event.target.value)}
                   placeholder={
-                    isZh ? 'Owner 密码' : isFr ? 'Mot de passe du propriétaire' : 'Owner password'
+                    isZh
+                      ? 'Owner 密码'
+                      : isFr
+                        ? 'Mot de passe du propriétaire'
+                        : 'Owner password'
                   }
                   autoComplete="current-password"
                   onPressEnter={() => {

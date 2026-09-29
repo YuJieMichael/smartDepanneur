@@ -1,7 +1,15 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { Checkbox, DatePicker, Form, Input, InputNumber, Modal, Select } from 'antd';
+import {
+  Checkbox,
+  DatePicker,
+  Form,
+  Input,
+  InputNumber,
+  Modal,
+  Select,
+} from 'antd';
 import { apiGetAllCategories, CategoryRow } from '@/api/categories';
 import { apiGetAllSuppliers, SupplierRow } from '@/api/suppliers';
 import { apiCreateProduct } from '@/api/products';
@@ -14,7 +22,11 @@ interface CreateProductDialogProps {
   onSuccess: () => void;
 }
 
-export default function CreateProductDialog({ open, onClose, onSuccess }: CreateProductDialogProps) {
+export default function CreateProductDialog({
+  open,
+  onClose,
+  onSuccess,
+}: CreateProductDialogProps) {
   const t = useT();
   const [form] = Form.useForm();
   const [loading, setLoading] = useState(false);
@@ -24,8 +36,12 @@ export default function CreateProductDialog({ open, onClose, onSuccess }: Create
 
   useEffect(() => {
     if (open) {
-      apiGetAllCategories().then(setCategories).catch(() => {});
-      apiGetAllSuppliers().then(setSuppliers).catch(() => {});
+      apiGetAllCategories()
+        .then(setCategories)
+        .catch(() => {});
+      apiGetAllSuppliers()
+        .then(setSuppliers)
+        .catch(() => {});
     }
   }, [open]);
 
@@ -43,7 +59,9 @@ export default function CreateProductDialog({ open, onClose, onSuccess }: Create
         currentStock: values.currentStock ?? 0,
         minStock: values.minStock ?? 0,
         expirationTracked: values.expirationTracked ?? false,
-        expirationDate: values.expirationDate ? values.expirationDate.toISOString() : null,
+        expirationDate: values.expirationDate
+          ? values.expirationDate.format('YYYY-MM-DD')
+          : null,
         isActive: true,
         categoryId: values.categoryId ?? null,
         supplierId: values.supplierId ?? null,
@@ -87,7 +105,13 @@ export default function CreateProductDialog({ open, onClose, onSuccess }: Create
           <Input placeholder={t.products.name} />
         </Form.Item>
 
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0 16px' }}>
+        <div
+          style={{
+            display: 'grid',
+            gridTemplateColumns: '1fr 1fr',
+            gap: '0 16px',
+          }}
+        >
           <Form.Item label={t.products.barcode} name="barcode">
             <Input placeholder={t.products.barcode} />
           </Form.Item>
@@ -98,22 +122,44 @@ export default function CreateProductDialog({ open, onClose, onSuccess }: Create
           <Form.Item
             label={t.products.cost_price}
             name="costPrice"
-            rules={[{ required: true, message: t.products.cost_price_required }]}
+            rules={[
+              { required: true, message: t.products.cost_price_required },
+            ]}
           >
-            <InputNumber min={0} precision={2} style={{ width: '100%' }} prefix="$" />
+            <InputNumber
+              min={0}
+              precision={2}
+              style={{ width: '100%' }}
+              prefix="$"
+            />
           </Form.Item>
           <Form.Item
             label={t.products.selling_price}
             name="sellingPrice"
-            rules={[{ required: true, message: t.products.selling_price_required }]}
+            rules={[
+              { required: true, message: t.products.selling_price_required },
+            ]}
           >
-            <InputNumber min={0} precision={2} style={{ width: '100%' }} prefix="$" />
+            <InputNumber
+              min={0}
+              precision={2}
+              style={{ width: '100%' }}
+              prefix="$"
+            />
           </Form.Item>
 
-          <Form.Item label={t.products.current_stock} name="currentStock" initialValue={0}>
+          <Form.Item
+            label={t.products.current_stock}
+            name="currentStock"
+            initialValue={0}
+          >
             <InputNumber min={0} precision={0} style={{ width: '100%' }} />
           </Form.Item>
-          <Form.Item label={t.products.min_stock} name="minStock" initialValue={0}>
+          <Form.Item
+            label={t.products.min_stock}
+            name="minStock"
+            initialValue={0}
+          >
             <InputNumber min={0} precision={0} style={{ width: '100%' }} />
           </Form.Item>
 
@@ -137,7 +183,11 @@ export default function CreateProductDialog({ open, onClose, onSuccess }: Create
           </Form.Item>
         </div>
 
-        <Form.Item name="expirationTracked" valuePropName="checked" style={{ marginBottom: 8 }}>
+        <Form.Item
+          name="expirationTracked"
+          valuePropName="checked"
+          style={{ marginBottom: 8 }}
+        >
           <Checkbox onChange={(e) => setTrackExpiration(e.target.checked)}>
             {t.products.expiration_tracked}
           </Checkbox>

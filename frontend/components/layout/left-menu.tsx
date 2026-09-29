@@ -3,7 +3,12 @@
 import { useEffect, useRef, useState } from 'react';
 import { usePathname, useRouter } from 'next/navigation';
 import { Menu, Tour } from 'antd';
-import { HomeOutlined, ShopOutlined, ShoppingCartOutlined, TeamOutlined } from '@ant-design/icons';
+import {
+  HomeOutlined,
+  ShopOutlined,
+  ShoppingCartOutlined,
+  TeamOutlined,
+} from '@ant-design/icons';
 import { useAppStore } from '@/lib/store';
 import { useI18nStore, useT } from '@/lib/i18n';
 
@@ -18,7 +23,8 @@ export default function LeftMenu() {
   const currentUser = useAppStore((s) => s.currentUser);
 
   const isAdmin = currentUser?.roles.some((r) => r.name === 'Admin') ?? false;
-  const isStoreOwner = currentUser?.roles.some((r) => r.name === 'Store Owner') ?? false;
+  const isStoreOwner =
+    currentUser?.roles.some((r) => r.name === 'Store Owner') ?? false;
   const isCashierOnly =
     (currentUser?.roles.some((r) => r.name === 'Cashier') ?? false) &&
     !isAdmin &&
@@ -33,7 +39,11 @@ export default function LeftMenu() {
   const [tourOpen, setTourOpen] = useState(false);
 
   useEffect(() => {
-    if (isAdmin && pathname.startsWith('/admin/') && !localStorage.getItem(TOUR_KEY)) {
+    if (
+      isAdmin &&
+      pathname.startsWith('/admin/') &&
+      !localStorage.getItem(TOUR_KEY)
+    ) {
       const timer = setTimeout(() => setTourOpen(true), 800);
       return () => clearTimeout(timer);
     }
@@ -47,63 +57,167 @@ export default function LeftMenu() {
       icon: <HomeOutlined />,
       label: t.nav.main,
     },
-    ...(isAdmin ? [{
-      key: 'user-management',
-      icon: <TeamOutlined />,
-      label: t.nav.user_management,
-      children: [
-        { key: '/admin/users', label: t.nav.users },
-        { key: '/admin/roles', label: t.nav.roles },
-        { key: '/admin/permissions', label: t.nav.permissions },
-        { key: '/admin/dictionary', label: t.nav.dictionary },
-      ],
-    }] : []),
-    ...((isAdmin || isStoreOwner || permissions.size > 0) ? [{
-      key: 'store-management',
-      icon: <ShopOutlined />,
-      label: t.nav.store_management,
-      children: [
-        ...((isAdmin || permissions.has('dashboard-view'))
-          ? [{ key: '/dashboard', label: locale === 'zh' ? '仪表盘' : locale === 'fr' ? 'Tableau de bord' : 'Dashboard' }]
-          : []),
-        ...((isAdmin || permissions.has('sales-edit'))
-          ? [{ key: '/sales', label: locale === 'zh' ? '新销售' : locale === 'fr' ? 'Nouvelle vente' : 'New Sale' }]
-          : []),
-        ...((isAdmin || permissions.has('product-edit'))
-          ? [
-              { key: '/products', label: t.nav.products },
-              { key: '/categories', label: t.nav.categories },
-              { key: '/suppliers', label: t.nav.suppliers },
-            ]
-          : []),
-        ...((isAdmin || permissions.has('inventory-edit'))
-          ? [{ key: '/inventory', label: t.nav.inventory }]
-          : []),
-        ...((isAdmin || permissions.has('insights-view')) ? [{
-          key: '/insights',
-          label:
-            locale === 'zh'
-              ? '门店 Agent'
-              : locale === 'fr'
-                ? 'Agent du magasin'
-                : 'Store Agent',
-        }] : []),
-      ],
-    }] : []),
+    ...(isAdmin
+      ? [
+          {
+            key: 'user-management',
+            icon: <TeamOutlined />,
+            label: t.nav.user_management,
+            children: [
+              { key: '/admin/users', label: t.nav.users },
+              { key: '/admin/roles', label: t.nav.roles },
+              { key: '/admin/permissions', label: t.nav.permissions },
+              { key: '/admin/dictionary', label: t.nav.dictionary },
+            ],
+          },
+        ]
+      : []),
+    ...(isAdmin || isStoreOwner || permissions.size > 0
+      ? [
+          {
+            key: 'store-management',
+            icon: <ShopOutlined />,
+            label: t.nav.store_management,
+            children: [
+              ...(isAdmin || permissions.has('dashboard-view')
+                ? [
+                    {
+                      key: '/dashboard',
+                      label:
+                        locale === 'zh'
+                          ? '仪表盘'
+                          : locale === 'fr'
+                            ? 'Tableau de bord'
+                            : 'Dashboard',
+                    },
+                  ]
+                : []),
+              ...(isAdmin || permissions.has('sales-edit')
+                ? [
+                    {
+                      key: '/shifts',
+                      label:
+                        locale === 'zh'
+                          ? '交班对账'
+                          : locale === 'fr'
+                            ? 'Quarts et rapprochement'
+                            : 'Shifts & reconciliation',
+                    },
+                    {
+                      key: '/sales',
+                      label:
+                        locale === 'zh'
+                          ? '新销售'
+                          : locale === 'fr'
+                            ? 'Nouvelle vente'
+                            : 'New Sale',
+                    },
+                  ]
+                : []),
+              ...(isAdmin || permissions.has('product-edit')
+                ? [
+                    { key: '/products', label: t.nav.products },
+                    {
+                      key: '/product-import',
+                      label:
+                        locale === 'zh'
+                          ? 'CSV 商品导入'
+                          : locale === 'fr'
+                            ? 'Importer CSV'
+                            : 'CSV product import',
+                    },
+                    { key: '/categories', label: t.nav.categories },
+                    { key: '/suppliers', label: t.nav.suppliers },
+                  ]
+                : []),
+              ...(isAdmin || permissions.has('inventory-edit')
+                ? [
+                    { key: '/inventory', label: t.nav.inventory },
+                    {
+                      key: '/batches',
+                      label:
+                        locale === 'zh'
+                          ? '批次与有效期'
+                          : locale === 'fr'
+                            ? 'Lots et expiration'
+                            : 'Batches & expiry',
+                    },
+                    {
+                      key: '/purchasing',
+                      label:
+                        locale === 'zh'
+                          ? '采购与收货'
+                          : locale === 'fr'
+                            ? 'Achats et réception'
+                            : 'Purchasing & receiving',
+                    },
+                  ]
+                : []),
+              ...(isAdmin || permissions.has('insights-view')
+                ? [
+                    {
+                      key: '/insights',
+                      label:
+                        locale === 'zh'
+                          ? '门店 Agent'
+                          : locale === 'fr'
+                            ? 'Agent du magasin'
+                            : 'Store Agent',
+                    },
+                  ]
+                : []),
+            ],
+          },
+        ]
+      : []),
   ];
   const items = isCashierOnly
-    ? [{
-        key: '/sales',
-        icon: <ShoppingCartOutlined />,
-        label: locale === 'zh' ? '收银销售' : locale === 'fr' ? 'Point de vente' : 'Checkout',
-      }]
+    ? [
+        {
+          key: '/shifts',
+          label:
+            locale === 'zh'
+              ? '交班对账'
+              : locale === 'fr'
+                ? 'Quarts et rapprochement'
+                : 'Shifts & reconciliation',
+        },
+        {
+          key: '/sales',
+          icon: <ShoppingCartOutlined />,
+          label:
+            locale === 'zh'
+              ? '收银销售'
+              : locale === 'fr'
+                ? 'Point de vente'
+                : 'Checkout',
+        },
+      ]
     : ownerItems;
 
-  const openKeys = pathname.startsWith('/admin/') ? ['user-management'] :
-    ['/dashboard', '/sales', '/products', '/categories', '/suppliers', '/inventory', '/insights'].some((p) => pathname.startsWith(p)) ? ['store-management'] : [];
+  const openKeys = pathname.startsWith('/admin/')
+    ? ['user-management']
+    : [
+          '/dashboard',
+          '/sales',
+          '/products',
+          '/categories',
+          '/suppliers',
+          '/inventory',
+          '/insights',
+          '/shifts',
+          '/batches',
+          '/purchasing',
+          '/product-import',
+        ].some((p) => pathname.startsWith(p))
+      ? ['store-management']
+      : [];
 
   return (
-    <aside ref={menuRef} className="w-52 min-h-[calc(100vh-56px)] border-r border-gray-200 bg-white shrink-0 pt-3">
+    <aside
+      ref={menuRef}
+      className="w-52 min-h-[calc(100vh-56px)] border-r border-gray-200 bg-white shrink-0 pt-3"
+    >
       <Menu
         mode="inline"
         selectedKeys={[pathname]}

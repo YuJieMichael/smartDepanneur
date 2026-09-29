@@ -1,4 +1,10 @@
-import { BadRequestException, ConflictException, Injectable, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  ConflictException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
+import { receiveStock } from '../store-operations/stock';
 import { Prisma } from '@prisma/client';
 import { AuditTrailService } from '../audit-trail/audit-trail.service';
 import { PrismaService } from '../prisma/prisma.service';
@@ -12,7 +18,9 @@ const productInclude = {
   createdBy: { select: { id: true, email: true } },
 } satisfies Prisma.ProductInclude;
 
-type ProductWithRelations = Prisma.ProductGetPayload<{ include: typeof productInclude }>;
+type ProductWithRelations = Prisma.ProductGetPayload<{
+  include: typeof productInclude;
+}>;
 
 type NormalizedUpdateInput = {
   data: Prisma.ProductUpdateInput;
@@ -54,7 +62,10 @@ export class ProductsService {
     return { total, list, page, pageSize };
   }
 
-  async getFilterOptions(field: string, query: QueryProductsDto): Promise<string[]> {
+  async getFilterOptions(
+    field: string,
+    query: QueryProductsDto,
+  ): Promise<string[]> {
     const where = this.buildWhere(query, field);
 
     switch (field) {
@@ -79,14 +90,22 @@ export class ProductsService {
           where,
           select: { category: { select: { name: true } } },
         });
-        return [...new Set(rows.map((row) => row.category?.name).filter(Boolean) as string[])].sort();
+        return [
+          ...new Set(
+            rows.map((row) => row.category?.name).filter(Boolean) as string[],
+          ),
+        ].sort();
       }
       case 'supplier': {
         const rows = await this.prisma.product.findMany({
           where,
           select: { supplier: { select: { name: true } } },
         });
-        return [...new Set(rows.map((row) => row.supplier?.name).filter(Boolean) as string[])].sort();
+        return [
+          ...new Set(
+            rows.map((row) => row.supplier?.name).filter(Boolean) as string[],
+          ),
+        ].sort();
       }
       case 'isActive': {
         const rows = await this.prisma.product.findMany({
@@ -102,7 +121,11 @@ export class ProductsService {
           select: { createdAt: true },
           orderBy: { createdAt: 'asc' },
         });
-        return [...new Set(rows.map((row) => row.createdAt.toISOString().split('T')[0]))];
+        return [
+          ...new Set(
+            rows.map((row) => row.createdAt.toISOString().split('T')[0]),
+          ),
+        ];
       }
       default:
         return [];
@@ -134,12 +157,31 @@ export class ProductsService {
 
     const normalized = this.normalizeCreateInput(data);
 
-    const product = await this.prisma.product.create({
-      data: {
-        ...normalized,
-        createdBy: { connect: { id: operator.id } },
-      },
-      include: productInclude,
+    const product = await this.prisma.$transaction(async (tx) => {
+      const created = await tx.product.create({
+        data: {
+          ...normalized,
+          currentStock: 0,
+          expirationDate: null,
+          createdBy: { connect: { id: operator.id } },
+        },
+      });
+      if (data.currentStock)
+        await receiveStock(
+          tx,
+          {
+            productId: created.id,
+            quantity: data.currentStock,
+            expirationDate: data.expirationDate,
+            unitCost: data.costPrice,
+            reason: 'Opening stock',
+          },
+          operator,
+        );
+      return tx.product.findUniqueOrThrow({
+        where: { id: created.id },
+        include: productInclude,
+      });
     });
 
     await this.auditTrailService.create({
@@ -169,9 +211,27 @@ export class ProductsService {
       throw new NotFoundException(`Product ${id} not found`);
     }
 
+    if (
+      data.currentStock !== undefined &&
+      data.currentStock !== existing.currentStock
+    )
+      throw new BadRequestException('Use inventory movements to change stock');
+    if (
+      data.expirationDate !== undefined &&
+      (data.expirationDate?.slice(0, 10) ?? null) !==
+        (existing.expirationDate?.toISOString().slice(0, 10) ?? null)
+    )
+      throw new BadRequestException(
+        'Edit the batch expiration date in the batch inventory screen',
+      );
     const normalized = this.normalizeUpdateInput(data);
+    delete normalized.data.currentStock;
+    delete normalized.data.expirationDate;
 
-    await this.assertRelationsExist(normalized.categoryId, normalized.supplierId);
+    await this.assertRelationsExist(
+      normalized.categoryId,
+      normalized.supplierId,
+    );
     await this.assertUniqueFields(normalized.barcode, normalized.sku, id);
 
     const product = await this.prisma.product.update({
@@ -185,10 +245,7 @@ export class ProductsService {
     return product;
   }
 
-  async deleteProduct(
-    id: number,
-    operator: { id: number; email: string },
-  ) {
+  async deleteProduct(id: number, operator: { id: number; email: string }) {
     const existing = await this.prisma.product.findUnique({
       where: { id },
       select: { id: true, name: true },
@@ -231,33 +288,44 @@ export class ProductsService {
     }
 
     if (excludedField !== 'name' && query.filterNames) {
-      const names = query.filterNames.split(',').map((value) => value.trim()).filter(Boolean);
+      const names = query.filterNames
+        .split(',')
+        .map((value) => value.trim())
+        .filter(Boolean);
       if (names.length) {
         and.push({ name: { in: names } });
       }
     }
 
     if (excludedField !== 'category' && query.filterCategories) {
-      const categories = query.filterCategories.split(',').map((value) => value.trim()).filter(Boolean);
+      const categories = query.filterCategories
+        .split(',')
+        .map((value) => value.trim())
+        .filter(Boolean);
       if (categories.length) {
         and.push({ category: { is: { name: { in: categories } } } });
       }
     }
 
     if (excludedField !== 'supplier' && query.filterSuppliers) {
-      const suppliers = query.filterSuppliers.split(',').map((value) => value.trim()).filter(Boolean);
+      const suppliers = query.filterSuppliers
+        .split(',')
+        .map((value) => value.trim())
+        .filter(Boolean);
       if (suppliers.length) {
         and.push({ supplier: { is: { name: { in: suppliers } } } });
       }
     }
 
     if (excludedField !== 'isActive' && query.filterActive) {
-      const activeValues = [...new Set(
-        query.filterActive
-          .split(',')
-          .map((value) => value.trim().toLowerCase())
-          .filter((value) => value === 'true' || value === 'false'),
-      )];
+      const activeValues = [
+        ...new Set(
+          query.filterActive
+            .split(',')
+            .map((value) => value.trim().toLowerCase())
+            .filter((value) => value === 'true' || value === 'false'),
+        ),
+      ];
 
       if (activeValues.length === 1) {
         and.push({ isActive: activeValues[0] === 'true' });
@@ -265,7 +333,10 @@ export class ProductsService {
     }
 
     if (excludedField !== 'createdAt' && query.filterCreatedDates) {
-      const dates = query.filterCreatedDates.split(',').map((value) => value.trim()).filter(Boolean);
+      const dates = query.filterCreatedDates
+        .split(',')
+        .map((value) => value.trim())
+        .filter(Boolean);
       if (dates.length) {
         and.push({
           OR: dates.map((date) => {
@@ -287,14 +358,18 @@ export class ProductsService {
     return { [sortField]: sortOrder };
   }
 
-  private normalizeCreateInput(data: CreateProductDto): Prisma.ProductCreateInput {
+  private normalizeCreateInput(
+    data: CreateProductDto,
+  ): Prisma.ProductCreateInput {
     const name = data.name?.trim();
     if (!name) {
       throw new BadRequestException('Product name is required');
     }
 
     if (data.costPrice === undefined || data.sellingPrice === undefined) {
-      throw new BadRequestException('Cost price and selling price are required');
+      throw new BadRequestException(
+        'Cost price and selling price are required',
+      );
     }
 
     return {
@@ -309,8 +384,12 @@ export class ProductsService {
       expirationTracked: data.expirationTracked ?? false,
       expirationDate: this.normalizeDate(data.expirationDate),
       isActive: data.isActive ?? true,
-      category: data.categoryId ? { connect: { id: data.categoryId } } : undefined,
-      supplier: data.supplierId ? { connect: { id: data.supplierId } } : undefined,
+      category: data.categoryId
+        ? { connect: { id: data.categoryId } }
+        : undefined,
+      supplier: data.supplierId
+        ? { connect: { id: data.supplierId } }
+        : undefined,
     };
   }
 
@@ -340,19 +419,31 @@ export class ProductsService {
     }
 
     if (data.currentStock !== undefined) {
-      normalized.data.currentStock = this.normalizeInteger(data.currentStock, 'currentStock');
+      normalized.data.currentStock = this.normalizeInteger(
+        data.currentStock,
+        'currentStock',
+      );
     }
 
     if (data.minStock !== undefined) {
-      normalized.data.minStock = this.normalizeInteger(data.minStock, 'minStock');
+      normalized.data.minStock = this.normalizeInteger(
+        data.minStock,
+        'minStock',
+      );
     }
 
     if (data.costPrice !== undefined) {
-      normalized.data.costPrice = this.normalizeDecimal(data.costPrice, 'costPrice');
+      normalized.data.costPrice = this.normalizeDecimal(
+        data.costPrice,
+        'costPrice',
+      );
     }
 
     if (data.sellingPrice !== undefined) {
-      normalized.data.sellingPrice = this.normalizeDecimal(data.sellingPrice, 'sellingPrice');
+      normalized.data.sellingPrice = this.normalizeDecimal(
+        data.sellingPrice,
+        'sellingPrice',
+      );
     }
 
     if (data.expirationTracked !== undefined) {
@@ -393,9 +484,18 @@ export class ProductsService {
     return trimmed || null;
   }
 
-  private normalizeInteger(value: number | undefined, field: string, fallback?: number) {
+  private normalizeInteger(
+    value: number | undefined,
+    field: string,
+    fallback?: number,
+  ) {
     const parsed = value ?? fallback;
-    if (parsed === undefined || parsed === null || !Number.isInteger(parsed) || parsed < 0) {
+    if (
+      parsed === undefined ||
+      parsed === null ||
+      !Number.isInteger(parsed) ||
+      parsed < 0
+    ) {
       throw new BadRequestException(`${field} must be a non-negative integer`);
     }
     return parsed;
@@ -422,23 +522,34 @@ export class ProductsService {
     return parsed;
   }
 
-  private async assertRelationsExist(categoryId?: number | null, supplierId?: number | null) {
+  private async assertRelationsExist(
+    categoryId?: number | null,
+    supplierId?: number | null,
+  ) {
     if (categoryId !== undefined && categoryId !== null) {
-      const category = await this.prisma.category.findUnique({ where: { id: categoryId } });
+      const category = await this.prisma.category.findUnique({
+        where: { id: categoryId },
+      });
       if (!category) {
         throw new BadRequestException(`Category ${categoryId} not found`);
       }
     }
 
     if (supplierId !== undefined && supplierId !== null) {
-      const supplier = await this.prisma.supplier.findUnique({ where: { id: supplierId } });
+      const supplier = await this.prisma.supplier.findUnique({
+        where: { id: supplierId },
+      });
       if (!supplier) {
         throw new BadRequestException(`Supplier ${supplierId} not found`);
       }
     }
   }
 
-  private async assertUniqueFields(barcode?: string | null, sku?: string | null, productId?: number) {
+  private async assertUniqueFields(
+    barcode?: string | null,
+    sku?: string | null,
+    productId?: number,
+  ) {
     if (barcode) {
       const existing = await this.prisma.product.findFirst({
         where: {
@@ -479,19 +590,43 @@ export class ProductsService {
       ['barcode', previous.barcode, current.barcode],
       ['sku', previous.sku, current.sku],
       ['unit', previous.unit, current.unit],
-      ['currentStock', String(previous.currentStock), String(current.currentStock)],
+      [
+        'currentStock',
+        String(previous.currentStock),
+        String(current.currentStock),
+      ],
       ['minStock', String(previous.minStock), String(current.minStock)],
-      ['costPrice', previous.costPrice.toString(), current.costPrice.toString()],
-      ['sellingPrice', previous.sellingPrice.toString(), current.sellingPrice.toString()],
-      ['expirationTracked', String(previous.expirationTracked), String(current.expirationTracked)],
+      [
+        'costPrice',
+        previous.costPrice.toString(),
+        current.costPrice.toString(),
+      ],
+      [
+        'sellingPrice',
+        previous.sellingPrice.toString(),
+        current.sellingPrice.toString(),
+      ],
+      [
+        'expirationTracked',
+        String(previous.expirationTracked),
+        String(current.expirationTracked),
+      ],
       [
         'expirationDate',
         previous.expirationDate ? previous.expirationDate.toISOString() : null,
         current.expirationDate ? current.expirationDate.toISOString() : null,
       ],
       ['isActive', String(previous.isActive), String(current.isActive)],
-      ['category', previous.category?.name ?? null, current.category?.name ?? null],
-      ['supplier', previous.supplier?.name ?? null, current.supplier?.name ?? null],
+      [
+        'category',
+        previous.category?.name ?? null,
+        current.category?.name ?? null,
+      ],
+      [
+        'supplier',
+        previous.supplier?.name ?? null,
+        current.supplier?.name ?? null,
+      ],
     ];
 
     for (const [field, oldValue, newValue] of changeMap) {

@@ -1,9 +1,14 @@
-import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, Injectable } from '@nestjs/common';
+import { calendarDate, dateRange, storeDate } from '../store-operations/common';
+import { consumeStock, receiveStock } from '../store-operations/stock';
 import { InventoryMovementType, Prisma } from '@prisma/client';
 import { AuditTrailService } from '../audit-trail/audit-trail.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { AdjustStockDto } from './dto/adjust-stock.dto';
-import { QueryInventoryMovementsDto, InventoryMovementSortField } from './dto/query-inventory-movements.dto';
+import {
+  QueryInventoryMovementsDto,
+  InventoryMovementSortField,
+} from './dto/query-inventory-movements.dto';
 import { StockInDto } from './dto/stock-in.dto';
 import { WasteStockDto } from './dto/waste-stock.dto';
 
@@ -55,7 +60,10 @@ export class InventoryService {
     return { total, list, page, pageSize };
   }
 
-  async getFilterOptions(field: string, query: QueryInventoryMovementsDto): Promise<string[]> {
+  async getFilterOptions(
+    field: string,
+    query: QueryInventoryMovementsDto,
+  ): Promise<string[]> {
     const where = this.buildWhere(query, field);
 
     switch (field) {
@@ -80,7 +88,7 @@ export class InventoryService {
           select: { createdAt: true },
           orderBy: { createdAt: 'asc' },
         });
-        return [...new Set(rows.map((row) => row.createdAt.toISOString().split('T')[0]))];
+        return [...new Set(rows.map((row) => storeDate(row.createdAt)))];
       }
       default:
         return [];
@@ -91,12 +99,18 @@ export class InventoryService {
     const quantity = this.normalizePositiveInteger(data.quantity, 'quantity');
     const reason = this.normalizeOptionalString(data.reason);
     const referenceType = this.normalizeOptionalString(data.referenceType);
-    const referenceId = this.normalizeOptionalInteger(data.referenceId, 'referenceId');
+    const referenceId = this.normalizeOptionalInteger(
+      data.referenceId,
+      'referenceId',
+    );
     const unitCost = this.normalizeDecimal(data.unitCost, 'unitCost', true);
 
     return this.applyMovement(
       {
         productId: data.productId,
+        batchId: data.batchId,
+        lotCode: data.lotCode,
+        expirationDate: data.expirationDate,
         quantityDelta: quantity,
         movementType: InventoryMovementType.purchase,
         reason,
@@ -109,15 +123,27 @@ export class InventoryService {
     );
   }
 
-  async adjustStock(data: AdjustStockDto, operator: { id: number; email: string }) {
-    const quantityDelta = this.normalizeNonZeroInteger(data.quantity, 'quantity');
+  async adjustStock(
+    data: AdjustStockDto,
+    operator: { id: number; email: string },
+  ) {
+    const quantityDelta = this.normalizeNonZeroInteger(
+      data.quantity,
+      'quantity',
+    );
     const reason = this.normalizeOptionalString(data.reason);
     const referenceType = this.normalizeOptionalString(data.referenceType);
-    const referenceId = this.normalizeOptionalInteger(data.referenceId, 'referenceId');
+    const referenceId = this.normalizeOptionalInteger(
+      data.referenceId,
+      'referenceId',
+    );
 
     return this.applyMovement(
       {
         productId: data.productId,
+        batchId: data.batchId,
+        lotCode: data.lotCode,
+        expirationDate: data.expirationDate,
         quantityDelta,
         movementType: InventoryMovementType.adjustment,
         reason,
@@ -129,15 +155,24 @@ export class InventoryService {
     );
   }
 
-  async wasteStock(data: WasteStockDto, operator: { id: number; email: string }) {
+  async wasteStock(
+    data: WasteStockDto,
+    operator: { id: number; email: string },
+  ) {
     const quantity = this.normalizePositiveInteger(data.quantity, 'quantity');
     const reason = this.normalizeOptionalString(data.reason);
     const referenceType = this.normalizeOptionalString(data.referenceType);
-    const referenceId = this.normalizeOptionalInteger(data.referenceId, 'referenceId');
+    const referenceId = this.normalizeOptionalInteger(
+      data.referenceId,
+      'referenceId',
+    );
 
     return this.applyMovement(
       {
         productId: data.productId,
+        batchId: data.batchId,
+        lotCode: data.lotCode,
+        expirationDate: data.expirationDate,
         quantityDelta: -quantity,
         movementType: InventoryMovementType.waste,
         reason,
@@ -167,57 +202,36 @@ export class InventoryService {
         supplier: { select: { id: true, name: true } },
         category: { select: { id: true, name: true } },
       },
-      orderBy: [
-        { currentStock: 'asc' },
-        { name: 'asc' },
-      ],
+      orderBy: [{ currentStock: 'asc' }, { name: 'asc' }],
     });
   }
 
   async getExpirationAlerts(days = 7) {
-    const todayStart = new Date();
-    todayStart.setUTCHours(0, 0, 0, 0);
-    const soonEnd = new Date(todayStart.getTime() + days * 86400000);
-
-    const products = await this.prisma.product.findMany({
+    if (!Number.isInteger(days) || days < 0 || days > 365)
+      throw new BadRequestException('days must be 0–365');
+    const today = calendarDate(storeDate());
+    const batches = await this.prisma.stockBatch.findMany({
       where: {
-        isActive: true,
-        expirationTracked: true,
-        expirationDate: { not: null },
+        quantityRemaining: { gt: 0 },
+        expirationDate: { lte: new Date(today.getTime() + days * 86400000) },
+        product: { isActive: true },
       },
-      select: {
-        id: true,
-        name: true,
-        sku: true,
-        barcode: true,
-        currentStock: true,
-        expirationDate: true,
-        supplier: { select: { id: true, name: true } },
-        category: { select: { id: true, name: true } },
-      },
+      include: { product: { include: { supplier: true, category: true } } },
       orderBy: { expirationDate: 'asc' },
     });
-
-    return products
-      .map((product) => {
-        const expirationDate = product.expirationDate!;
-        const daysUntilExpiration = Math.ceil(
-          (expirationDate.getTime() - todayStart.getTime()) / 86400000,
-        );
-        const status =
-          daysUntilExpiration < 0
-            ? 'expired'
-            : expirationDate <= soonEnd
-              ? 'expiring_soon'
-              : 'safe';
-
-        return {
-          ...product,
-          daysUntilExpiration,
-          status,
-        };
-      })
-      .filter((product) => product.status !== 'safe');
+    return batches.map((batch) => ({
+      ...batch.product,
+      id: batch.id,
+      productId: batch.productId,
+      batchId: batch.id,
+      lotCode: batch.lotCode,
+      currentStock: batch.quantityRemaining,
+      expirationDate: batch.expirationDate,
+      daysUntilExpiration: Math.round(
+        (batch.expirationDate!.getTime() - today.getTime()) / 86400000,
+      ),
+      status: batch.expirationDate! < today ? 'expired' : 'expiring_soon',
+    }));
   }
 
   private async applyMovement(
@@ -230,90 +244,38 @@ export class InventoryService {
       referenceId?: number | null;
       unitCost?: Prisma.Decimal | null;
       auditField: string;
+      batchId?: number;
+      lotCode?: string;
+      expirationDate?: string | null;
     },
     operator: { id: number; email: string },
   ) {
-    const result = await this.prisma.$transaction(async (tx) => {
-      const product = await tx.product.findUnique({
-        where: { id: input.productId },
-        select: { id: true, name: true, currentStock: true },
-      });
-
-      if (!product) {
-        throw new NotFoundException(`Product ${input.productId} not found`);
-      }
-
-      const stockCondition =
-        input.quantityDelta < 0
-          ? { gte: Math.abs(input.quantityDelta) }
-          : undefined;
-      const updateResult = await tx.product.updateMany({
-        where: {
-          id: product.id,
-          ...(stockCondition ? { currentStock: stockCondition } : {}),
-        },
-        data: {
-          currentStock:
-            input.quantityDelta > 0
-              ? { increment: input.quantityDelta }
-              : { decrement: Math.abs(input.quantityDelta) },
-        },
-      });
-
-      if (updateResult.count !== 1) {
-        throw new BadRequestException(
-          `Insufficient stock for product ${product.name}`,
+    return this.prisma.$transaction(async (tx) => {
+      let id: number;
+      if (input.quantityDelta > 0) {
+        const result = await receiveStock(
+          tx,
+          { ...input, quantity: input.quantityDelta, type: input.movementType },
+          operator,
         );
+        id = result.movement.id;
+      } else {
+        const result = await consumeStock(
+          tx,
+          {
+            ...input,
+            quantity: -input.quantityDelta,
+            type: input.movementType,
+          },
+          operator,
+        );
+        id = result.movements[0];
       }
-
-      const updatedProduct = await tx.product.findUniqueOrThrow({
-        where: { id: product.id },
-        select: { id: true, name: true, currentStock: true },
-      });
-
-      const movement = await tx.inventoryMovement.create({
-        data: {
-          type: input.movementType,
-          quantity: input.quantityDelta,
-          unitCost: input.unitCost,
-          reason: input.reason,
-          referenceType: input.referenceType,
-          referenceId: input.referenceId,
-          product: { connect: { id: product.id } },
-          user: { connect: { id: operator.id } },
-        },
+      return tx.inventoryMovement.findUniqueOrThrow({
+        where: { id },
         include: movementInclude,
       });
-
-      return {
-        previousStock: updatedProduct.currentStock - input.quantityDelta,
-        product: updatedProduct,
-        movement,
-      };
     });
-
-    await Promise.all([
-      this.auditTrailService.create({
-        table: 'products',
-        recordId: result.product.id,
-        field: 'currentStock',
-        oldValue: String(result.previousStock),
-        newValue: String(result.product.currentStock),
-        userId: operator.id,
-        userEmail: operator.email,
-      }),
-      this.auditTrailService.create({
-        table: 'inventory_movements',
-        recordId: result.movement.id,
-        field: input.auditField,
-        oldValue: null,
-        newValue: `${result.movement.product.name}: ${result.movement.quantity}`,
-        userId: operator.id,
-        userEmail: operator.email,
-      }),
-    ]);
-
-    return result.movement;
   }
 
   private buildWhere(
@@ -334,26 +296,35 @@ export class InventoryService {
       const types = query.filterTypes
         .split(',')
         .map((value) => value.trim())
-        .filter((value): value is InventoryMovementType => Object.values(InventoryMovementType).includes(value as InventoryMovementType));
+        .filter((value): value is InventoryMovementType =>
+          Object.values(InventoryMovementType).includes(
+            value as InventoryMovementType,
+          ),
+        );
       if (types.length) {
         and.push({ type: { in: types } });
       }
     }
 
     if (excludedField !== 'productName' && query.filterProductNames) {
-      const names = query.filterProductNames.split(',').map((value) => value.trim()).filter(Boolean);
+      const names = query.filterProductNames
+        .split(',')
+        .map((value) => value.trim())
+        .filter(Boolean);
       if (names.length) {
         and.push({ product: { name: { in: names } } });
       }
     }
 
     if (excludedField !== 'createdAt' && query.filterCreatedDates) {
-      const dates = query.filterCreatedDates.split(',').map((value) => value.trim()).filter(Boolean);
+      const dates = query.filterCreatedDates
+        .split(',')
+        .map((value) => value.trim())
+        .filter(Boolean);
       if (dates.length) {
         and.push({
           OR: dates.map((date) => {
-            const start = new Date(`${date}T00:00:00.000Z`);
-            const end = new Date(start.getTime() + 86400000);
+            const { start, end } = dateRange(date);
             return { createdAt: { gte: start, lt: end } };
           }),
         });
@@ -384,7 +355,10 @@ export class InventoryService {
     return value;
   }
 
-  private normalizeOptionalInteger(value: number | null | undefined, field: string) {
+  private normalizeOptionalInteger(
+    value: number | null | undefined,
+    field: string,
+  ) {
     if (value === undefined || value === null) {
       return value ?? null;
     }
