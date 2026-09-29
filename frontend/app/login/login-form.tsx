@@ -39,6 +39,7 @@ export default function LoginForm() {
       const { access_token } = await apiLogin(values.email, values.password);
       sessionStorage.setItem(AUTH_STORAGE_KEY, access_token);
       const user = await fetchCurrentUser();
+      if (!user) throw new Error(DEMO_MODE ? "Demo session could not be loaded" : t.auth.login_failed);
       const params = new URLSearchParams(window.location.search);
       const redirect = params.get('redirect');
       const isCashierOnly =
