@@ -77,7 +77,7 @@ function createSale(state: DemoState, data: CreateSalePayload, user: User, creat
 
 function seed(): DemoState {
   const createdAt = dayOffset(-30);
-  const categories = ['Beverages', 'Dairy', 'Snacks', 'Bakery', 'Household'].map((name, i) => ({ id: i + 1, name, code: `DEMO-C${i + 1}`, createdAt, updatedAt: createdAt }));
+  const categories = ['Drinks', 'Dairy', 'Snacks', 'Bakery', 'Household'].map((name, i) => ({ id: i + 1, name, code: `DEMO-C${i + 1}`, createdAt, updatedAt: createdAt }));
   const suppliers = ['Distribution Boréale (démo)', 'Ferme du Quartier (démo)', 'Boulangerie du Coin (démo)'].map((name, i) => ({ id: i + 1, name, contactName: 'Demo contact', phone: null, email: `supplier${i + 1}@example.com`, notes: 'Fictional supplier. No orders are sent.', createdAt, updatedAt: createdAt }));
   const samples: [string, number, number, number, number, number, number, number | null][] = [
     ['Eau de source 500 ml', 1, 1, 100, 20, 0.45, 1.49, null],
@@ -224,9 +224,9 @@ function dispatch(state: DemoState, endpoint: string, options: RequestInit): unk
   if (path === '/api/dashboard/sales-trend') {
     const days = Math.min(30, Math.max(1, Number(query.get('days')) || 7));
     const points = Array.from({ length: days }, (_, i) => { const report = closeout(state, dateKey(dayOffset(i - days + 1))); return { date: report.date, saleCount: report.saleCount, revenue: report.totals.revenue, profit: report.totals.grossProfit }; });
-    const previous = Array.from({ length: days }, (_, i) => closeout(state, dateKey(dayOffset(i - 2 * days + 1))));
+    const previous = closeout(state, dateKey(dayOffset(-1)));
     const change = (current: number, before: number) => before ? money((current - before) / before * 100) : null;
-    return { timeZone: 'America/Toronto', days, points, comparison: { saleCountDelta: sum(points.map((p) => p.saleCount)) - sum(previous.map((p) => p.saleCount)), revenueChangePercent: change(sum(points.map((p) => Number(p.revenue))), sum(previous.map((p) => Number(p.totals.revenue)))), profitChangePercent: change(sum(points.map((p) => Number(p.profit))), sum(previous.map((p) => Number(p.totals.grossProfit)))) } };
+    return { timeZone: 'America/Toronto', days, points, comparison: { saleCountDelta: today.saleCount - previous.saleCount, revenueChangePercent: change(Number(today.totals.revenue), Number(previous.totals.revenue)), profitChangePercent: change(Number(today.totals.grossProfit), Number(previous.totals.grossProfit)) } };
   }
 
   const collection = path.match(/^\/api\/(products|categories|suppliers)(?:\/(.*))?$/);
