@@ -1,3 +1,4 @@
+import { AUTH_STORAGE_KEY, DEMO_MODE } from '@/lib/demo/config';
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? '';
 
 export interface UploadResult {
@@ -9,8 +10,9 @@ export function uploadFile(
   file: File,
   onProgress?: (percent: number) => void,
 ): Promise<UploadResult> {
+  if (DEMO_MODE) return Promise.reject(new Error('File uploads are disabled in the demo'));
   return new Promise((resolve, reject) => {
-    const token = sessionStorage.getItem('access_token');
+    const token = sessionStorage.getItem(AUTH_STORAGE_KEY);
     const xhr = new XMLHttpRequest();
     const formData = new FormData();
     formData.append('file', file);

@@ -1,24 +1,10 @@
-'use client';
+import ClientPage from './route-client';
+import { DEMO_MODE } from '@/lib/demo/config';
 
-import { useParams } from 'next/navigation';
-import PostNewClient from '../new/post-new-client';
-import PostDetailClient from '../detail/[id]/post-detail-client';
+export function generateStaticParams() {
+  return DEMO_MODE ? [{ path: ['preview-disabled'] }] : [];
+}
 
-export default function PostCatchAll() {
-  const params = useParams();
-  const path = params.path as string[] | undefined;
-
-  if (!path || path.length === 0) {
-    return null;
-  }
-
-  if (path[0] === 'new') {
-    return <PostNewClient />;
-  }
-
-  if (path[0] === 'detail' && path.length === 2) {
-    return <PostDetailClient postId={Number(path[1])} />;
-  }
-
-  return null;
+export default function Page() {
+  return DEMO_MODE ? <p>This section is not included in the store demo.</p> : <ClientPage />;
 }

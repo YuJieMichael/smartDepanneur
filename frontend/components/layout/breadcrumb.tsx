@@ -1,5 +1,8 @@
 'use client';
 
+import { appPath, publicPath } from '@/lib/demo/config';
+
+
 import { usePathname } from 'next/navigation';
 import { Breadcrumb } from 'antd';
 import { HomeOutlined } from '@ant-design/icons';
@@ -8,7 +11,7 @@ import { useT } from '@/lib/i18n';
 const NO_BREADCRUMB_PATHS = ['/login', '/register', '/'];
 
 export default function AppBreadcrumb() {
-  const pathname = usePathname();
+  const pathname = appPath(usePathname());
   const t = useT();
 
   if (NO_BREADCRUMB_PATHS.includes(pathname)) return null;
@@ -39,13 +42,13 @@ export default function AppBreadcrumb() {
   const segments = pathname.split('/').filter(Boolean);
 
   const items = [
-    { title: <HomeOutlined />, href: '/' },
+    { title: <HomeOutlined />, href: publicPath('/') },
     ...segments.map((seg, i) => {
       const href = '/' + segments.slice(0, i + 1).join('/');
       const isLast = i === segments.length - 1;
       const label = pathLabelMap[href] || labelMap[seg] || seg;
       if (isLast) return { title: label };
-      if (validRoutes.has(href)) return { title: label, href };
+      if (validRoutes.has(href)) return { title: label, href: publicPath(href) };
       return { title: label };
     }),
   ];

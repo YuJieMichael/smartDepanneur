@@ -11,11 +11,12 @@ import { useT, useI18nStore } from '@/lib/i18n';
 import { apiGetNotifications, apiMarkNotificationReviewed } from '@/api/notification';
 import type { Notification } from '@/api/notification';
 import PersonalInfoDialog from '@/components/common/personal-info-dialog';
+import { publicPath, appPath } from '@/lib/demo/config';
 
 const NO_NAV_PATHS = ['/login', '/register'];
 
 export default function Navigation() {
-  const pathname = usePathname();
+  const pathname = appPath(usePathname());
   const router = useRouter();
   const currentUser = useAppStore((s) => s.currentUser);
   const t = useT();
@@ -67,7 +68,7 @@ export default function Navigation() {
             localStorage.removeItem('smartdepanneur_tour_seen_owner');
             localStorage.removeItem('smartdepanneur_tour_seen_login');
             localStorage.removeItem('smartdepanneur_tour_seen_admin');
-            window.location.href = window.location.pathname.startsWith('/admin/') ? window.location.pathname : '/';
+            window.location.href = pathname.startsWith('/admin/') ? publicPath(pathname) : publicPath('/');
           }}
         >
           {t.tour.guide}

@@ -1,7 +1,10 @@
-'use client';
+import ClientPage from './route-client';
+import { DEMO_MODE } from '@/lib/demo/config';
 
-import ApplicationDetailClient from './application-detail-client';
+export function generateStaticParams() {
+  return DEMO_MODE ? [{ id: 'preview-disabled' }] : [];
+}
 
-export default function ApplicationDetailPage() {
-  return <ApplicationDetailClient />;
+export default function Page() {
+  return DEMO_MODE ? <p>This section is not included in the store demo.</p> : <ClientPage />;
 }

@@ -4,6 +4,7 @@ node_modules/
 !.env.example
 !**/.env.example
 .next*/
+frontend/out/
 dist/
 coverage/
 uploads/

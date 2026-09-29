@@ -1,5 +1,7 @@
 "use client";
 
+import { publicPath } from "@/lib/demo/config";
+
 import { useCallback, useEffect, useState } from "react";
 import {
   App,
@@ -579,7 +581,7 @@ export default function DashboardPage() {
             }
             loading={loading}
             extra={
-              <Button size="small" type="link" href="/inventory">
+              <Button size="small" type="link" href={publicPath('/inventory/')}>
                 {isZh
                   ? "查看库存"
                   : isFr
@@ -642,7 +644,7 @@ export default function DashboardPage() {
             }
             loading={loading}
             extra={
-              <Button size="small" type="link" href="/inventory">
+              <Button size="small" type="link" href={publicPath('/inventory/')}>
                 {isZh
                   ? "查看库存"
                   : isFr

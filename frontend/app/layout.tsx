@@ -6,10 +6,13 @@ import Navigation from "@/components/layout/navigation";
 import LeftMenu from "@/components/layout/left-menu";
 import AppBreadcrumb from "@/components/layout/breadcrumb";
 import { AntdRegistry } from "@ant-design/nextjs-registry";
+import DemoBanner from '@/components/common/demo-banner';
+import { DEMO_MODE } from '@/lib/demo/config';
 
 export const metadata: Metadata = {
-  title: "SmartDepanneur",
+  title: DEMO_MODE ? "SmartDepanneur — Demo preview" : "SmartDepanneur",
   description: "SmartDepanneur - Convenience store management demo",
+  ...(DEMO_MODE ? { robots: { index: false, follow: false } } : {}),
 };
 
 export default function RootLayout({
@@ -22,6 +25,7 @@ export default function RootLayout({
       <body className="antialiased">
         <AntdRegistry>
           <Providers>
+            <DemoBanner />
             <AuthGuard>
               <Navigation />
               <div className="flex h-[calc(100vh-56px)]">

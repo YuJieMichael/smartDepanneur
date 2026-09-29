@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import { App, Button, Form, Input, Radio, Space, Tabs, Tour, Typography } from 'antd';
 import { apiCheckEmailExists, apiLogin, apiRegister, fetchCurrentUser } from '@/api/auth';
 import { useI18nStore, useT } from '@/lib/i18n';
+import { DEMO_MODE, AUTH_STORAGE_KEY } from '@/lib/demo/config';
 
 const TOUR_KEY = 'smartdepanneur_tour_seen_login';
 
@@ -26,7 +27,7 @@ export default function LoginForm() {
   const [tourOpen, setTourOpen] = useState(false);
 
   useEffect(() => {
-    if (!localStorage.getItem(TOUR_KEY)) {
+    if (!DEMO_MODE && !localStorage.getItem(TOUR_KEY)) {
       const timer = setTimeout(() => setTourOpen(true), 800);
       return () => clearTimeout(timer);
     }
@@ -36,7 +37,7 @@ export default function LoginForm() {
     setLoading(true);
     try {
       const { access_token } = await apiLogin(values.email, values.password);
-      sessionStorage.setItem('access_token', access_token);
+      sessionStorage.setItem(AUTH_STORAGE_KEY, access_token);
       const user = await fetchCurrentUser();
       const params = new URLSearchParams(window.location.search);
       const redirect = params.get('redirect');
@@ -210,7 +211,21 @@ export default function LoginForm() {
             </Button>
           ))}
         </Space>
-        <Tabs
+        {DEMO_MODE ? (
+          <Space orientation="vertical" style={{ width: '100%' }} size="middle">
+            <Typography.Paragraph type="secondary">
+              {locale === 'zh' ? '选择演示角色即可体验。无需注册，所有商品和交易均为虚构数据。'
+                : locale === 'fr' ? 'Choisissez un rôle pour explorer le magasin fictif. Aucune inscription nécessaire.'
+                : 'Choose a demo role to explore a fictional store. No registration required.'}
+            </Typography.Paragraph>
+            {demoAccounts.map((account) => (
+              <Button key={account.email} type="primary" block size="large" loading={loading} onClick={() => onSignIn(account)}>
+                {account.label === 'Store Owner' ? (locale === 'zh' ? '以店主身份体验' : locale === 'fr' ? 'Explorer comme propriétaire' : 'Explore as Store Owner')
+                  : (locale === 'zh' ? '以收银员身份体验' : locale === 'fr' ? 'Explorer comme caissier' : 'Explore as Cashier')}
+              </Button>
+            ))}
+          </Space>
+        ) : <Tabs
           activeKey={activeKey}
           onChange={setActiveKey}
           centered
@@ -218,7 +233,7 @@ export default function LoginForm() {
             { key: 'signin', label: t.auth.sign_in, children: signInForm },
             { key: 'signup', label: t.auth.sign_up, children: signUpForm },
           ]}
-        />
+        />}
         <Tour
           open={tourOpen}
           onClose={() => {

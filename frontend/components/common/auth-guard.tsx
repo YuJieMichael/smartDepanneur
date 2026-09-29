@@ -4,11 +4,12 @@ import { useEffect } from 'react';
 import { usePathname, useRouter } from 'next/navigation';
 import { useAppStore } from '@/lib/store';
 import { fetchCurrentUser, logout } from '@/api/auth';
+import { DEMO_MODE, DEMO_ROUTES, appPath, AUTH_STORAGE_KEY } from '@/lib/demo/config';
 
 const PUBLIC_PATHS = ['/login', '/register'];
 
 export default function AuthGuard({ children }: { children: React.ReactNode }) {
-  const pathname = usePathname();
+  const pathname = appPath(usePathname());
   const router = useRouter();
   const currentUser = useAppStore((s) => s.currentUser);
   const isCashierOnly =
@@ -23,13 +24,17 @@ export default function AuthGuard({ children }: { children: React.ReactNode }) {
     if (PUBLIC_PATHS.includes(pathname)) return;
 
     if (currentUser) {
+      if (DEMO_MODE && !DEMO_ROUTES.includes(pathname)) {
+        router.replace('/');
+        return;
+      }
       if (isCashierOnly && !cashierCanAccessPath) {
         router.replace('/sales');
       }
       return;
     }
 
-    const token = sessionStorage.getItem('access_token');
+    const token = sessionStorage.getItem(AUTH_STORAGE_KEY);
     if (!token) {
       logout();
       return;

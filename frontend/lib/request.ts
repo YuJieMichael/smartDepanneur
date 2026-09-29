@@ -21,6 +21,10 @@ export class ApiError extends Error {
 }
 
 export async function request<T>(endpoint: string, options: RequestInit = {}): Promise<T> {
+  if (process.env.NEXT_PUBLIC_DEMO_MODE === 'true') {
+    const { demoRequest } = await import('./demo/api');
+    return demoRequest<T>(endpoint, options);
+  }
   let config: RequestInit = {
     ...options,
     headers: {

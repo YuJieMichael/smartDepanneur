@@ -1,4 +1,6 @@
-﻿'use client';
+'use client';
+import { appPath } from '@/lib/demo/config';
+
 
 import { useEffect, useRef, useState } from 'react';
 import { usePathname, useRouter } from 'next/navigation';
@@ -11,7 +13,7 @@ const NO_MENU_PATHS = ['/login', '/register'];
 const TOUR_KEY = 'SmartDepanneur_tour_seen_admin';
 
 export default function LeftMenu() {
-  const pathname = usePathname();
+  const pathname = appPath(usePathname());
   const router = useRouter();
   const t = useT();
   const locale = useI18nStore((state) => state.locale);

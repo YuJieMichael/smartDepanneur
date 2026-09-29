@@ -1,5 +1,6 @@
 import { request, ApiError } from '@/lib/request';
 import { User, useAppStore } from '@/lib/store';
+import { appPath, publicPath, AUTH_STORAGE_KEY } from '@/lib/demo/config';
 
 export interface LoginResponse {
   access_token: string;
@@ -58,13 +59,13 @@ let _loggingOut = false;
 export function logout(saveRedirect = true) {
   if (_loggingOut) return;
   _loggingOut = true;
-  sessionStorage.removeItem('access_token');
+  sessionStorage.removeItem(AUTH_STORAGE_KEY);
   useAppStore.getState().setCurrentUser(null);
   if (saveRedirect) {
-    const current = window.location.pathname + window.location.search;
+    const current = appPath(window.location.pathname) + window.location.search;
     const redirect = current !== '/login' ? `?redirect=${encodeURIComponent(current)}` : '';
-    window.location.replace(`/login${redirect}`);
+    window.location.replace(publicPath(`/login/${redirect}`));
   } else {
-    window.location.replace('/login');
+    window.location.replace(publicPath('/login/'));
   }
 }

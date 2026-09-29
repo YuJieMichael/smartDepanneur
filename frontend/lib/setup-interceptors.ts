@@ -1,3 +1,4 @@
+import { AUTH_STORAGE_KEY } from '@/lib/demo/config';
 import { addRequestInterceptor, addResponseInterceptor } from './request';
 import { globalMessage } from './message-bridge';
 import { useI18nStore } from './i18n';
@@ -35,7 +36,7 @@ function getT() {
 
 // 请求拦截器：无 token 时（非公开页面）提示并登出
 addRequestInterceptor((config) => {
-  const token = sessionStorage.getItem('access_token');
+  const token = sessionStorage.getItem(AUTH_STORAGE_KEY);
   if (token) {
     const headers = config.headers as Record<string, string>;
     headers['Authorization'] = `Bearer ${token}`;
@@ -63,12 +64,12 @@ addResponseInterceptor(async (res, endpoint) => {
   }
 
   if (res.ok && !SKIP_REFRESH_ENDPOINTS.includes(endpoint)) {
-    const token = sessionStorage.getItem('access_token');
+    const token = sessionStorage.getItem(AUTH_STORAGE_KEY);
     const now = Date.now();
     if (token && now - lastRefreshTime > REFRESH_COOLDOWN_MS) {
       lastRefreshTime = now;
       _apiRefreshToken?.().then((data) => {
-        sessionStorage.setItem('access_token', data.access_token);
+        sessionStorage.setItem(AUTH_STORAGE_KEY, data.access_token);
       }).catch(() => {});
     }
   }
