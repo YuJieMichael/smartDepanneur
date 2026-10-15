@@ -24,6 +24,7 @@ import { DashboardModule } from './dashboard/dashboard.module';
 import { InsightsModule } from './insights/insights.module';
 import { PurchaseOrdersModule } from './purchase-orders/purchase-orders.module';
 import { AgentActionsModule } from './agent-actions/agent-actions.module';
+import { InvoicesModule } from './invoices/invoices.module';
 import { validateEnvironment } from './config/validate-environment';
 import { AccessControlModule } from './access-control/access-control.module';
 
@@ -56,6 +57,7 @@ import { AccessControlModule } from './access-control/access-control.module';
     InsightsModule,
     PurchaseOrdersModule,
     AgentActionsModule,
+    InvoicesModule,
   ],
   controllers: [AppController],
   providers: [AppService],
