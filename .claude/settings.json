@@ -1,0 +1,15 @@
+{
+  "$schema": "https://json.schemastore.org/claude-code-settings.json",
+  "extraKnownMarketplaces": {
+    "caveman": {
+      "source": {
+        "source": "github",
+        "repo": "JuliusBrussee/caveman",
+        "ref": "v4.0.1"
+      }
+    }
+  },
+  "enabledPlugins": {
+    "caveman@caveman": true
+  }
+}

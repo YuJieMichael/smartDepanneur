@@ -215,6 +215,8 @@ production builds. A final job validates Compose and builds both images.
 │   ├── components/             UI and operational forms
 │   └── lib/i18n/               EN / FR / ZH translations
 ├── docs/                       Architecture, AWS, demo, and roadmap
+├── game-studio/                Separate Claude Code game-dev sandbox (not part of the app)
+├── .claude/                    Claude Code project settings
 └── docker-compose.yml          Complete local stack
 ```
 
@@ -225,6 +227,23 @@ production builds. A final job validates Compose and builds both images.
 - [AWS deployment](docs/DEPLOYMENT_AWS.md)
 - [Interview demo script](docs/DEMO_SCRIPT.md)
 - [Product roadmap](docs/ROADMAP.md)
+
+## Claude Code tooling
+
+- `.claude/settings.json` enables the
+  [caveman](https://github.com/JuliusBrussee/caveman) plugin (pinned to
+  `v4.0.1`). It makes Claude's chat replies terse to cut output tokens; code,
+  commits, and docs stay in normal prose. Claude Code offers to install it the
+  first time the folder is trusted. Say `stop caveman` to turn it off for a
+  session.
+- `game-studio/` is a copy of
+  [Claude Code Game Studios](https://github.com/Donchitos/Claude-Code-Game-Studios)
+  `v1.1.3` (MIT). The only additions are the same caveman setting and a game
+  ideas file. It is a separate sandbox for
+  a new game and has no connection to the SmartDepanneur app or its CI. Start
+  Claude Code inside `game-studio/` so its agents, hooks, and rules load, then
+  run `/start`. Game ideas live in
+  [game-studio/design/concept-ideas.md](game-studio/design/concept-ideas.md).
 
 ## Current scope
 
