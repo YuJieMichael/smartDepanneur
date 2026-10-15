@@ -31,6 +31,7 @@ steps, known boundaries, and resume positioning.
 - English, French, and Simplified Chinese user interfaces
 - Repeatable Docker development and production-style builds
 - Automated typechecking, linting, tests, builds, and container validation
+- A trilingual agent eval with routing, language, and grounding checks
 
 ## Core workflow
 
@@ -193,6 +194,42 @@ Claude Desktop configuration (`claude_desktop_config.json`):
 The MCP process loads only Prisma and the insight service: no HTTP routes,
 no JWT secret, and every tool is annotated read-only.
 
+## Store Agent eval
+
+`npm run eval:agent` (in `backend/`) scores the Store Agent on 78 owner
+questions in English, French, and Chinese against an in-memory fixture store,
+so it needs neither PostgreSQL nor an API key. Each answer is checked for:
+
+- **Routing**: the agent called the tool the question needs
+- **Language**: the answer is in the selected UI language
+- **Grounding**: every product it names came back from a tool it called
+- **Required facts**: it surfaces the fixture's key fact (for example, the
+  out-of-stock product for a restocking question)
+
+Cases come in three splits: `dev` (may guide changes), `holdout` (written
+alongside dev, never tuned on), and `blind` (written by a separate model from
+a description of the four tools, without seeing any agent code).
+
+The first run showed the deterministic fallback agent, which answers whenever
+OpenAI is unavailable, routed only 42% of questions correctly: "Are we running
+out of anything?" got a generic store summary. Replacing single keywords with
+multilingual intent groups raised it to:
+
+| Split | Cases | Before | After |
+| --- | --- | --- | --- |
+| dev | 30 | 46.7% | 100% |
+| holdout | 12 | 25.0% | 100% |
+| blind | 36 | 44.4% | 66.7% |
+| overall | 78 | 42.3% | 84.6% |
+
+The blind failures are idiomatic phrasings ("What's flying off the shelves?",
+"rendus à sec") that keyword rules cannot cover; that gap is why the LLM agent
+is primary. A Jest test keeps these scores from regressing in CI.
+
+`npm run eval:agent -- --agent=openai` runs the same cases against the live
+OpenAI agent (needs `OPENAI_API_KEY`) and adds fallback rate and latency.
+Reports are written to `backend/eval/results/`.
+
 ## Demo accounts
 
 Demo credentials exist only in seeded demo environments.
@@ -227,6 +264,7 @@ Current backend tests cover:
 - Dashboard closeout, trends, and void metrics
 - AI local fallback and question validation
 - MCP tool listing, read-only annotations, results, and error reporting
+- Store Agent eval score gates for routing, answer language, and grounding
 
 GitHub Actions runs backend and frontend typechecking, linting, tests and
 production builds. A final job validates Compose and builds both images.

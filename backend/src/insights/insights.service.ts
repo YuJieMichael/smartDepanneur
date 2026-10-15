@@ -80,6 +80,38 @@ export const STORE_AGENT_TOOLS: ReadonlyArray<{
   },
 ];
 
+// Intent phrases for the deterministic fallback agent, grouped by meaning
+// rather than single keywords. Tuned against the dev split of
+// eval/store-agent.cases.ts; the holdout split measures generalization.
+const LOCAL_AGENT_INTENTS: { tool: InsightAgentTool; patterns: RegExp[] }[] = [
+  {
+    tool: 'get_slow_movers',
+    patterns: [
+      /\bslow\b|not selling|\bdead\b|collecting dust|never (move|sell)|(don't|doesn't|do not|does not) (move|sell)/,
+      /\bno sales?\b|without (a |any )?(single )?sale|haven't sold|not sold/,
+      /se vendent? mal|vente lente|stagn|ne se vend(ent)? pas|\bdor(t|ment)\b|ne bougent? pas|aucune vente|invendu/,
+      /滞销|卖不动|不好卖|没人买|卖不出|没卖出|没有卖出/,
+    ],
+  },
+  {
+    tool: 'get_reorder_suggestions',
+    patterns: [
+      /restock|re-?order|low stock|running (low|out)|run out|out of stock|sold out/,
+      /\b(order|buy) (more|from)\b|need to order|place an? (purchase )?order|purchase order/,
+      /r[ée]approvision|stock faible|rupture|commander|racheter|\bmanque/,
+      /补货|进货|订货|订什么|缺货|卖完|快没|库存不足|库存低|不够卖/,
+    ],
+  },
+  {
+    tool: 'get_top_sellers',
+    patterns: [
+      /\btop\b|\bbest\b|popular|most (money|revenue|profit)|number one|bestsell/,
+      /meilleur(e)?s? (ventes|vendeurs)|se vendent le mieux|plus vendu|rapporte le plus/,
+      /热销|卖得最好|卖得好|销量|最赚钱|卖最多/,
+    ],
+  },
+];
+
 const AGENT_TOOLS: InsightAgentTool[] = STORE_AGENT_TOOLS.map(
   (tool) => tool.name,
 );
@@ -578,41 +610,14 @@ export class InsightsService {
   }
 
   private selectLocalAgentTool(question: string): InsightAgentTool {
-    const normalizedQuestion = question.toLowerCase();
-    const asksForReorder =
-      normalizedQuestion.includes('restock') ||
-      normalizedQuestion.includes('reorder') ||
-      normalizedQuestion.includes('low stock') ||
-      normalizedQuestion.includes('réapprovision') ||
-      normalizedQuestion.includes('reapprovision') ||
-      normalizedQuestion.includes('stock faible') ||
-      normalizedQuestion.includes('commander') ||
-      question.includes('补货') ||
-      question.includes('进货') ||
-      question.includes('库存');
-    const asksForSlowMovers =
-      normalizedQuestion.includes('slow') ||
-      normalizedQuestion.includes('not selling') ||
-      normalizedQuestion.includes('dead') ||
-      normalizedQuestion.includes('se vendent mal') ||
-      normalizedQuestion.includes('vente lente') ||
-      normalizedQuestion.includes('stagn') ||
-      question.includes('滞销') ||
-      question.includes('卖不动') ||
-      question.includes('不好卖');
-    const asksForTopSellers =
-      normalizedQuestion.includes('top') ||
-      normalizedQuestion.includes('best') ||
-      normalizedQuestion.includes('popular') ||
-      normalizedQuestion.includes('meilleures ventes') ||
-      normalizedQuestion.includes('se vendent le mieux') ||
-      question.includes('热销') ||
-      question.includes('卖得最好') ||
-      question.includes('销量');
-
-    if (asksForReorder) return 'get_reorder_suggestions';
-    if (asksForSlowMovers) return 'get_slow_movers';
-    if (asksForTopSellers) return 'get_top_sellers';
+    const normalizedQuestion = question.toLowerCase().replace(/[’`]/g, "'");
+    // Checked in order: "lots of stock but not selling" is a slow-mover
+    // question even though it mentions stock.
+    for (const intent of LOCAL_AGENT_INTENTS) {
+      if (intent.patterns.some((pattern) => pattern.test(normalizedQuestion))) {
+        return intent.tool;
+      }
+    }
     return 'get_store_summary';
   }
 
