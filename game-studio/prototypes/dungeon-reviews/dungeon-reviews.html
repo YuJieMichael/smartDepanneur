@@ -46,7 +46,7 @@ button:focus-visible,summary:focus-visible{outline:2px solid var(--moss);outline
 .label{font-size:11.5px;letter-spacing:.14em;color:var(--muted)}
 .rowx{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap}
 /* dungeon */
-.strip{display:grid;grid-template-columns:auto repeat(6,minmax(0,1fr)) auto;gap:6px;align-items:stretch}
+.strip{display:grid;grid-template-columns:auto repeat(var(--n,6),minmax(0,1fr)) auto;gap:6px;align-items:stretch}
 @media (max-width:620px){.strip{grid-template-columns:repeat(3,minmax(0,1fr))}.gate{display:none}}
 .gate{writing-mode:vertical-rl;font-size:12px;color:var(--muted);display:flex;align-items:center;justify-content:center;padding:0 2px;letter-spacing:.3em}
 .room{position:relative;aspect-ratio:3/4;max-width:100%;background:var(--surface-2);border:1.5px dashed var(--line);border-radius:10px;
@@ -54,6 +54,15 @@ button:focus-visible,summary:focus-visible{outline:2px solid var(--moss);outline
 .room.filled{border-style:solid}
 .room.monster{border-color:color-mix(in srgb,var(--brick) 55%,var(--line))}
 .room.closed{opacity:.5;border-style:dashed}
+.goals{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:6px}
+.goals li{display:grid;grid-template-columns:22px minmax(0,1fr);gap:6px;align-items:baseline}
+.goals .ic{font-weight:600;text-align:center}
+.goals .done .ic{color:var(--moss)} .goals .fail .ic{color:var(--brick)} .goals .pending .ic{color:var(--muted)}
+.goals .fail .gt{color:var(--muted);text-decoration:line-through}
+.goals .now{font-family:var(--mono);font-size:12px;color:var(--muted)}
+.tool.locked{border-style:dashed}
+.tool.locked .glyph{opacity:.45}
+.g-monster.dim{opacity:.45}
 .room .door{position:absolute;top:4px;right:7px;font-size:11px;color:var(--moss)}
 .room.closed .door{color:var(--brick)}
 .room.here{box-shadow:0 0 0 3px var(--amber);border-color:var(--amber)}
@@ -129,7 +138,7 @@ textarea#recordBox{width:100%;min-height:180px;background:var(--surface-2);color
   <section class="top">
     <div class="brand">
       <h1>地牢点评网</h1>
-      <div class="sub" id="sub">原型 v0.3 · 本季 12 位冒险者 · 冲刺年度最佳地牢</div>
+      <div class="sub" id="sub"></div>
     </div>
     <div class="score">
       <div class="kv"><span class="k">综合评分</span>
@@ -137,7 +146,6 @@ textarea#recordBox{width:100%;min-height:180px;background:var(--surface-2);color
       <div class="kv"><span class="k">近 5 条</span><span class="v" id="recent">–</span></div>
       <div class="kv"><span class="k">评价数</span><span class="v" id="count">0</span></div>
       <div class="kv"><span class="k">金币</span><span class="v gold" id="gold">0</span></div>
-      <div class="kv"><span class="k">工资/位</span><span class="v" id="wage">0</span></div>
     </div>
   </section>
 
@@ -180,6 +188,10 @@ textarea#recordBox{width:100%;min-height:180px;background:var(--surface-2);color
 
     <div class="col">
       <section class="card">
+        <div class="rowx"><span class="label" id="goalTitle">本季目标</span><span class="rmeta">每达成一个 +30 金</span></div>
+        <ul class="goals" id="goals"></ul>
+      </section>
+      <section class="card">
         <div class="rowx"><span class="label">最新点评</span>
           <button class="btn" id="fake">刷一条五星（15 金）</button></div>
         <div class="rmeta" id="fakeRisk"></div>
@@ -197,8 +209,10 @@ textarea#recordBox{width:100%;min-height:180px;background:var(--surface-2);color
           <li>探店博主的评价算 3 条；差评师进门前要钱，不给扣 2 星</li>
           <li>刷好评：每条在挂的假评价让每次真实评价后的被查概率 +12%，被查就全删，外加一条一星公告</li>
           <li>不选工具时点房间就能开关门，免费。关着的房间客人直接走过</li>
-          <li>每来一位客人，所有怪物都要发工资（史莱姆 1、骷髅兵 2、巨魔 4）。季末金币是负数就算破产</li>
-          <li>一季 12 位客人，越往后越可能来强的，但强弱一直混着来</li>
+          <li>一共 3 季，每季 12 位客人。地牢、金币和解锁都会带进下一季，客人一季比一季强</li>
+          <li>每季 3 个目标，每达成一个奖励 30 金。金币还能用来扩建房间（最多 8 间）</li>
+          <li>拟态宝箱、吸血鬼要先花金币解锁。吸血鬼最多把客人吸到剩 1 血，不会致命</li>
+          <li>地牢评论家（第 2、3 季）的评价算 5 条，剩 20% 以内的血才给五星</li>
         </ul>
       </section>
     </div>
@@ -206,7 +220,7 @@ textarea#recordBox{width:100%;min-height:180px;background:var(--surface-2);color
 
   <div class="controls">
     <button class="btn" id="copyRec">复制试玩记录</button>
-    <button class="btn" id="restart">重开一季</button>
+    <button class="btn" id="restart">从第 1 季重来</button>
     <span class="status" id="copyMsg"></span>
   </div>
   <textarea id="recordBox" hidden readonly aria-label="试玩记录"></textarea>
@@ -216,11 +230,13 @@ textarea#recordBox{width:100%;min-height:180px;background:var(--surface-2);color
 <script>
 (function(){
 "use strict";
-const SEASON=12, ROOMS=6, START_GOLD=50, CHEST_REFILL=15;
+const SEASON=12, ROOMS=6, START_GOLD=80, CHEST_REFILL=15, GOAL_BONUS=30, SEASONS_TOTAL=3, CRITIC_WEIGHT=5, MAX_ROOMS=8, EXPAND_COST=[60,120];
 const ITEMS={
-  slime:{name:"史莱姆",glyph:"史",kind:"monster",hp:4,dmg:2,cost:5,wage:1,desc:"血 4 · 攻 2 · 工资 1"},
-  skel:{name:"骷髅兵",glyph:"骷",kind:"monster",hp:9,dmg:4,cost:12,wage:2,desc:"血 9 · 攻 4 · 工资 2"},
-  troll:{name:"巨魔",glyph:"魔",kind:"monster",hp:22,dmg:8,cost:30,wage:4,desc:"血 22 · 攻 8 · 工资 4"},
+  slime:{name:"史莱姆",glyph:"史",kind:"monster",hp:4,dmg:2,cost:5,desc:"血 4 · 攻 2"},
+  skel:{name:"骷髅兵",glyph:"骷",kind:"monster",hp:9,dmg:4,cost:12,desc:"血 9 · 攻 4"},
+  troll:{name:"巨魔",glyph:"魔",kind:"monster",hp:22,dmg:8,cost:20,desc:"血 22 · 攻 8"},
+  mimic:{name:"拟态宝箱",glyph:"拟",kind:"monster",hp:12,dmg:6,cost:15,unlock:40,first:true,desc:"血 12 · 攻 6 · 装成宝箱，抢先出手"},
+  vamp:{name:"吸血鬼",glyph:"吸",kind:"monster",hp:14,dmg:6,cost:25,unlock:60,nonlethal:true,desc:"血 14 · 攻 6 · 最多吸到剩 1 血，不会致命"},
   spike:{name:"地刺",glyph:"刺",kind:"trap",dmg:5,cost:8,desc:"踩到掉 5 血；盗贼会拆"},
   chest:{name:"宝箱",glyph:"箱",kind:"chest",cost:4,desc:`每被开一次花 ${CHEST_REFILL} 金；+1 星`},
   spring:{name:"泉水",glyph:"泉",kind:"spring",heal:8,cost:6,desc:"回 8 血，用来微调难度"}
@@ -233,7 +249,17 @@ const ADV={
   knight:{t:"骑士",g:"骑",hp:45,atk:7,fee:18},
   hero:{t:"勇者",g:"勇",hp:70,atk:10,fee:28}
 };
-const POOLS=[[1,["novice","rogue","warrior","mage"]],[5,["novice","rogue","warrior","mage","knight"]],[9,["novice","rogue","warrior","mage","knight","hero"]]];
+const SEASONS=[
+  {pool:[[1,["novice","rogue","warrior","mage"]],[5,["novice","rogue","warrior","mage","knight"]],[9,["novice","rogue","warrior","mage","knight","hero"]]],
+   special:{3:"blogger",5:"extort",7:"blogger",9:"extort",11:"blogger"},
+   goals:[{k:"blog5",t:"让一位探店博主给五星"},{k:"deaths",n:1,t:"阵亡不超过 1 位"},{k:"avg",n:3.8,t:"综合评分 ≥ 3.8"}]},
+  {pool:[[1,["rogue","warrior","mage","knight"]],[5,["warrior","mage","knight","hero"]],[9,["mage","knight","hero","hero"]]],
+   special:{2:"blogger",4:"extort",6:"blogger",8:"extort",10:"critic",12:"blogger"},
+   goals:[{k:"critic5",t:"让地牢评论家给五星"},{k:"deaths",n:1,t:"阵亡不超过 1 位"},{k:"avg",n:4.0,t:"综合评分 ≥ 4.0"}]},
+  {pool:[[1,["warrior","mage","knight","hero"]],[5,["mage","knight","hero","hero"]],[9,["knight","hero","hero","mage"]]],
+   special:{2:"blogger",4:"critic",6:"extort",8:"blogger",10:"critic",12:"blogger"},
+   goals:[{k:"blogAll5",t:"每位探店博主都给五星"},{k:"deaths",n:0,t:"零阵亡"},{k:"avg",n:4.3,t:"综合评分 ≥ 4.3"}]}
+];
 const NAMES=["小王","阿强","豆豆","李叔","蘑菇","小七","老张","大壮","阿花","米粒","铁蛋","糯米"];
 const REV={
   5:["差点死在{worst}手里，太刺激了！下次还来。","进去满血，出来只剩 {hp} 口气。五星，强烈推荐。","{worst}那一下我以为要交代了，值回票价！","腿还在抖。这才叫地牢。"],
@@ -249,7 +275,6 @@ const QUIRKS=[
   {k:"greedy",t:"财迷",d:"开到宝箱 +2 星（平时 +1）"},
   {k:"hardcore",t:"硬核玩家",d:"剩 15% 以内的血才给五星"}
 ];
-const SPECIAL={3:"blogger",5:"extort",7:"blogger",9:"extort",11:"blogger"};
 const BLOGGER_WEIGHT=3, EXTORT_FEE=20, FAKE_COST=15, FAKE_RISK=0.12;
 const FAKE_TEXT=["好评！五星！服务周到！","环境好，怪物专业，下次还来。","性价比很高，推荐给朋友了。","五星好评，老板人很好。"];
 const BLOGGER_OPEN=["家人们谁懂啊！","【探店】","探店第 37 家地牢："];
@@ -264,28 +289,50 @@ function rng(){S.seed=(S.seed*16807)%2147483647;return S.seed/2147483647;}
 const pick=a=>a[Math.floor(rng()*a.length)];
 
 /* ---------- state ---------- */
-function newSeason(){
+function newGame(){
   const seed=(Date.now()%2147483646)+1;
-  S={seed,seed0:seed,gold:START_GOLD,rooms:Array(ROOMS).fill(null),doors:Array(ROOMS).fill(true),reviews:[],record:[],guestNo:0,guest:null,msg:"",err:false,over:false,fakeLive:0,fakeTotal:0,busted:0};
+  S={seed,seed0:seed,gold:START_GOLD,rooms:Array(ROOMS).fill(null),doors:Array(ROOMS).fill(true),record:[],season:0,
+    unlocked:Object.keys(ITEMS).filter(k=>!ITEMS[k].unlock),msg:"",err:false,seasonLog:[]};
   S.rooms[1]="slime";S.rooms[3]="skel";
   S.gold-=ITEMS.slime.cost+ITEMS.skel.cost;
+  startSeason(1);
+  S.msg="开业了！看看客人的血量和攻击，点房间免费开关门来调难度。右边是本季的 3 个目标。";
+}
+function startSeason(n){
+  Object.assign(S,{season:n,reviews:[],guestNo:0,guest:null,over:false,fakeLive:0,fakeTotal:0,extortPaid:0,busted:0,bonus:0,goalResult:null});
+  S.record.push(`== 第 ${n} 季 · 开季金币 ${S.gold} · 已解锁 ${S.unlocked.map(k=>ITEMS[k].glyph).join("")} ==`);
   nextGuest();
-  S.msg="开业了！看看客人的血量和攻击，点房间免费开关门来调难度。";
+}
+const seasonCfg=()=>SEASONS[S.season-1];
+function goalState(gl,final){
+  const R=S.reviews.filter(r=>!r.notice);
+  if(gl.k==="blog5")return R.some(r=>r.role==="blogger"&&r.stars===5)?"done":final?"fail":"pending";
+  if(gl.k==="critic5")return R.some(r=>r.role==="critic"&&r.stars===5)?"done":final?"fail":"pending";
+  if(gl.k==="blogAll5"){const b=R.filter(r=>r.role==="blogger");if(b.some(r=>r.stars<5))return "fail";return final?(b.length?"done":"fail"):"pending";}
+  if(gl.k==="deaths")return R.filter(r=>r.died).length>gl.n?"fail":final?"done":"pending";
+  if(gl.k==="avg")return final?(avgOf(S.reviews)>=gl.n?"done":"fail"):"pending";
+  return "pending";
+}
+function endSeason(){
+  const res=seasonCfg().goals.map(gl=>({t:gl.t,st:goalState(gl,true)}));
+  const done=res.filter(x=>x.st==="done").length;
+  S.goalResult=res;S.bonus=done*GOAL_BONUS;S.gold+=S.bonus;
+  S.record.push(`-- 第 ${S.season} 季结束：加权平均 ${avgOf(S.reviews).toFixed(2)}，目标 ${done}/3（${res.map(x=>(x.st==="done"?"✓":"✗")+x.t).join("，")}），奖励 ${S.bonus} 金，金币 ${S.gold}`);
 }
 const wOf=r=>r.weight||1;
 const avgOf=a=>{const w=a.reduce((t,r)=>t+wOf(r),0);return w?a.reduce((t,r)=>t+r.stars*wOf(r),0)/w:0;};
 const recentAvg=()=>{const r=S.reviews.slice(-5);return r.length?avgOf(r):3;};
 const riskNow=()=>Math.min(0.9,S.fakeLive*FAKE_RISK);
-const wagesNow=()=>S.rooms.reduce((t,k)=>t+(k&&ITEMS[k].wage||0),0);
 function nextGuest(){
-  if(S.guestNo>=SEASON){S.guest=null;S.over=true;return;}
-  const n=S.guestNo+1;let pool=POOLS[0][1];POOLS.forEach(([min,p])=>{if(n>=min)pool=p;});
+  if(S.guestNo>=SEASON){S.guest=null;S.over=true;endSeason();return;}
+  const cfg=seasonCfg(),n=S.guestNo+1;let pool=cfg.pool[0][1];cfg.pool.forEach(([min,p])=>{if(n>=min)pool=p;});
   const k=pick(pool),d=ADV[k];
   S.guestNo++;
-  const role=SPECIAL[S.guestNo]||"normal",nm=pick(NAMES);
+  const role=cfg.special[S.guestNo]||"normal",nm=pick(NAMES);
   const g={k,...d,role,quirk:null,deal:null,name:d.t+nm};
   if(role==="blogger"){g.name=`探店博主·${nm}`;g.fans=(1+Math.floor(rng()*90)/10).toFixed(1);}
   else if(role==="extort")g.name=`差评师·${nm}`;
+  else if(role==="critic")g.name=`地牢评论家·${nm}`;
   else if(rng()<0.5)g.quirk=pick(QUIRKS);
   S.guest=g;
 }
@@ -314,17 +361,23 @@ const sfx={
 /* ---------- simulation ---------- */
 function vary(x){return Math.max(1,Math.round(x*(0.8+rng()*0.4)));}
 function simulate(){
-  const g=S.guest,ev=[];let hp=g.hp,gold=S.gold,met=false,trapHit=false,chestOk=false,chestEmpty=false,dealt={},died=false,killer=null,metSlime=false,hadSpring=false;
-  for(let i=0;i<ROOMS&&!died;i++){
+  const g=S.guest,ev=[];let hp=g.hp,gold=S.gold,met=false,trapHit=false,chestOk=false,chestEmpty=false,dealt={},died=false,killer=null,metSlime=false,hadSpring=false,mimic=false,vamp=false;
+  for(let i=0;i<S.rooms.length&&!died;i++){
     const k=S.rooms[i];if(!k||!S.doors[i])continue;const it=ITEMS[k];
     ev.push({room:i,type:"enter"});
     if(it.kind==="monster"){
-      met=true;if(k==="slime")metSlime=true;let mhp=it.hp;
+      met=true;if(k==="slime")metSlime=true;if(k==="mimic")mimic=true;if(k==="vamp")vamp=true;
+      let mhp=it.hp,monTurn=!!it.first;
       for(;;){
-        const a=vary(g.atk);mhp-=a;ev.push({room:i,type:"strike",amount:a,mhp:Math.max(0,mhp),hp});
-        if(mhp<=0){ev.push({room:i,type:"kill"});break;}
-        const d=vary(it.dmg);hp-=d;dealt[k]=(dealt[k]||0)+d;ev.push({room:i,type:"hurt",amount:d,hp:Math.max(0,hp),mhp});
-        if(hp<=0){died=true;killer=k;ev.push({room:i,type:"die"});break;}
+        if(monTurn){
+          let d=vary(it.dmg);if(it.nonlethal)d=Math.min(d,Math.max(0,hp-1));
+          hp-=d;dealt[k]=(dealt[k]||0)+d;ev.push({room:i,type:"hurt",amount:d,hp:Math.max(0,hp),mhp});
+          if(hp<=0){died=true;killer=k;ev.push({room:i,type:"die"});break;}
+        }else{
+          const a=vary(g.atk);mhp-=a;ev.push({room:i,type:"strike",amount:a,mhp:Math.max(0,mhp),hp});
+          if(mhp<=0){ev.push({room:i,type:"kill"});break;}
+        }
+        monTurn=!monTurn;
       }
     }else if(it.kind==="trap"){
       if(g.disarm){ev.push({room:i,type:"disarm"});}
@@ -339,13 +392,13 @@ function simulate(){
   }
   if(!died)ev.push({type:"exit"});
   const worstKey=killer||Object.keys(dealt).sort((a,b)=>dealt[b]-dealt[a])[0]||null;
-  return {ev,hp:Math.max(0,hp),max:g.hp,died,met,trapHit,chestOk,chestEmpty,metSlime,hadSpring,worst:worstKey?ITEMS[worstKey].name:"门口的灰尘",goldAfterChests:gold};
+  return {ev,hp:Math.max(0,hp),max:g.hp,died,met,trapHit,chestOk,chestEmpty,metSlime,hadSpring,mimic,vamp,worst:worstKey?ITEMS[worstKey].name:"门口的灰尘",goldAfterChests:gold};
 }
 function rate(res,g){
   const q=g.quirk&&g.quirk.k;let s,tier;
   if(res.died){s=1;tier="dead";}
   else if(!res.met&&!res.trapHit){s=1;tier="empty";}
-  else{const r=res.hp/res.max;s=r<=(q==="hardcore"?0.15:0.3)?5:r<=0.6?4:r<=0.85?3:2;tier=String(s);
+  else{const r=res.hp/res.max;s=r<=(q==="hardcore"?0.15:g.role==="critic"?0.2:0.3)?5:r<=0.6?4:r<=0.85?3:2;tier=String(s);
     if(res.chestOk)s+=q==="greedy"?2:1;if(res.chestEmpty)s-=1;
     if(q==="noslime"&&res.metSlime)s-=1;if(q==="spa"&&res.hadSpring)s+=1;
     s=Math.max(1,Math.min(5,s));}
@@ -358,12 +411,16 @@ function rate(res,g){
   if(q==="spa"&&res.hadSpring&&!res.died)extra.push("泉水泡得舒服，加一星。");
   else if(res.healed&&!res.died)extra.push("泉水挺解乏。");
   if(q==="hardcore"&&!res.died&&res.hp/res.max<=0.3&&res.hp/res.max>0.15)extra.push("还差点意思，不够硬核。");
+  if(res.mimic&&!res.died)extra.push("宝箱居然会咬人！！");
+  if(res.vamp&&!res.died)extra.push("被吸了一身血，居然没死，奇妙的体验。");
+  if(g.role==="critic"&&!res.died&&res.hp/res.max<=0.3&&res.hp/res.max>0.2)extra.push("尚可，但离一流地牢还有距离。");
   let body=text+(extra.length?" "+extra.join(" "):"");
   if(g.role==="extort"){
     if(g.deal==="paid"){s=5;body=res.died?"人是死了，但钱收了。五星，童叟无欺。":"收钱办事，五星好评，童叟无欺。";}
     else{s=Math.max(1,s-2);body="不给钱是吧？"+body;}
   }
   if(g.role==="blogger")body=pick(BLOGGER_OPEN)+body+pick(BLOGGER_CLOSE);
+  if(g.role==="critic")body="【专业点评】"+body+" ——《地牢评论》";
   const html=(tier==="dead"&&!(g.role==="extort"&&g.deal==="paid")?`<span class="ghost">（亡魂代写）</span>`:"")+esc(body);
   return {stars:s,text:html};
 }
@@ -386,7 +443,7 @@ function buyFake(){
 }
 function decideExtort(pay){
   const g=S.guest;if(!g||g.role!=="extort"||g.deal||running)return;
-  if(pay){if(S.gold<EXTORT_FEE){say(`金币不够：他要 ${EXTORT_FEE} 金`,true);return;}S.gold-=EXTORT_FEE;g.deal="paid";S.fakeLive++;say(`给了 ${EXTORT_FEE} 金。他保证给五星，但这条好评也算刷单，被查概率现在是 ${Math.round(riskNow()*100)}%。`);}
+  if(pay){if(S.gold<EXTORT_FEE){say(`金币不够：他要 ${EXTORT_FEE} 金`,true);return;}S.gold-=EXTORT_FEE;g.deal="paid";S.fakeLive++;S.extortPaid++;say(`给了 ${EXTORT_FEE} 金。他保证给五星，但这条好评也算刷单，被查概率现在是 ${Math.round(riskNow()*100)}%。`);}
   else{g.deal="refused";say("不给。他冷笑一声：「等着瞧。」评价会被扣 2 星。");}
   render();
 }
@@ -397,8 +454,8 @@ async function runGuest(){
   if(running||S.over||!S.guest)return;
   if(S.guest.role==="extort"&&!S.guest.deal){say("先决定给不给差评师钱",true);return;}
   running=true;skipFlag=false;tool=null;selRoom=null;
-  const g=S.guest,wage=wagesNow();S.gold+=g.fee-wage;sfx.coin();
-  say(`${g.name}付了 ${g.fee} 金门票，怪物工资 ${wage} 金，进去了……`);
+  const g=S.guest;S.gold+=g.fee;sfx.coin();
+  say(`${g.name}付了 ${g.fee} 金门票，进去了……`);
   const res=simulate();
   res.disarmed=res.ev.some(e=>e.type==="disarm");res.healed=res.ev.some(e=>e.type==="heal"&&e.amount>0);
   render();setHp(g.hp,g.hp);
@@ -407,7 +464,7 @@ async function runGuest(){
     if(e.room!==undefined&&e.room!==here){here=e.room;markHere(here);}
     if(e.type==="enter"){await wait(380);continue;}
     if(e.type==="strike"){floatAt(e.room,`-${e.amount}`,"mon");sfx.hit();setMonHp(e.room,e.mhp);await wait(330);}
-    else if(e.type==="hurt"){floatAt(e.room,`-${e.amount}`,"adv");shake(e.room);sfx.hurt();setHp(e.hp,g.hp);await wait(380);}
+    else if(e.type==="hurt"){floatAt(e.room,e.amount?`-${e.amount}`:"吸不动了",e.amount?"adv":"mon");shake(e.room);sfx.hurt();setHp(e.hp,g.hp);await wait(380);}
     else if(e.type==="kill"){floatAt(e.room,"击败","mon");sfx.kill();await wait(280);}
     else if(e.type==="trap"){floatAt(e.room,`-${e.amount}`,"adv");shake(e.room);sfx.trap();setHp(e.hp,g.hp);await wait(420);}
     else if(e.type==="disarm"){floatAt(e.room,"拆了","mon");await wait(380);}
@@ -420,14 +477,14 @@ async function runGuest(){
   markHere(-1);
   S.gold=res.goldAfterChests;
   const r=rate(res,g);
-  const review={no:S.guestNo,name:g.name,type:g.t,role:g.role,stars:r.stars,text:r.text,hp:res.hp,max:res.max,died:res.died,weight:g.role==="blogger"?BLOGGER_WEIGHT:1,fake:g.role==="extort"&&g.deal==="paid"};
+  const review={no:S.guestNo,name:g.name,type:g.t,role:g.role,stars:r.stars,text:r.text,hp:res.hp,max:res.max,died:res.died,weight:g.role==="blogger"?BLOGGER_WEIGHT:g.role==="critic"?CRITIC_WEIGHT:1,fake:g.role==="extort"&&g.deal==="paid"};
   S.reviews.push(review);
   sfx.star(r.stars);
   const layout=S.rooms.map((k,i)=>k?ITEMS[k].glyph+(S.doors[i]?"":"关"):"空").join(" ");
-  const tag=g.role==="blogger"?"[博主×3]":g.role==="extort"?`[差评师:${g.deal==="paid"?"给钱":"拒绝"}]`:g.quirk?`[${g.quirk.t}]`:"";
+  const tag=g.role==="blogger"?"[博主×3]":g.role==="critic"?"[评论家×5]":g.role==="extort"?`[差评师:${g.deal==="paid"?"给钱":"拒绝"}]`:g.quirk?`[${g.quirk.t}]`:"";
   S.record.push(`#${S.guestNo} ${g.name}${tag}(${g.hp}血 ${g.atk}攻) | 布置 ${layout} | ${res.died?"阵亡":`剩 ${res.hp}/${res.max}（${Math.round(100*res.hp/res.max)}%）`} | ★${r.stars} | 金 ${S.gold}`);
   let m=res.died?`${g.name}没能出来。${r.stars>1?`钱收了，他还是给了 ${r.stars} 星。`:"收到一条亡魂差评。"}`
-    :`${g.name}出来了，剩 ${res.hp}/${res.max} 血，给了 ${r.stars} 星${g.role==="blogger"?"（博主评价算 3 条）":""}。`;
+    :`${g.name}出来了，剩 ${res.hp}/${res.max} 血，给了 ${r.stars} 星${g.role==="blogger"?"（博主评价算 3 条）":g.role==="critic"?"（评论家评价算 5 条）":""}。`;
   const busted=platformCheck();
   if(busted!==null){m+=` 平台核查！${busted} 条刷的好评被删，还挂上了一条一星公告。`;S.record.push(`  被平台查到刷单，删除 ${busted} 条`);sfx.die();}
   say(m);
@@ -467,18 +524,21 @@ function renderRooms(){
     h+=`<button class="room${it?" filled "+it.kind:""}${shut?" closed":""}" data-room="${i}" aria-label="第 ${i+1} 间${it?"："+it.name+(shut?"，门关着":"，门开着"):"：空"}">
       <span class="no">${i+1}</span>${it?`<span class="door">${shut?"门关着":"门开着"}</span>`:""}`;
     if(it){
-      h+=`<span class="glyph g-${it.kind}">${it.glyph}</span><span class="nm">${it.name}</span><span class="st">${it.kind==="monster"?`血 ${it.hp} · 攻 ${it.dmg} · 薪 ${it.wage}`:it.kind==="trap"?`伤 ${it.dmg}`:it.kind==="spring"?`回 ${it.heal}`:`开一次 ${CHEST_REFILL} 金`}</span>`;
+      h+=`<span class="glyph g-${it.kind}">${it.glyph}</span><span class="nm">${it.name}</span><span class="st">${it.kind==="monster"?`血 ${it.hp} · 攻 ${it.dmg}`:it.kind==="trap"?`伤 ${it.dmg}`:it.kind==="spring"?`回 ${it.heal}`:`开一次 ${CHEST_REFILL} 金`}</span>`;
       if(it.kind==="monster")h+=`<span class="hpbar"><i style="width:100%" data-mhp="${i}"></i></span>`;
     }else h+=`<span class="empty">空房间</span>`;
     h+=`</button>`;
   });
   h+=`<div class="gate">出口</div>`;
+  $("#strip").style.setProperty("--n",S.rooms.length);
   $("#strip").innerHTML=h;
 }
 function renderShop(){
-  const tools=Object.entries(ITEMS).map(([k,it])=>`<button class="tool" data-tool="${k}" aria-pressed="${tool===k}">
-    <span class="glyph g-${it.kind}">${it.glyph}</span><span class="t1">${it.name}<span class="c">${it.cost} 金</span></span><span class="t2">${it.desc}</span></button>`).join("");
-  $("#shop").innerHTML=tools+`<button class="tool" data-tool="demolish" aria-pressed="${tool==="demolish"}"><span class="glyph g-demolish">拆</span><span class="t1">拆除<span class="c">退一半</span></span><span class="t2">点房间拆掉里面的东西</span></button>`;
+  const tools=Object.entries(ITEMS).map(([k,it])=>S.unlocked.includes(k)?`<button class="tool" data-tool="${k}" aria-pressed="${tool===k}">
+    <span class="glyph g-${it.kind}">${it.glyph}</span><span class="t1">${it.name}<span class="c">${it.cost} 金</span></span><span class="t2">${it.desc}</span></button>`
+    :`<button class="tool locked" data-unlock="${k}"><span class="glyph g-${it.kind}">${it.glyph}</span><span class="t1">${it.name}<span class="c">解锁 ${it.unlock} 金</span></span><span class="t2">${it.desc}</span></button>`).join("");
+  $("#shop").innerHTML=tools+`<button class="tool" data-tool="demolish" aria-pressed="${tool==="demolish"}"><span class="glyph g-demolish">拆</span><span class="t1">拆除<span class="c">退一半</span></span><span class="t2">点房间拆掉里面的东西</span></button>`
+    +(S.rooms.length<MAX_ROOMS?`<button class="tool" data-expand="1"><span class="glyph g-demolish">扩</span><span class="t1">扩建一间<span class="c">${EXPAND_COST[S.rooms.length-6]} 金</span></span><span class="t2">加第 ${S.rooms.length+1} 间房（最多 ${MAX_ROOMS} 间）</span></button>`:"");
 }
 function renderGuest(){
   const g=S.guest;
@@ -488,6 +548,7 @@ function renderGuest(){
   $("#gStats").textContent=`血 ${g.hp} · 攻 ${g.atk} · 门票 ${g.fee} 金${g.disarm?" · 会拆陷阱":""}`;
   let tags="";
   if(g.role==="blogger")tags=`<span class="tag t-blog">探店博主 · 粉丝 ${g.fans} 万 · 评价算 ${BLOGGER_WEIGHT} 条</span>`;
+  else if(g.role==="critic")tags=`<span class="tag t-blog">地牢评论家 · 评价算 ${CRITIC_WEIGHT} 条 · 剩 20% 以内才给五星</span>`;
   else if(g.role==="extort")tags=`<span class="tag t-ext">差评师 · 要 ${EXTORT_FEE} 金，不给就扣 2 星${g.deal?`（已${g.deal==="paid"?"给钱":"拒绝"}）`:""}</span>`;
   else if(g.quirk)tags=`<span class="tag t-quirk">${g.quirk.t} · ${g.quirk.d}</span>`;
   $("#gTags").innerHTML=tags;
@@ -499,7 +560,7 @@ function renderFeed(fresh){
   const list=S.reviews.slice().reverse();
   const meta=r=>r.notice?"平台公告 · 权重 ×2":r.role==="extort"&&r.fake?"你花钱买的 · 算一条刷单":r.fake?"你刷的 · 只有你看得到这个标记":`#${r.no} · ${r.died?"阵亡":`剩 ${r.hp}/${r.max} 血`}${r.weight>1?` · 权重 ×${r.weight}`:""}`;
   $("#feed").innerHTML=list.length?list.map((r,i)=>`<article class="review${fresh&&i===0?" new":""}${r.notice?" notice":""}">
-    <div class="rhead"><span class="rname">${esc(r.name)}${r.role==="blogger"?` <span class="tag t-blog">博主</span>`:r.role==="extort"?` <span class="tag t-ext">差评师</span>`:r.fake?` <span class="tag t-fake">刷</span>`:""}</span><span class="stars">${starStr(r.stars)}</span></div>
+    <div class="rhead"><span class="rname">${esc(r.name)}${r.role==="blogger"?` <span class="tag t-blog">博主</span>`:r.role==="critic"?` <span class="tag t-blog">评论家</span>`:r.role==="extort"?` <span class="tag t-ext">差评师</span>`:r.fake?` <span class="tag t-fake">刷</span>`:""}</span><span class="stars">${starStr(r.stars)}</span></div>
     <div class="rtext">${r.text}</div>
     <div class="rmeta">${meta(r)}</div></article>`).join("")
     :`<div class="emptyfeed">还没有评价。放第一位冒险者进去吧。</div>`;
@@ -511,24 +572,33 @@ function renderTop(){
   $("#recent").textContent=S.reviews.length?recentAvg().toFixed(1):"–";
   $("#count").textContent=S.reviews.length;
   $("#gold").textContent=S.gold;
-  $("#wage").textContent=wagesNow();
   $("#fakeRisk").textContent=S.fakeLive?`在挂 ${S.fakeLive} 条 · 每次评价后 ${Math.round(riskNow()*100)}% 被查`:"没有在挂的刷单";
   $("#hint").textContent=tool?(tool==="demolish"?"点房间拆除":`点房间放置：${ITEMS[tool].name}`):"";
+}
+function renderGoals(){
+  $("#sub").textContent=`原型 v0.4 · 第 ${S.season}/${SEASONS_TOTAL} 季 · 每季 ${SEASON} 位冒险者`;
+  $("#goalTitle").textContent=`第 ${S.season} 季目标`;
+  const final=S.over;
+  $("#goals").innerHTML=seasonCfg().goals.map(gl=>{const st=goalState(gl,final);
+    const now=gl.k==="avg"&&S.reviews.length?` <span class="now">现在 ${avgOf(S.reviews).toFixed(2)}</span>`:gl.k==="deaths"?` <span class="now">已阵亡 ${S.reviews.filter(r=>r.died).length}</span>`:"";
+    return `<li class="${st}"><span class="ic">${st==="done"?"✓":st==="fail"?"✗":"○"}</span><span class="gt">${esc(gl.t)}${now}</span></li>`;}).join("");
 }
 function renderModal(){
   const m=$("#modal");
   if(!S.over){m.hidden=true;m.innerHTML="";return;}
   const a=avgOf(S.reviews);
-  const title=S.gold<0?"欠薪破产":a>=4.5?"年度最佳地牢":a>=3.8?"网红打卡地牢":a>=3?"街坊口碑地牢":"差评如潮";
+  const title=a>=4.5?"年度最佳地牢":a>=3.8?"网红打卡地牢":a>=3?"街坊口碑地牢":"差评如潮";
   const dead=S.reviews.filter(r=>r.died).length,five=S.reviews.filter(r=>r.stars===5).length;
   m.innerHTML=`<div class="sheet" role="dialog" aria-label="本季结算"><h2>${title}</h2>
     <div class="big"><span class="n">${a.toFixed(2)}</span><span class="stars">${starStr(a)}</span></div>
-    <div>${SEASON} 位冒险者里 ${dead} 位没能出来；评价区共 ${S.reviews.length} 条，${five} 条五星。刷单 ${S.fakeTotal} 条，被平台查到 ${S.busted} 次。期末金币 ${S.gold}。</div>
-    <div class="controls"><button class="btn primary" id="again">再开一季</button><button class="btn" id="copy2">复制试玩记录</button><span class="status" id="copyMsg2"></span></div></div>`;
+    <div>第 ${S.season} 季：${SEASON} 位冒险者里 ${dead} 位没能出来；评价区共 ${S.reviews.length} 条，${five} 条五星。刷单 ${S.fakeTotal} 条，给差评师钱 ${S.extortPaid} 次，被平台查到 ${S.busted} 次。</div>
+    <ul class="goals">${(S.goalResult||[]).map(x=>`<li class="${x.st}"><span class="ic">${x.st==="done"?"✓":"✗"}</span><span class="gt">${esc(x.t)}</span></li>`).join("")}</ul>
+    <div>目标奖励 <b>${S.bonus}</b> 金，现在金币 ${S.gold}。${S.season<SEASONS_TOTAL?"地牢、金币和解锁都会带进下一季，下一季的客人更强。":"三季全部结束。"}</div>
+    <div class="controls">${S.season<SEASONS_TOTAL?`<button class="btn primary" id="nextSeason">进入第 ${S.season+1} 季</button>`:""}<button class="btn" id="again">从第 1 季重来</button><button class="btn" id="copy2">复制试玩记录</button><span class="status" id="copyMsg2"></span></div></div>`;
   m.hidden=false;
 }
 function render(fresh){
-  renderTop();renderRooms();renderShop();renderGuest();renderFeed(fresh);renderModal();
+  renderTop();renderRooms();renderShop();renderGuest();renderFeed(fresh);renderGoals();renderModal();
   $("#go").disabled=running||S.over||(S.guest&&S.guest.role==="extort"&&!S.guest.deal);$("#skip").disabled=!running;
   $("#fake").disabled=running||S.over;
   const el=$("#status");el.textContent=S.msg;el.className="status"+(S.err?" err":"");
@@ -548,7 +618,7 @@ function setMonHp(i,mhp){const bar=document.querySelector(`[data-mhp="${i}"]`);c
 /* ---------- record ---------- */
 function recordText(){
   const a=avgOf(S.reviews);
-  return [`地牢点评网原型 v0.3 试玩记录（种子 ${S.seed0}）`,...S.record,`—— 汇总 ——`,`评价 ${S.reviews.length} 条（含刷单 ${S.reviews.filter(r=>r.fake).length}），加权平均 ${a.toFixed(2)}，五星 ${S.reviews.filter(r=>r.stars===5).length}，阵亡 ${S.reviews.filter(r=>r.died).length}，共刷 ${S.fakeTotal} 条、被查 ${S.busted} 次，金币 ${S.gold}`].join("\n");
+  return [`地牢点评网原型 v0.4 试玩记录（种子 ${S.seed0}）`,...S.record,`—— 当前第 ${S.season} 季汇总 ——`,`评价 ${S.reviews.length} 条（含刷单 ${S.reviews.filter(r=>r.fake).length}），加权平均 ${a.toFixed(2)}，五星 ${S.reviews.filter(r=>r.stars===5).length}，阵亡 ${S.reviews.filter(r=>r.died).length}，共刷 ${S.fakeTotal} 条、给差评师钱 ${S.extortPaid} 次、被查 ${S.busted} 次，金币 ${S.gold}`].join("\n");
 }
 function copyRecord(sel){
   const txt=recordText(),box=$("#recordBox");
@@ -558,7 +628,16 @@ function copyRecord(sel){
 
 /* ---------- events ---------- */
 $("#strip").addEventListener("click",e=>{const b=e.target.closest("[data-room]");if(b)clickRoom(+b.dataset.room);});
-$("#shop").addEventListener("click",e=>{const b=e.target.closest("[data-tool]");if(!b||running)return;const k=b.dataset.tool;tool=tool===k?null:k;selRoom=null;
+$("#shop").addEventListener("click",e=>{
+  const x=e.target.closest("[data-expand]");
+  if(x&&!running){const c=EXPAND_COST[S.rooms.length-6];
+    if(S.gold<c){say(`金币不够：扩建要 ${c} 金`,true);return;}
+    S.gold-=c;S.rooms.push(null);S.doors.push(true);S.record.push(`  扩建到 ${S.rooms.length} 间（−${c} 金）`);say(`扩建好了，现在有 ${S.rooms.length} 间房。`);sfx.coin();render();return;}
+  const u=e.target.closest("[data-unlock]");
+  if(u&&!running){const k=u.dataset.unlock,it=ITEMS[k];
+    if(S.gold<it.unlock){say(`金币不够：解锁${it.name}要 ${it.unlock} 金`,true);return;}
+    S.gold-=it.unlock;S.unlocked.push(k);S.record.push(`  解锁${it.name}（−${it.unlock} 金）`);say(`解锁了${it.name}！现在可以花 ${it.cost} 金放进房间。`);sfx.coin();render();return;}
+  const b=e.target.closest("[data-tool]");if(!b||running)return;const k=b.dataset.tool;tool=tool===k?null:k;selRoom=null;
   say(tool?(tool==="demolish"?"点一个房间拆掉里面的东西":`点一个房间放置${ITEMS[tool].name}`):"");render();});
 $("#go").addEventListener("click",()=>{audio();runGuest();});
 $("#pay").addEventListener("click",()=>decideExtort(true));
@@ -568,9 +647,10 @@ $("#speed").addEventListener("click",()=>{speed=speed===1?3:1;$("#speed").setAtt
 $("#skip").addEventListener("click",()=>{skipFlag=true;});
 $("#mute").addEventListener("click",()=>{muted=!muted;$("#mute").setAttribute("aria-pressed",String(muted));$("#mute").textContent=muted?"已静音":"静音";});
 $("#copyRec").addEventListener("click",()=>copyRecord("#copyMsg"));
-$("#restart").addEventListener("click",()=>{if(running)return;newSeason();tool=null;selRoom=null;render();});
+$("#restart").addEventListener("click",()=>{if(running)return;newGame();tool=null;selRoom=null;render();});
 $("#modal").addEventListener("click",e=>{
-  if(e.target.closest("#again")){newSeason();tool=null;selRoom=null;render();}
+  if(e.target.closest("#nextSeason")){S.record.push(`→ 选择进入第 ${S.season+1} 季`);startSeason(S.season+1);tool=null;selRoom=null;say(`第 ${S.season} 季开始。客人更强了，看看右边的新目标。`);render();}
+  else if(e.target.closest("#again")){newGame();tool=null;selRoom=null;render();}
   else if(e.target.closest("#copy2"))copyRecord("#copyMsg2");
 });
 document.addEventListener("keydown",e=>{
@@ -579,6 +659,6 @@ document.addEventListener("keydown",e=>{
   else if(e.key==="Escape"){tool=null;selRoom=null;say("");render();}
 });
 
-newSeason();render();
+newGame();render();
 })();
 </script>
