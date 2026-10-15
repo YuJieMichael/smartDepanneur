@@ -1,0 +1,579 @@
+<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head><body><title>地牢点评网原型</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;600&family=ZCOOL+KuaiLe&display=swap">
+<style>
+/* Layout: a review-site page for your dungeon. Rating header on top; the dungeon strip and its controls on the left;
+   the review feed on the right. Stacks to one column on phones. Moss = your dungeon, amber = stars, brick = danger. */
+:root{
+  --bg:#eceee7; --surface:#ffffff; --surface-2:#f5f6f1; --fg:#1e2320; --muted:#5d6861; --line:#d3d9cf;
+  --moss:#3d7a57; --amber:#d99a16; --brick:#c2452e; --gold:#a97a10; --stone:#8a948b;
+  --display:"ZCOOL KuaiLe","PingFang SC","Microsoft YaHei",sans-serif;
+  --body:"PingFang SC","Hiragino Sans GB","Microsoft YaHei","Noto Sans SC",system-ui,sans-serif;
+  --mono:"IBM Plex Mono",ui-monospace,Menlo,monospace;
+}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
+  --bg:#131714; --surface:#1c211d; --surface-2:#232924; --fg:#e7ebe5; --muted:#9aa59d; --line:#2f3731;
+  --moss:#6dbb8c; --amber:#f0b534; --brick:#e2674f; --gold:#ddb14f; --stone:#77827a; color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#131714; --surface:#1c211d; --surface-2:#232924; --fg:#e7ebe5; --muted:#9aa59d; --line:#2f3731;
+  --moss:#6dbb8c; --amber:#f0b534; --brick:#e2674f; --gold:#ddb14f; --stone:#77827a; color-scheme:dark}
+html,body{background:var(--bg);color:var(--fg)}
+[hidden]{display:none!important}
+body{font-family:var(--body);font-size:14px;line-height:1.55;
+  padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));padding-block:14px 32px}
+button{font:inherit;color:inherit;cursor:pointer}
+button:focus-visible,summary:focus-visible{outline:2px solid var(--moss);outline-offset:2px}
+.wrap{max-width:1180px;margin:0 auto;display:flex;flex-direction:column;gap:14px}
+.top{display:flex;flex-wrap:wrap;gap:12px 24px;align-items:flex-end;justify-content:space-between;background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:14px 18px}
+.brand{display:flex;flex-direction:column;gap:2px}
+.brand h1{font-family:var(--display);font-weight:400;font-size:30px;margin:0;line-height:1.1;color:var(--moss)}
+.brand .sub{color:var(--muted);font-size:13px}
+.score{display:flex;gap:20px;align-items:flex-end;flex-wrap:wrap}
+.big{display:flex;align-items:baseline;gap:8px}
+.big .n{font-family:var(--mono);font-size:40px;font-weight:600;line-height:1;font-variant-numeric:tabular-nums}
+.stars{color:var(--amber);letter-spacing:1px;white-space:nowrap}
+.stars .off{color:var(--line)}
+.kv{display:flex;flex-direction:column;gap:2px}
+.kv .k{font-size:11.5px;letter-spacing:.12em;color:var(--muted)}
+.kv .v{font-family:var(--mono);font-size:20px;font-variant-numeric:tabular-nums}
+.v.gold{color:var(--gold)}
+.grid{display:grid;grid-template-columns:minmax(0,1.6fr) minmax(0,1fr);gap:16px;align-items:start}
+@media (max-width:900px){.grid{grid-template-columns:minmax(0,1fr)}}
+.col{display:flex;flex-direction:column;gap:14px;min-width:0}
+.card{background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:14px;display:flex;flex-direction:column;gap:10px;min-width:0}
+.label{font-size:11.5px;letter-spacing:.14em;color:var(--muted)}
+.rowx{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap}
+/* dungeon */
+.strip{display:grid;grid-template-columns:auto repeat(6,minmax(0,1fr)) auto;gap:6px;align-items:stretch}
+@media (max-width:620px){.strip{grid-template-columns:repeat(3,minmax(0,1fr))}.gate{display:none}}
+.gate{writing-mode:vertical-rl;font-size:12px;color:var(--muted);display:flex;align-items:center;justify-content:center;padding:0 2px;letter-spacing:.3em}
+.room{position:relative;aspect-ratio:3/4;max-width:100%;background:var(--surface-2);border:1.5px dashed var(--line);border-radius:10px;
+  display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;padding:6px 4px;text-align:center;overflow:visible}
+.room.filled{border-style:solid}
+.room.monster{border-color:color-mix(in srgb,var(--brick) 55%,var(--line))}
+.room.sel{outline:2.5px solid var(--moss);outline-offset:2px}
+.room.here{box-shadow:0 0 0 3px var(--amber);border-color:var(--amber)}
+.room .no{position:absolute;top:4px;left:7px;font-family:var(--mono);font-size:11px;color:var(--muted)}
+.glyph{font-family:var(--display);font-size:30px;line-height:1;width:46px;height:46px;border-radius:12px;display:flex;align-items:center;justify-content:center;color:#fff}
+.g-monster{background:var(--brick)} .g-trap{background:var(--stone)} .g-chest{background:var(--gold)} .g-spring{background:var(--moss)}
+.room .nm{font-size:12.5px;font-weight:600}
+.room .st{font-family:var(--mono);font-size:11px;color:var(--muted)}
+.room .empty{color:var(--muted);font-size:12px}
+.hpbar{width:80%;height:5px;border-radius:3px;background:var(--line);overflow:hidden}
+.hpbar>i{display:block;height:100%;background:var(--brick)}
+.adv-chip{position:absolute;bottom:-12px;left:50%;transform:translateX(-50%);background:var(--amber);color:#1e1a10;font-family:var(--display);font-size:16px;width:28px;height:28px;border-radius:50%;display:flex;align-items:center;justify-content:center;box-shadow:0 1px 3px rgba(0,0,0,.25);z-index:2}
+.float{position:absolute;left:50%;top:30%;transform:translateX(-50%);font-family:var(--mono);font-weight:600;font-size:18px;pointer-events:none;z-index:3;white-space:nowrap}
+.float.adv{color:var(--brick)} .float.mon{color:var(--muted)} .float.heal{color:var(--moss)} .float.gold{color:var(--gold)}
+@media (prefers-reduced-motion:no-preference){
+  .float{animation:rise .9s ease-out forwards}
+  @keyframes rise{from{opacity:1;transform:translate(-50%,0)}to{opacity:0;transform:translate(-50%,-34px)}}
+  .room.hit{animation:shake .25s}
+  @keyframes shake{0%,100%{translate:0}25%{translate:-3px}75%{translate:3px}}
+  .review.new{animation:pop .45s ease-out}
+  @keyframes pop{from{transform:scale(.96);opacity:0}to{transform:none;opacity:1}}
+}
+/* guest + controls */
+.guest{display:grid;grid-template-columns:auto minmax(0,1fr);gap:12px;align-items:center}
+.avatar{width:52px;height:52px;border-radius:50%;background:var(--amber);color:#1e1a10;font-family:var(--display);font-size:26px;display:flex;align-items:center;justify-content:center}
+.gname{font-weight:600;font-size:15px}
+.gstats{font-family:var(--mono);font-size:13px;color:var(--muted)}
+.ghp{height:8px;border-radius:4px;background:var(--line);overflow:hidden;margin-top:4px}
+.ghp>i{display:block;height:100%;background:var(--amber);transition:width .2s}
+.controls{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+.btn{background:var(--surface-2);border:1px solid var(--line);border-radius:8px;padding:8px 14px}
+.btn:disabled{opacity:.45;cursor:default}
+.btn.primary{background:var(--moss);border-color:var(--moss);color:var(--surface);font-weight:600}
+.btn[aria-pressed="true"]{border-color:var(--moss);box-shadow:inset 0 -2px 0 var(--moss)}
+.spacer{flex:1}
+.status{min-height:22px;color:var(--muted);font-size:13.5px}
+.status.err{color:var(--brick)}
+.shop{display:grid;grid-template-columns:repeat(auto-fill,minmax(min(100%,150px),1fr));gap:8px}
+.tool{display:grid;grid-template-columns:auto minmax(0,1fr);gap:4px 10px;align-items:center;text-align:left;background:var(--surface-2);border:1px solid var(--line);border-radius:10px;padding:8px 10px}
+.tool[aria-pressed="true"]{border-color:var(--moss);box-shadow:0 0 0 1.5px var(--moss)}
+.tool .glyph{width:34px;height:34px;font-size:20px;border-radius:9px;grid-row:span 2}
+.tool .t1{font-weight:600;font-size:13.5px;display:flex;justify-content:space-between;gap:6px}
+.tool .t1 .c{font-family:var(--mono);color:var(--gold);font-weight:400}
+.tool .t2{font-size:11.5px;color:var(--muted);line-height:1.35}
+.g-demolish{background:var(--muted)}
+/* reviews */
+.feed{display:flex;flex-direction:column;gap:10px}
+.review{border-top:1px solid var(--line);padding-top:10px;display:flex;flex-direction:column;gap:4px}
+.review:first-child{border-top:0;padding-top:0}
+.rhead{display:flex;justify-content:space-between;gap:8px;align-items:baseline;flex-wrap:wrap}
+.rname{font-weight:600}
+.rmeta{font-family:var(--mono);font-size:11.5px;color:var(--muted)}
+.rtext{font-size:14px}
+.rtext .ghost{color:var(--muted);font-style:italic}
+.emptyfeed{color:var(--muted);font-size:13px}
+.gtags{display:flex;flex-wrap:wrap;gap:6px;margin-top:4px}
+.tag{display:inline-block;font-size:11.5px;line-height:1.5;padding:0 7px;border-radius:999px;border:1px solid currentColor;font-weight:400;white-space:nowrap}
+.t-blog{color:var(--moss)} .t-ext{color:var(--brick)} .t-quirk{color:var(--gold)} .t-fake{color:var(--muted)}
+.review.notice{background:color-mix(in srgb,var(--brick) 8%,transparent);border-radius:8px;padding:8px 10px;border-top:0}
+.rules{margin:0;padding-left:18px;display:flex;flex-direction:column;gap:3px}
+.rules b{color:var(--amber)}
+details{background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:10px 14px}
+summary{cursor:pointer;color:var(--muted)}
+details[open] summary{margin-bottom:8px}
+textarea#recordBox{width:100%;min-height:180px;background:var(--surface-2);color:var(--fg);border:1px solid var(--line);border-radius:8px;font:12.5px/1.5 var(--mono);padding:10px;box-sizing:border-box}
+.modal{position:fixed;inset:0;background:color-mix(in srgb,var(--bg) 80%,transparent);display:flex;align-items:center;justify-content:center;z-index:10;
+  padding:max(16px,env(safe-area-inset-top,0px)) max(16px,env(safe-area-inset-right,0px)) max(16px,env(safe-area-inset-bottom,0px)) max(16px,env(safe-area-inset-left,0px));overflow:auto}
+.sheet{background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:22px;max-width:560px;width:100%;display:flex;flex-direction:column;gap:12px}
+.sheet h2{font-family:var(--display);font-weight:400;font-size:30px;margin:0;color:var(--moss)}
+</style>
+
+<div class="wrap">
+  <section class="top">
+    <div class="brand">
+      <h1>地牢点评网</h1>
+      <div class="sub" id="sub">原型 v0.2 · 本季 15 位冒险者 · 冲刺年度最佳地牢</div>
+    </div>
+    <div class="score">
+      <div class="kv"><span class="k">综合评分</span>
+        <div class="big"><span class="n" id="avg">–</span><span class="stars" id="avgStars"></span></div></div>
+      <div class="kv"><span class="k">近 5 条</span><span class="v" id="recent">–</span></div>
+      <div class="kv"><span class="k">评价数</span><span class="v" id="count">0</span></div>
+      <div class="kv"><span class="k">金币</span><span class="v gold" id="gold">0</span></div>
+    </div>
+  </section>
+
+  <div class="grid">
+    <div class="col">
+      <section class="card">
+        <div class="rowx"><span class="label">你的地牢 · 冒险者从左往右闯</span><span class="label" id="hint"></span></div>
+        <div class="strip" id="strip"></div>
+      </section>
+
+      <section class="card">
+        <div class="guest">
+          <div class="avatar" id="gAvatar">勇</div>
+          <div>
+            <div class="gname" id="gName"></div>
+            <div class="gstats" id="gStats"></div>
+            <div class="gtags" id="gTags"></div>
+            <div class="ghp"><i id="gHp" style="width:100%"></i></div>
+          </div>
+        </div>
+        <div class="controls" id="extort" hidden>
+          <button class="btn" id="pay">给他 20 金（保证五星）</button>
+          <button class="btn" id="refuse">不给（他的评价扣 2 星）</button>
+        </div>
+        <div class="controls">
+          <button class="btn primary" id="go">放 TA 进来 <span class="rmeta">空格</span></button>
+          <button class="btn" id="speed" aria-pressed="false">3 倍速</button>
+          <button class="btn" id="skip" disabled>跳过动画</button>
+          <span class="spacer"></span>
+          <button class="btn" id="mute" aria-pressed="false">静音</button>
+        </div>
+        <div class="status" id="status" aria-live="polite"></div>
+      </section>
+
+      <section class="card">
+        <div class="label">招兵买马 · 先选一项，再点房间放置；不选工具时点两个房间可以互换</div>
+        <div class="shop" id="shop"></div>
+      </section>
+    </div>
+
+    <div class="col">
+      <section class="card">
+        <div class="rowx"><span class="label">最新点评</span>
+          <button class="btn" id="fake">刷一条五星（15 金）</button></div>
+        <div class="rmeta" id="fakeRisk"></div>
+        <div class="feed" id="feed"></div>
+      </section>
+      <section class="card">
+        <div class="label">星级怎么算</div>
+        <ul class="rules">
+          <li>出来时剩 <b>30% 以内</b>的血：★★★★★（差点死了，最刺激）</li>
+          <li>剩 30–60%：★★★★；60–85%：★★★；85% 以上：★★（太无聊）</li>
+          <li>死在里面：★（不过他的钱包归你）</li>
+          <li>开到有钱的宝箱 +1 星；宝箱是空的 −1 星</li>
+          <li>一只怪都没碰到：★</li>
+          <li>有些客人带偏好（讨厌史莱姆、爱泡温泉、财迷、硬核玩家），进门前能看到</li>
+          <li>探店博主的评价算 3 条；差评师进门前要钱，不给扣 2 星</li>
+          <li>刷好评：每条在挂的假评价让每次真实评价后的被查概率 +12%，被查就全删，外加一条一星公告</li>
+          <li>近 5 条评价越高，来的冒险者越强、门票越贵</li>
+        </ul>
+      </section>
+    </div>
+  </div>
+
+  <div class="controls">
+    <button class="btn" id="copyRec">复制试玩记录</button>
+    <button class="btn" id="restart">重开一季</button>
+    <span class="status" id="copyMsg"></span>
+  </div>
+  <textarea id="recordBox" hidden readonly aria-label="试玩记录"></textarea>
+</div>
+<div class="modal" id="modal" hidden></div>
+
+<script>
+(function(){
+"use strict";
+const SEASON=15, ROOMS=6, START_GOLD=50, CHEST_REFILL=15;
+const ITEMS={
+  slime:{name:"史莱姆",glyph:"史",kind:"monster",hp:4,dmg:2,cost:5,desc:"血 4 · 攻 2"},
+  skel:{name:"骷髅兵",glyph:"骷",kind:"monster",hp:9,dmg:4,cost:12,desc:"血 9 · 攻 4"},
+  troll:{name:"巨魔",glyph:"魔",kind:"monster",hp:22,dmg:8,cost:30,desc:"血 22 · 攻 8"},
+  spike:{name:"地刺",glyph:"刺",kind:"trap",dmg:5,cost:8,desc:"踩到掉 5 血；盗贼会拆"},
+  chest:{name:"宝箱",glyph:"箱",kind:"chest",cost:4,desc:`每被开一次花 ${CHEST_REFILL} 金；+1 星`},
+  spring:{name:"泉水",glyph:"泉",kind:"spring",heal:8,cost:6,desc:"回 8 血，用来微调难度"}
+};
+const ADV={
+  novice:{t:"新手",g:"新",hp:14,atk:3,fee:6},
+  rogue:{t:"盗贼",g:"盗",hp:18,atk:4,fee:8,disarm:true},
+  warrior:{t:"战士",g:"战",hp:28,atk:5,fee:10},
+  mage:{t:"法师",g:"法",hp:13,atk:9,fee:12},
+  knight:{t:"骑士",g:"骑",hp:45,atk:7,fee:18},
+  hero:{t:"勇者",g:"勇",hp:70,atk:10,fee:28}
+};
+const POOLS=[[0,["novice","novice","rogue","warrior"]],[3,["warrior","rogue","mage","knight"]],[4,["knight","mage","hero","warrior"]]];
+const NAMES=["小王","阿强","豆豆","李叔","蘑菇","小七","老张","大壮","阿花","米粒","铁蛋","糯米"];
+const REV={
+  5:["差点死在{worst}手里，太刺激了！下次还来。","进去满血，出来只剩 {hp} 口气。五星，强烈推荐。","{worst}那一下我以为要交代了，值回票价！","腿还在抖。这才叫地牢。"],
+  4:["挺带劲的，{worst}有点东西。","难度刚好，就是出来有点累。","整体不错，{worst}可以再凶一点。"],
+  3:["还行吧，没什么记忆点。","就……一般。{worst}还挺可爱的。","中规中矩，适合带新人来。"],
+  2:["这也叫地牢？我是来散步的。","全程没掉几滴血，无聊。","{worst}看到我就怂了吧？太水了。"],
+  dead:["我死了。差评。","被{worst}送走了。退钱！哦不对，我已经死了。","一星，因为不能给零星。"],
+  empty:["这是个空房子吧？","老板人呢？怪物呢？我自己逛了一圈就出来了。"]
+};
+const QUIRKS=[
+  {k:"noslime",t:"讨厌史莱姆",d:"碰到史莱姆 −1 星"},
+  {k:"spa",t:"爱泡温泉",d:"路过泉水 +1 星"},
+  {k:"greedy",t:"财迷",d:"开到宝箱 +2 星（平时 +1）"},
+  {k:"hardcore",t:"硬核玩家",d:"剩 15% 以内的血才给五星"}
+];
+const SPECIAL={3:"blogger",6:"extort",9:"blogger",12:"extort",14:"blogger"};
+const BLOGGER_WEIGHT=3, EXTORT_FEE=20, FAKE_COST=15, FAKE_RISK=0.12;
+const FAKE_TEXT=["好评！五星！服务周到！","环境好，怪物专业，下次还来。","性价比很高，推荐给朋友了。","五星好评，老板人很好。"];
+const BLOGGER_OPEN=["家人们谁懂啊！","【探店】","探店第 37 家地牢："];
+const BLOGGER_CLOSE=[" #地牢探店"," 关注我，带你打卡更多地牢！"," 已收藏。"];
+
+let S=null, tool=null, selRoom=null, running=false, speed=1, skipFlag=false, muted=false;
+const $=s=>document.querySelector(s);
+const esc=s=>String(s).replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+
+/* ---------- seeded rng ---------- */
+function rng(){S.seed=(S.seed*16807)%2147483647;return S.seed/2147483647;}
+const pick=a=>a[Math.floor(rng()*a.length)];
+
+/* ---------- state ---------- */
+function newSeason(){
+  const seed=(Date.now()%2147483646)+1;
+  S={seed,seed0:seed,gold:START_GOLD,rooms:Array(ROOMS).fill(null),reviews:[],record:[],guestNo:0,guest:null,msg:"",err:false,over:false,fakeLive:0,fakeTotal:0,busted:0};
+  S.rooms[1]="slime";S.rooms[3]="skel";
+  S.gold-=ITEMS.slime.cost+ITEMS.skel.cost;
+  nextGuest();
+  S.msg="开业了！先看看第一位客人的血量和攻击，再调整房间。";
+}
+const wOf=r=>r.weight||1;
+const avgOf=a=>{const w=a.reduce((t,r)=>t+wOf(r),0);return w?a.reduce((t,r)=>t+r.stars*wOf(r),0)/w:0;};
+const recentAvg=()=>{const r=S.reviews.slice(-5);return r.length?avgOf(r):3;};
+const riskNow=()=>Math.min(0.9,S.fakeLive*FAKE_RISK);
+function nextGuest(){
+  if(S.guestNo>=SEASON){S.guest=null;S.over=true;return;}
+  const r=recentAvg();let pool=POOLS[0][1];POOLS.forEach(([min,p])=>{if(r>=min)pool=p;});
+  const k=pick(pool),d=ADV[k];
+  S.guestNo++;
+  const role=SPECIAL[S.guestNo]||"normal",nm=pick(NAMES);
+  const g={k,...d,role,quirk:null,deal:null,name:d.t+nm};
+  if(role==="blogger"){g.name=`探店博主·${nm}`;g.fans=(1+Math.floor(rng()*90)/10).toFixed(1);}
+  else if(role==="extort")g.name=`差评师·${nm}`;
+  else if(rng()<0.5)g.quirk=pick(QUIRKS);
+  S.guest=g;
+}
+
+/* ---------- audio ---------- */
+let ac=null;
+function audio(){if(muted)return null;try{if(!ac)ac=new (window.AudioContext||window.webkitAudioContext)();if(ac.state==="suspended")ac.resume();}catch(e){ac=null;}return ac;}
+function blip(freq,dur,vol,type,slide){
+  const a=audio();if(!a)return;
+  const o=a.createOscillator(),g=a.createGain();o.type=type||"square";o.frequency.setValueAtTime(freq,a.currentTime);
+  if(slide)o.frequency.exponentialRampToValueAtTime(slide,a.currentTime+dur);
+  g.gain.setValueAtTime(vol,a.currentTime);g.gain.exponentialRampToValueAtTime(0.0001,a.currentTime+dur);
+  o.connect(g).connect(a.destination);o.start();o.stop(a.currentTime+dur+0.02);
+}
+const sfx={
+  hit:()=>blip(180,0.08,0.08,"square",90),
+  hurt:()=>blip(120,0.12,0.12,"sawtooth",60),
+  kill:()=>blip(520,0.15,0.08,"triangle",260),
+  heal:()=>blip(600,0.18,0.06,"sine",900),
+  coin:()=>{blip(988,0.08,0.06,"square");setTimeout(()=>blip(1319,0.12,0.06,"square"),70);},
+  trap:()=>blip(90,0.15,0.14,"sawtooth",50),
+  die:()=>blip(300,0.6,0.12,"triangle",60),
+  star:n=>{for(let i=0;i<n;i++)setTimeout(()=>blip(660+i*110,0.1,0.06,"triangle"),i*90);}
+};
+
+/* ---------- simulation ---------- */
+function vary(x){return Math.max(1,Math.round(x*(0.8+rng()*0.4)));}
+function simulate(){
+  const g=S.guest,ev=[];let hp=g.hp,gold=S.gold,met=false,trapHit=false,chestOk=false,chestEmpty=false,dealt={},died=false,killer=null,metSlime=false,hadSpring=false;
+  for(let i=0;i<ROOMS&&!died;i++){
+    const k=S.rooms[i];if(!k)continue;const it=ITEMS[k];
+    ev.push({room:i,type:"enter"});
+    if(it.kind==="monster"){
+      met=true;if(k==="slime")metSlime=true;let mhp=it.hp;
+      for(;;){
+        const a=vary(g.atk);mhp-=a;ev.push({room:i,type:"strike",amount:a,mhp:Math.max(0,mhp),hp});
+        if(mhp<=0){ev.push({room:i,type:"kill"});break;}
+        const d=vary(it.dmg);hp-=d;dealt[k]=(dealt[k]||0)+d;ev.push({room:i,type:"hurt",amount:d,hp:Math.max(0,hp),mhp});
+        if(hp<=0){died=true;killer=k;ev.push({room:i,type:"die"});break;}
+      }
+    }else if(it.kind==="trap"){
+      if(g.disarm){ev.push({room:i,type:"disarm"});}
+      else{trapHit=true;hp-=it.dmg;dealt[k]=(dealt[k]||0)+it.dmg;ev.push({room:i,type:"trap",amount:it.dmg,hp:Math.max(0,hp)});
+        if(hp<=0){died=true;killer=k;ev.push({room:i,type:"die"});}}
+    }else if(it.kind==="chest"){
+      if(gold>=CHEST_REFILL){gold-=CHEST_REFILL;chestOk=true;ev.push({room:i,type:"chest",amount:CHEST_REFILL});}
+      else{chestEmpty=true;ev.push({room:i,type:"chestEmpty"});}
+    }else if(it.kind==="spring"){
+      hadSpring=true;const h=Math.min(it.heal,g.hp-hp);hp+=h;ev.push({room:i,type:"heal",amount:h,hp});
+    }
+  }
+  if(!died)ev.push({type:"exit"});
+  const worstKey=killer||Object.keys(dealt).sort((a,b)=>dealt[b]-dealt[a])[0]||null;
+  return {ev,hp:Math.max(0,hp),max:g.hp,died,met,trapHit,chestOk,chestEmpty,metSlime,hadSpring,worst:worstKey?ITEMS[worstKey].name:"门口的灰尘",goldAfterChests:gold};
+}
+function rate(res,g){
+  const q=g.quirk&&g.quirk.k;let s,tier;
+  if(res.died){s=1;tier="dead";}
+  else if(!res.met&&!res.trapHit){s=1;tier="empty";}
+  else{const r=res.hp/res.max;s=r<=(q==="hardcore"?0.15:0.3)?5:r<=0.6?4:r<=0.85?3:2;tier=String(s);
+    if(res.chestOk)s+=q==="greedy"?2:1;if(res.chestEmpty)s-=1;
+    if(q==="noslime"&&res.metSlime)s-=1;if(q==="spa"&&res.hadSpring)s+=1;
+    s=Math.max(1,Math.min(5,s));}
+  let text=pick(REV[tier]).replace("{worst}",res.worst).replace("{hp}",res.hp);
+  const extra=[];
+  if(res.chestOk)extra.push(q==="greedy"?"宝箱！宝箱！加两星！":"宝箱里真有钱，加一星。");
+  if(res.chestEmpty)extra.push("宝箱是空的，骗子。");
+  if(res.disarmed)extra.push("陷阱做得太糙，我顺手就拆了。");
+  if(q==="noslime"&&res.metSlime&&!res.died)extra.push("又是史莱姆，黏糊糊的，扣一星。");
+  if(q==="spa"&&res.hadSpring&&!res.died)extra.push("泉水泡得舒服，加一星。");
+  else if(res.healed&&!res.died)extra.push("泉水挺解乏。");
+  if(q==="hardcore"&&!res.died&&res.hp/res.max<=0.3&&res.hp/res.max>0.15)extra.push("还差点意思，不够硬核。");
+  let body=text+(extra.length?" "+extra.join(" "):"");
+  if(g.role==="extort"){
+    if(g.deal==="paid"){s=5;body=res.died?"人是死了，但钱收了。五星，童叟无欺。":"收钱办事，五星好评，童叟无欺。";}
+    else{s=Math.max(1,s-2);body="不给钱是吧？"+body;}
+  }
+  if(g.role==="blogger")body=pick(BLOGGER_OPEN)+body+pick(BLOGGER_CLOSE);
+  const html=(tier==="dead"&&!(g.role==="extort"&&g.deal==="paid")?`<span class="ghost">（亡魂代写）</span>`:"")+esc(body);
+  return {stars:s,text:html};
+}
+function platformCheck(){
+  if(!S.fakeLive)return null;
+  const p=riskNow();if(rng()>=p)return null;
+  const removed=S.reviews.filter(r=>r.fake).length;
+  S.reviews=S.reviews.filter(r=>!r.fake);S.fakeLive=0;S.busted++;
+  S.reviews.push({name:"平台公告",type:"公告",stars:1,weight:2,notice:true,text:esc(`经核查，该商家存在刷单行为，已删除 ${removed} 条虚假评价。`),no:S.guestNo});
+  return removed;
+}
+function buyFake(){
+  if(running||S.over)return;
+  if(S.gold<FAKE_COST){say(`金币不够：刷一条要 ${FAKE_COST} 金`,true);return;}
+  S.gold-=FAKE_COST;S.fakeLive++;S.fakeTotal++;
+  S.reviews.push({name:"用户"+(1000+Math.floor(rng()*9000)),type:"刷单",stars:5,fake:true,text:esc(pick(FAKE_TEXT)),no:S.guestNo});
+  S.record.push(`  刷了一条五星（在挂 ${S.fakeLive} 条，被查概率 ${Math.round(riskNow()*100)}%）`);
+  say(`刷了一条五星好评。现在每次真实评价后，有 ${Math.round(riskNow()*100)}% 的概率被平台核查。`);
+  render(true);
+}
+function decideExtort(pay){
+  const g=S.guest;if(!g||g.role!=="extort"||g.deal||running)return;
+  if(pay){if(S.gold<EXTORT_FEE){say(`金币不够：他要 ${EXTORT_FEE} 金`,true);return;}S.gold-=EXTORT_FEE;g.deal="paid";say(`给了 ${EXTORT_FEE} 金。他保证给五星。`);}
+  else{g.deal="refused";say("不给。他冷笑一声：「等着瞧。」评价会被扣 2 星。");}
+  render();
+}
+
+/* ---------- run ---------- */
+const wait=ms=>new Promise(r=>setTimeout(r,skipFlag?0:ms/speed));
+async function runGuest(){
+  if(running||S.over||!S.guest)return;
+  if(S.guest.role==="extort"&&!S.guest.deal){say("先决定给不给差评师钱",true);return;}
+  running=true;skipFlag=false;tool=null;selRoom=null;
+  const g=S.guest;S.gold+=g.fee;sfx.coin();
+  say(`${g.name}付了 ${g.fee} 金门票，进去了……`);
+  const res=simulate();
+  res.disarmed=res.ev.some(e=>e.type==="disarm");res.healed=res.ev.some(e=>e.type==="heal"&&e.amount>0);
+  render();setHp(g.hp,g.hp);
+  let here=-1;
+  for(const e of res.ev){
+    if(e.room!==undefined&&e.room!==here){here=e.room;markHere(here);}
+    if(e.type==="enter"){await wait(380);continue;}
+    if(e.type==="strike"){floatAt(e.room,`-${e.amount}`,"mon");sfx.hit();setMonHp(e.room,e.mhp);await wait(330);}
+    else if(e.type==="hurt"){floatAt(e.room,`-${e.amount}`,"adv");shake(e.room);sfx.hurt();setHp(e.hp,g.hp);await wait(380);}
+    else if(e.type==="kill"){floatAt(e.room,"击败","mon");sfx.kill();await wait(280);}
+    else if(e.type==="trap"){floatAt(e.room,`-${e.amount}`,"adv");shake(e.room);sfx.trap();setHp(e.hp,g.hp);await wait(420);}
+    else if(e.type==="disarm"){floatAt(e.room,"拆了","mon");await wait(380);}
+    else if(e.type==="chest"){floatAt(e.room,`−${e.amount} 金`,"gold");sfx.coin();await wait(380);}
+    else if(e.type==="chestEmpty"){floatAt(e.room,"空的！","adv");await wait(380);}
+    else if(e.type==="heal"){floatAt(e.room,`+${e.amount}`,"heal");sfx.heal();setHp(e.hp,g.hp);await wait(380);}
+    else if(e.type==="die"){floatAt(e.room,"阵亡","adv");sfx.die();await wait(600);}
+    else if(e.type==="exit"){markHere(-1);await wait(300);}
+  }
+  markHere(-1);
+  S.gold=res.goldAfterChests;
+  if(res.died){S.gold+=g.fee;}
+  const r=rate(res,g);
+  const review={no:S.guestNo,name:g.name,type:g.t,role:g.role,stars:r.stars,text:r.text,hp:res.hp,max:res.max,died:res.died,weight:g.role==="blogger"?BLOGGER_WEIGHT:1};
+  S.reviews.push(review);
+  sfx.star(r.stars);
+  const layout=S.rooms.map(k=>k?ITEMS[k].glyph:"空").join("");
+  const tag=g.role==="blogger"?"[博主×3]":g.role==="extort"?`[差评师:${g.deal==="paid"?"给钱":"拒绝"}]`:g.quirk?`[${g.quirk.t}]`:"";
+  S.record.push(`#${S.guestNo} ${g.name}${tag}(${g.hp}血 ${g.atk}攻) | 布置 ${layout} | ${res.died?"阵亡":`剩 ${res.hp}/${res.max}（${Math.round(100*res.hp/res.max)}%）`} | ★${r.stars} | 金 ${S.gold}`);
+  let m=res.died?`${g.name}没能出来。你拿走了他的钱包（+${g.fee} 金），${r.stars>1?`他还是给了 ${r.stars} 星。`:"但收到一条亡魂差评。"}`
+    :`${g.name}出来了，剩 ${res.hp}/${res.max} 血，给了 ${r.stars} 星${g.role==="blogger"?"（博主评价算 3 条）":""}。`;
+  const busted=platformCheck();
+  if(busted!==null){m+=` 平台核查！${busted} 条刷的好评被删，还挂上了一条一星公告。`;S.record.push(`  被平台查到刷单，删除 ${busted} 条`);sfx.die();}
+  say(m);
+  running=false;skipFlag=false;
+  nextGuest();
+  render(true);
+}
+
+/* ---------- placement ---------- */
+function say(m,err){S.msg=m;S.err=!!err;const el=$("#status");if(el){el.textContent=m;el.className="status"+(err?" err":"");}}
+function clickRoom(i){
+  if(running||S.over)return;
+  if(tool==="demolish"){
+    const k=S.rooms[i];if(!k){say("这间本来就是空的",true);return;}
+    const back=Math.floor(ITEMS[k].cost/2);S.rooms[i]=null;S.gold+=back;say(`拆掉${ITEMS[k].name}，退回 ${back} 金`);render();return;
+  }
+  if(tool){
+    const it=ITEMS[tool],old=S.rooms[i];
+    if(old===tool){say("这间已经是"+it.name,true);return;}
+    const refund=old?Math.floor(ITEMS[old].cost/2):0;
+    if(S.gold+refund<it.cost){say(`金币不够：${it.name}要 ${it.cost} 金`,true);return;}
+    S.gold+=refund-it.cost;S.rooms[i]=tool;
+    say(`第 ${i+1} 间放了${it.name}（−${it.cost} 金${refund?`，旧的退回 ${refund}`:""}）`);render();return;
+  }
+  if(selRoom===null){selRoom=i;say(`选中第 ${i+1} 间，再点另一间互换`);}
+  else if(selRoom===i){selRoom=null;say("");}
+  else{const t=S.rooms[selRoom];S.rooms[selRoom]=S.rooms[i];S.rooms[i]=t;say(`第 ${selRoom+1} 间和第 ${i+1} 间互换了`);selRoom=null;}
+  render();
+}
+
+/* ---------- render ---------- */
+function starStr(n){const f=Math.round(n);return "★".repeat(f)+`<span class="off">${"★".repeat(5-f)}</span>`;}
+function renderRooms(){
+  let h=`<div class="gate">入口</div>`;
+  S.rooms.forEach((k,i)=>{
+    const it=k?ITEMS[k]:null;
+    h+=`<button class="room${it?" filled "+it.kind:""}${selRoom===i?" sel":""}" data-room="${i}" aria-label="第 ${i+1} 间${it?"："+it.name:"：空"}">
+      <span class="no">${i+1}</span>`;
+    if(it){
+      h+=`<span class="glyph g-${it.kind}">${it.glyph}</span><span class="nm">${it.name}</span><span class="st">${it.kind==="monster"?`血 ${it.hp} · 攻 ${it.dmg}`:it.kind==="trap"?`伤 ${it.dmg}`:it.kind==="spring"?`回 ${it.heal}`:`开一次 ${CHEST_REFILL} 金`}</span>`;
+      if(it.kind==="monster")h+=`<span class="hpbar"><i style="width:100%" data-mhp="${i}"></i></span>`;
+    }else h+=`<span class="empty">空房间</span>`;
+    h+=`</button>`;
+  });
+  h+=`<div class="gate">出口</div>`;
+  $("#strip").innerHTML=h;
+}
+function renderShop(){
+  const tools=Object.entries(ITEMS).map(([k,it])=>`<button class="tool" data-tool="${k}" aria-pressed="${tool===k}">
+    <span class="glyph g-${it.kind}">${it.glyph}</span><span class="t1">${it.name}<span class="c">${it.cost} 金</span></span><span class="t2">${it.desc}</span></button>`).join("");
+  $("#shop").innerHTML=tools+`<button class="tool" data-tool="demolish" aria-pressed="${tool==="demolish"}"><span class="glyph g-demolish">拆</span><span class="t1">拆除<span class="c">退一半</span></span><span class="t2">点房间拆掉里面的东西</span></button>`;
+}
+function renderGuest(){
+  const g=S.guest;
+  if(!g){$("#gAvatar").textContent="完";$("#gName").textContent="本季结束";$("#gStats").textContent="";return;}
+  $("#gAvatar").textContent=g.g;
+  $("#gName").textContent=`第 ${S.guestNo}/${SEASON} 位：${g.name}`;
+  $("#gStats").textContent=`血 ${g.hp} · 攻 ${g.atk} · 门票 ${g.fee} 金${g.disarm?" · 会拆陷阱":""}`;
+  let tags="";
+  if(g.role==="blogger")tags=`<span class="tag t-blog">探店博主 · 粉丝 ${g.fans} 万 · 评价算 ${BLOGGER_WEIGHT} 条</span>`;
+  else if(g.role==="extort")tags=`<span class="tag t-ext">差评师 · 要 ${EXTORT_FEE} 金，不给就扣 2 星${g.deal?`（已${g.deal==="paid"?"给钱":"拒绝"}）`:""}</span>`;
+  else if(g.quirk)tags=`<span class="tag t-quirk">${g.quirk.t} · ${g.quirk.d}</span>`;
+  $("#gTags").innerHTML=tags;
+  const ext=g.role==="extort"&&!g.deal;
+  $("#extort").hidden=!ext;
+  if(!running)setHp(g.hp,g.hp);
+}
+function renderFeed(fresh){
+  const list=S.reviews.slice().reverse();
+  const meta=r=>r.notice?"平台公告 · 权重 ×2":r.fake?"你刷的 · 只有你看得到这个标记":`#${r.no} · ${r.died?"阵亡":`剩 ${r.hp}/${r.max} 血`}${r.weight>1?` · 权重 ×${r.weight}`:""}`;
+  $("#feed").innerHTML=list.length?list.map((r,i)=>`<article class="review${fresh&&i===0?" new":""}${r.notice?" notice":""}">
+    <div class="rhead"><span class="rname">${esc(r.name)}${r.role==="blogger"?` <span class="tag t-blog">博主</span>`:r.role==="extort"?` <span class="tag t-ext">差评师</span>`:r.fake?` <span class="tag t-fake">刷</span>`:""}</span><span class="stars">${starStr(r.stars)}</span></div>
+    <div class="rtext">${r.text}</div>
+    <div class="rmeta">${meta(r)}</div></article>`).join("")
+    :`<div class="emptyfeed">还没有评价。放第一位冒险者进去吧。</div>`;
+}
+function renderTop(){
+  const a=avgOf(S.reviews);
+  $("#avg").textContent=S.reviews.length?a.toFixed(1):"–";
+  $("#avgStars").innerHTML=S.reviews.length?starStr(a):"";
+  $("#recent").textContent=S.reviews.length?recentAvg().toFixed(1):"–";
+  $("#count").textContent=S.reviews.length;
+  $("#gold").textContent=S.gold;
+  $("#fakeRisk").textContent=S.fakeLive?`在挂 ${S.fakeLive} 条 · 每次评价后 ${Math.round(riskNow()*100)}% 被查`:"没有在挂的刷单";
+  $("#hint").textContent=tool?(tool==="demolish"?"点房间拆除":`点房间放置：${ITEMS[tool].name}`):"";
+}
+function renderModal(){
+  const m=$("#modal");
+  if(!S.over){m.hidden=true;m.innerHTML="";return;}
+  const a=avgOf(S.reviews);
+  const title=a>=4.5?"年度最佳地牢":a>=3.8?"网红打卡地牢":a>=3?"街坊口碑地牢":"差评如潮";
+  const dead=S.reviews.filter(r=>r.died).length,five=S.reviews.filter(r=>r.stars===5).length;
+  m.innerHTML=`<div class="sheet" role="dialog" aria-label="本季结算"><h2>${title}</h2>
+    <div class="big"><span class="n">${a.toFixed(2)}</span><span class="stars">${starStr(a)}</span></div>
+    <div>${SEASON} 位冒险者里 ${dead} 位没能出来；评价区共 ${S.reviews.length} 条，${five} 条五星。刷单 ${S.fakeTotal} 条，被平台查到 ${S.busted} 次。期末金币 ${S.gold}。</div>
+    <div class="controls"><button class="btn primary" id="again">再开一季</button><button class="btn" id="copy2">复制试玩记录</button><span class="status" id="copyMsg2"></span></div></div>`;
+  m.hidden=false;
+}
+function render(fresh){
+  renderTop();renderRooms();renderShop();renderGuest();renderFeed(fresh);renderModal();
+  $("#go").disabled=running||S.over||(S.guest&&S.guest.role==="extort"&&!S.guest.deal);$("#skip").disabled=!running;
+  $("#fake").disabled=running||S.over;
+  const el=$("#status");el.textContent=S.msg;el.className="status"+(S.err?" err":"");
+  document.querySelectorAll(".room,.tool").forEach(b=>b.disabled=running);
+}
+function roomEl(i){return document.querySelector(`[data-room="${i}"]`);}
+function markHere(i){
+  document.querySelectorAll(".room.here").forEach(r=>{r.classList.remove("here");const c=r.querySelector(".adv-chip");if(c)c.remove();});
+  if(i<0)return;const r=roomEl(i);if(!r)return;r.classList.add("here");
+  const c=document.createElement("span");c.className="adv-chip";c.textContent=S.guest?S.guest.g:"勇";r.appendChild(c);
+}
+function floatAt(i,txt,cls){const r=roomEl(i);if(!r||skipFlag)return;const f=document.createElement("span");f.className="float "+cls;f.textContent=txt;r.appendChild(f);setTimeout(()=>f.remove(),900);}
+function shake(i){const r=roomEl(i);if(!r||skipFlag)return;r.classList.remove("hit");void r.offsetWidth;r.classList.add("hit");}
+function setHp(hp,max){$("#gHp").style.width=Math.max(0,100*hp/max)+"%";if(S.guest)$("#gStats").textContent=`血 ${hp}/${max} · 攻 ${S.guest.atk} · 门票 ${S.guest.fee} 金${S.guest.disarm?" · 会拆陷阱":""}`;}
+function setMonHp(i,mhp){const bar=document.querySelector(`[data-mhp="${i}"]`);const k=S.rooms[i];if(bar&&k)bar.style.width=Math.max(0,100*mhp/ITEMS[k].hp)+"%";}
+
+/* ---------- record ---------- */
+function recordText(){
+  const a=avgOf(S.reviews);
+  return [`地牢点评网原型 v0.2 试玩记录（种子 ${S.seed0}）`,...S.record,`—— 汇总 ——`,`评价 ${S.reviews.length} 条（含刷单 ${S.reviews.filter(r=>r.fake).length}），加权平均 ${a.toFixed(2)}，五星 ${S.reviews.filter(r=>r.stars===5).length}，阵亡 ${S.reviews.filter(r=>r.died).length}，共刷 ${S.fakeTotal} 条、被查 ${S.busted} 次，金币 ${S.gold}`].join("\n");
+}
+function copyRecord(sel){
+  const txt=recordText(),box=$("#recordBox");
+  const fb=()=>{box.value=txt;box.hidden=false;box.focus();box.select();$(sel).textContent="已展开记录，请手动复制";};
+  try{navigator.clipboard.writeText(txt).then(()=>{$(sel).textContent="已复制";},fb);}catch(e){fb();}
+}
+
+/* ---------- events ---------- */
+$("#strip").addEventListener("click",e=>{const b=e.target.closest("[data-room]");if(b)clickRoom(+b.dataset.room);});
+$("#shop").addEventListener("click",e=>{const b=e.target.closest("[data-tool]");if(!b||running)return;const k=b.dataset.tool;tool=tool===k?null:k;selRoom=null;
+  say(tool?(tool==="demolish"?"点一个房间拆掉里面的东西":`点一个房间放置${ITEMS[tool].name}`):"");render();});
+$("#go").addEventListener("click",()=>{audio();runGuest();});
+$("#pay").addEventListener("click",()=>decideExtort(true));
+$("#refuse").addEventListener("click",()=>decideExtort(false));
+$("#fake").addEventListener("click",()=>{audio();sfx.coin();buyFake();});
+$("#speed").addEventListener("click",()=>{speed=speed===1?3:1;$("#speed").setAttribute("aria-pressed",String(speed===3));});
+$("#skip").addEventListener("click",()=>{skipFlag=true;});
+$("#mute").addEventListener("click",()=>{muted=!muted;$("#mute").setAttribute("aria-pressed",String(muted));$("#mute").textContent=muted?"已静音":"静音";});
+$("#copyRec").addEventListener("click",()=>copyRecord("#copyMsg"));
+$("#restart").addEventListener("click",()=>{if(running)return;newSeason();tool=null;selRoom=null;render();});
+$("#modal").addEventListener("click",e=>{
+  if(e.target.closest("#again")){newSeason();tool=null;selRoom=null;render();}
+  else if(e.target.closest("#copy2"))copyRecord("#copyMsg2");
+});
+document.addEventListener("keydown",e=>{
+  if(e.target.closest("textarea"))return;
+  if(e.key===" "&&!e.target.closest("button")){e.preventDefault();audio();runGuest();}
+  else if(e.key==="Escape"){tool=null;selRoom=null;say("");render();}
+});
+
+newSeason();render();
+})();
+</script>
+</body></html>
