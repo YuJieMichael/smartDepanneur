@@ -1,7 +1,7 @@
 {
   "name": "@smartdepanneur/backend",
   "version": "1.0.0",
-  "description": "NestJS API for SmartDepanneur AI inventory, sales, RBAC, and AI insights.",
+  "description": "NestJS API for SmartDepanneur Agent inventory, sales, RBAC, and multilingual store tools.",
   "author": "YuJie Michael",
   "private": true,
   "license": "MIT",
@@ -12,6 +12,8 @@
     "start:dev": "nest start --watch",
     "start:debug": "nest start --debug --watch",
     "start:prod": "node dist/src/main.js",
+    "mcp": "node dist/src/mcp/main.js",
+    "mcp:dev": "ts-node --transpile-only src/mcp/main.ts",
     "migrate:deploy": "prisma migrate deploy",
     "seed:demo": "node prisma/seed-test-data.mjs",
     "typecheck": "tsc --noEmit --incremental false",
@@ -29,6 +31,7 @@
     "seed": "node prisma/seed.mjs"
   },
   "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.32.1",
     "@nestjs/common": "^11.0.1",
     "@nestjs/config": "^4.0.3",
     "@nestjs/core": "^11.0.1",
@@ -42,7 +45,8 @@
     "prisma": "^5.22.0",
     "reflect-metadata": "^0.2.2",
     "rxjs": "^7.8.1",
-    "ts-node": "^10.9.2"
+    "ts-node": "^10.9.2",
+    "zod": "^4.6.7"
   },
   "devDependencies": {
     "@eslint/eslintrc": "^3.2.0",

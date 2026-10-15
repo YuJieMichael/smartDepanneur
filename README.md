@@ -27,6 +27,7 @@ steps, known boundaries, and resume positioning.
 - PostgreSQL transactions through Prisma
 - Atomic stock updates that prevent negative inventory
 - OpenAI Responses API tool calling with a deterministic local Agent fallback
+- The same Store Agent tools served to any MCP client over stdio
 - English, French, and Simplified Chinese user interfaces
 - Repeatable Docker development and production-style builds
 - Automated typechecking, linting, tests, builds, and container validation
@@ -103,7 +104,7 @@ flowchart LR
 | Frontend | Next.js 16, React 19, TypeScript, Ant Design, Tailwind CSS, Zustand |
 | Backend | NestJS 11, Node.js 22, Passport JWT, REST |
 | Data | PostgreSQL 16, Prisma 5 |
-| Agent | OpenAI Responses API function calling with local Agent fallback |
+| Agent | OpenAI Responses API function calling with local Agent fallback, MCP server (stdio) |
 | Delivery | Docker Compose, GitHub Actions, Dependabot |
 
 ## Run with Docker
@@ -159,6 +160,39 @@ npm run dev
 
 Default ports are frontend `3100`, backend `3101`, and PostgreSQL `5432`.
 
+## Store Agent tools over MCP
+
+The four read-only Store Agent tools are also served over the
+[Model Context Protocol](https://modelcontextprotocol.io), so an owner can ask
+Claude Desktop, Claude Code, or any MCP client about live store data without
+opening the app. The MCP server and the in-app agent share one tool
+definition list (`STORE_AGENT_TOOLS`), so both always expose the same tools.
+
+```powershell
+cd backend
+npm run build
+npm run mcp      # stdio server; needs DATABASE_URL
+```
+
+Claude Desktop configuration (`claude_desktop_config.json`):
+
+```json
+{
+  "mcpServers": {
+    "smartdepanneur": {
+      "command": "node",
+      "args": ["C:/path/to/smartDepanneur/backend/dist/src/mcp/main.js"],
+      "env": {
+        "DATABASE_URL": "postgresql://postgres:postgres@localhost:5432/depanneur"
+      }
+    }
+  }
+}
+```
+
+The MCP process loads only Prisma and the insight service: no HTTP routes,
+no JWT secret, and every tool is annotated read-only.
+
 ## Demo accounts
 
 Demo credentials exist only in seeded demo environments.
@@ -192,6 +226,7 @@ Current backend tests cover:
 - Idempotent supplier-grouped purchase-order draft generation
 - Dashboard closeout, trends, and void metrics
 - AI local fallback and question validation
+- MCP tool listing, read-only annotations, results, and error reporting
 
 GitHub Actions runs backend and frontend typechecking, linting, tests and
 production builds. A final job validates Compose and builds both images.

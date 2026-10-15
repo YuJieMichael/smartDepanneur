@@ -9,7 +9,7 @@ const SLOW_MOVER_LIMIT = 10;
 
 export type InsightLanguage = 'en' | 'fr' | 'zh';
 type InsightProvider = 'openai-agent' | 'local-agent';
-type InsightAgentTool =
+export type InsightAgentTool =
   | 'get_reorder_suggestions'
   | 'get_top_sellers'
   | 'get_slow_movers'
@@ -47,67 +47,55 @@ interface OpenAiFunctionCall {
   arguments: string;
 }
 
-const AGENT_TOOLS: InsightAgentTool[] = [
-  'get_reorder_suggestions',
-  'get_top_sellers',
-  'get_slow_movers',
-  'get_store_summary',
-];
-
-const RESPONSE_TOOL_DEFINITIONS = [
+// Single source of truth for the Store Agent tools. The OpenAI agent loop and
+// the MCP server both expose exactly these read-only tools.
+export const STORE_AGENT_TOOLS: ReadonlyArray<{
+  name: InsightAgentTool;
+  title: string;
+  description: string;
+}> = [
   {
-    type: 'function',
     name: 'get_reorder_suggestions',
+    title: 'Reorder suggestions',
     description:
       'Return products at or below minimum stock, recent sales velocity, recommended order quantities, suppliers, urgency, and estimated cost.',
-    parameters: {
-      type: 'object',
-      properties: {},
-      required: [],
-      additionalProperties: false,
-    },
-    strict: true,
   },
   {
-    type: 'function',
     name: 'get_top_sellers',
+    title: 'Top sellers',
     description:
       'Return the best-selling products ranked by units sold, with revenue and current stock.',
-    parameters: {
-      type: 'object',
-      properties: {},
-      required: [],
-      additionalProperties: false,
-    },
-    strict: true,
   },
   {
-    type: 'function',
     name: 'get_slow_movers',
+    title: 'Slow movers',
     description:
       'Return active products with stock but no sales in the last 30 days, including stock value and expiration information.',
-    parameters: {
-      type: 'object',
-      properties: {},
-      required: [],
-      additionalProperties: false,
-    },
-    strict: true,
   },
   {
-    type: 'function',
     name: 'get_store_summary',
+    title: 'Store summary',
     description:
       'Return today sale count, active product count, and low-stock product count.',
-    parameters: {
-      type: 'object',
-      properties: {},
-      required: [],
-      additionalProperties: false,
-    },
-    strict: true,
   },
-] as const;
+];
+
+const AGENT_TOOLS: InsightAgentTool[] = STORE_AGENT_TOOLS.map(
+  (tool) => tool.name,
+);
+
+const RESPONSE_TOOL_DEFINITIONS = STORE_AGENT_TOOLS.map((tool) => ({
+  type: 'function',
+  name: tool.name,
+  description: tool.description,
+  parameters: {
+    type: 'object',
+    properties: {},
+    required: [],
+    additionalProperties: false,
+  },
+  strict: true,
+}));
 
 @Injectable()
 export class InsightsService {
@@ -566,7 +554,7 @@ export class InsightsService {
     };
   }
 
-  private async executeAgentTool(tool: InsightAgentTool): Promise<unknown> {
+  async executeAgentTool(tool: InsightAgentTool): Promise<unknown> {
     switch (tool) {
       case 'get_reorder_suggestions':
         return this.getReorderSuggestions();
