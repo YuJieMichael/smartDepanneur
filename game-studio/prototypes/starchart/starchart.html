@@ -1,0 +1,758 @@
+<title>星图卡组原型</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;600&family=ZCOOL+XiaoWei&display=swap">
+<style>
+/* Layout: the star map is the stage on the left; the battle ledger (enemy, you, structures, preview) sits on the right and stacks under it on phones.
+   One deliberate night-sky look, so there is no light theme. Gold = chains/attack, jade = rings/defense, cinnabar = the enemy. */
+:root{
+  --ink:#0e1322; --ink-2:#151c31; --ink-3:#1d2641; --rule:#2a3454;
+  --fg:#ece5d3; --muted:#9ba3bb; --faint:#5d6789;
+  --gold:#e8b64c; --jade:#57c0a0; --cinnabar:#e2583f; --sel:#a8c6ff;
+  --display:"ZCOOL XiaoWei","Noto Serif SC","Songti SC","STSong",serif;
+  --body:"PingFang SC","Hiragino Sans GB","Microsoft YaHei","Noto Sans SC",system-ui,sans-serif;
+  --mono:"IBM Plex Mono",ui-monospace,"SFMono-Regular",Menlo,monospace;
+  color-scheme:dark;
+}
+html,body{background:var(--ink);color:var(--fg)}
+[hidden]{display:none!important}
+body{font-family:var(--body);font-size:14px;line-height:1.55;
+  padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));padding-block:14px 32px}
+button{font:inherit;color:inherit;cursor:pointer}
+button:focus-visible,select:focus-visible,input:focus-visible,summary:focus-visible{outline:2px solid var(--sel);outline-offset:2px}
+.wrap{max-width:1180px;margin:0 auto;display:flex;flex-direction:column;gap:14px}
+header{display:flex;flex-wrap:wrap;align-items:baseline;justify-content:space-between;gap:6px 16px}
+h1{font-family:var(--display);font-weight:400;font-size:28px;letter-spacing:.06em;margin:0;text-wrap:balance}
+h1 small{font-family:var(--mono);font-size:12px;color:var(--muted);letter-spacing:.08em;margin-left:8px}
+.runinfo{font-family:var(--mono);font-size:12.5px;color:var(--muted);letter-spacing:.04em}
+.grid{display:grid;grid-template-columns:minmax(0,1.65fr) minmax(0,1fr);gap:16px;align-items:start}
+@media (max-width:880px){.grid{grid-template-columns:minmax(0,1fr)}}
+.stage{display:flex;flex-direction:column;gap:10px;min-width:0}
+.board{position:relative;background:radial-gradient(120% 90% at 50% 40%,#18213d 0%,var(--ink) 70%);border:1px solid var(--rule);border-radius:10px;overflow:hidden}
+svg#map{display:block;width:100%;height:auto;touch-action:manipulation;user-select:none;-webkit-user-select:none}
+.toolbar{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+.seg{display:flex;border:1px solid var(--rule);border-radius:8px;overflow:hidden}
+.seg button{background:transparent;border:0;padding:8px 14px;display:flex;gap:6px;align-items:baseline}
+.seg button+button{border-left:1px solid var(--rule)}
+.seg button[aria-pressed="true"]{background:var(--ink-3);color:var(--fg);box-shadow:inset 0 -2px 0 var(--sel)}
+.seg button[aria-pressed="false"]{color:var(--muted)}
+.key{font-family:var(--mono);font-size:11px;color:var(--faint)}
+.btn{background:var(--ink-2);border:1px solid var(--rule);border-radius:8px;padding:8px 14px}
+.btn:disabled{opacity:.4;cursor:default}
+.btn.primary{background:var(--fg);color:var(--ink);border-color:var(--fg);font-weight:600}
+.spacer{flex:1}
+.status{min-height:22px;color:var(--muted);font-size:13.5px}
+.status.err{color:var(--cinnabar)}
+aside{display:flex;flex-direction:column;gap:12px;min-width:0}
+.card{background:var(--ink-2);border:1px solid var(--rule);border-radius:10px;padding:12px 14px;display:flex;flex-direction:column;gap:8px;min-width:0}
+.label{font-size:11.5px;letter-spacing:.14em;color:var(--muted)}
+.enemy-name{font-family:var(--display);font-size:26px;line-height:1.1;color:var(--fg)}
+.row{display:flex;align-items:baseline;justify-content:space-between;gap:10px}
+.lore{color:var(--muted);font-size:13px}
+.bar{height:8px;border-radius:4px;background:var(--ink-3);overflow:hidden}
+.bar>i{display:block;height:100%}
+.bar.hp-enemy>i{background:var(--cinnabar)}
+.bar.hp-you>i{background:var(--fg)}
+.num{font-family:var(--mono);font-variant-numeric:tabular-nums}
+.intent{border-left:3px solid var(--cinnabar);padding:6px 10px;background:color-mix(in srgb,var(--cinnabar) 9%,transparent);border-radius:0 6px 6px 0}
+.intent b{color:var(--cinnabar);font-weight:600}
+.future{font-size:12.5px;color:var(--muted)}
+.passive{font-size:13px;color:var(--gold)}
+.stats{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px}
+.stat{display:flex;flex-direction:column;gap:2px}
+.stat .v{font-family:var(--mono);font-size:20px;font-variant-numeric:tabular-nums}
+.pips{display:flex;gap:4px;padding-top:6px}
+.pips i{width:12px;height:12px;border-radius:50%;border:1.5px solid var(--fg)}
+.pips i.on{background:var(--fg)}
+.incoming{font-size:13px;color:var(--muted)}
+.incoming b{color:var(--fg);font-family:var(--mono)}
+.slist{display:flex;flex-direction:column;gap:6px}
+.srow{display:flex;align-items:center;gap:8px;padding:6px 8px;border-radius:7px;border:1px solid transparent}
+.srow:hover{border-color:var(--rule);background:var(--ink-3)}
+.chip{font-size:12px;padding:1px 7px;border-radius:999px;border:1px solid currentColor;flex:none}
+.chip.chain{color:var(--gold)} .chip.ring{color:var(--jade)}
+.sdesc{flex:1;min-width:0;font-size:13.5px}
+.sdesc .why{display:block;font-size:12px;color:var(--faint)}
+.act{flex:none;padding:5px 10px;border-radius:6px;border:1px solid var(--rule);background:transparent}
+.act.chain:not(:disabled){border-color:var(--gold);color:var(--gold)}
+.act.ring:not(:disabled){border-color:var(--jade);color:var(--jade)}
+.act:disabled{opacity:.4;cursor:default}
+.empty{color:var(--faint);font-size:13px}
+.pv{font-size:13px;display:flex;flex-direction:column;gap:3px;min-height:64px}
+.pv .t{color:var(--fg);font-weight:600}
+.pv .minus{color:var(--muted)} .pv .plus{color:var(--fg)}
+.pv .e{color:var(--cinnabar)} .pv .h{color:var(--muted)}
+.pv .tgt{color:var(--cinnabar);font-size:12.5px}
+details{background:var(--ink-2);border:1px solid var(--rule);border-radius:10px;padding:10px 14px}
+summary{cursor:pointer;color:var(--muted)}
+details[open] summary{margin-bottom:8px}
+.rules{margin:0;padding-left:18px;display:flex;flex-direction:column;gap:3px;max-width:68ch}
+.cfg{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,210px),1fr));gap:10px 16px;align-items:end}
+.cfg label{display:flex;flex-direction:column;gap:4px;font-size:13px;color:var(--muted)}
+.cfg select{background:var(--ink-3);color:var(--fg);border:1px solid var(--rule);border-radius:6px;padding:6px 8px;font:inherit}
+.cfg .check{flex-direction:row;align-items:center;gap:8px}
+.foot{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+textarea#recordBox{width:100%;min-height:180px;background:var(--ink-3);color:var(--fg);border:1px solid var(--rule);border-radius:8px;font:12.5px/1.5 var(--mono);padding:10px;box-sizing:border-box}
+.modal{position:fixed;inset:0;background:color-mix(in srgb,var(--ink) 82%,transparent);display:flex;align-items:center;justify-content:center;z-index:10;
+  padding:max(16px,env(safe-area-inset-top,0px)) max(16px,env(safe-area-inset-right,0px)) max(16px,env(safe-area-inset-bottom,0px)) max(16px,env(safe-area-inset-left,0px));overflow:auto}
+.sheet{background:var(--ink-2);border:1px solid var(--rule);border-radius:12px;padding:20px;max-width:720px;width:100%;display:flex;flex-direction:column;gap:14px}
+.sheet h2{font-family:var(--display);font-weight:400;font-size:26px;margin:0}
+.choices{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,190px),1fr));gap:10px}
+.choice{text-align:left;background:var(--ink-3);border:1px solid var(--rule);border-radius:10px;padding:12px;display:flex;flex-direction:column;gap:6px}
+.choice:hover:not(:disabled){border-color:var(--fg)}
+.choice:disabled{opacity:.45;cursor:default}
+.choice .cat{font-size:11.5px;letter-spacing:.14em;color:var(--muted)}
+.choice .nm{font-family:var(--display);font-size:22px}
+.choice .d{font-size:13px;color:var(--muted)}
+.tablewrap{overflow-x:auto}
+table{border-collapse:collapse;font-size:13px;width:100%}
+th,td{padding:5px 8px;border-bottom:1px solid var(--rule);text-align:right;white-space:nowrap}
+th:first-child,td:first-child{text-align:left}
+td{font-family:var(--mono);font-variant-numeric:tabular-nums}
+/* svg */
+.bgdot{fill:var(--fg)}
+.reach{fill:color-mix(in srgb,var(--sel) 6%,transparent);stroke:var(--sel);stroke-opacity:.5;stroke-dasharray:4 6}
+.edge{stroke-width:3.2;stroke-linecap:round}
+.edge.chain{stroke:var(--gold)} .edge.ring{stroke:var(--jade)}
+.edge.spent{stroke-opacity:.38}
+.goldunder{stroke:var(--fg);stroke-opacity:.28;stroke-width:9;stroke-linecap:round}
+.goldmark{fill:var(--fg)}
+.cutmark{stroke:var(--cinnabar);stroke-width:2;stroke-dasharray:5 5;fill:none}
+.pill rect{fill:var(--ink);stroke-width:1}
+.pill.chain rect{stroke:var(--gold)} .pill.ring rect{stroke:var(--jade)} .pill.spent rect{stroke:var(--faint)}
+.pill text{font-family:var(--mono);font-size:12px;text-anchor:middle;dominant-baseline:central}
+.pill.chain text{fill:var(--gold)} .pill.ring text{fill:var(--jade)} .pill.spent text{fill:var(--faint)}
+.core{fill:var(--fg)} .core.spent{fill-opacity:.4}
+.glow{fill:var(--fg);fill-opacity:.12}
+.brighthalo{fill:var(--gold);fill-opacity:.22;stroke:var(--gold);stroke-opacity:.7}
+.steadybox{fill:none;stroke:var(--muted);stroke-width:1.4}
+.selring{fill:none;stroke:var(--sel);stroke-width:2.2}
+.eaten{fill:none;stroke:var(--cinnabar);stroke-width:1.6;stroke-dasharray:3 3}
+.sealring{fill:none;stroke:var(--cinnabar);stroke-width:2}
+.threat{fill:none;stroke:var(--cinnabar);stroke-width:1.6;stroke-dasharray:4 4}
+.sname{font-family:var(--display);font-size:16px;fill:var(--fg);text-anchor:middle}
+.sname.dim{fill:var(--faint)}
+.pip{fill:none;stroke:var(--muted);stroke-width:1.2} .pip.on{fill:var(--muted)}
+.tag{font-size:11px;text-anchor:middle;fill:var(--cinnabar);font-family:var(--body)}
+.pvline{stroke-width:3;stroke-linecap:round;stroke-dasharray:6 5}
+.pvline.ok{stroke:var(--sel)} .pvline.bad{stroke:var(--cinnabar)}
+.pvcut{stroke:var(--cinnabar);stroke-width:9;stroke-opacity:.45;stroke-linecap:round}
+.pvgold{stroke:var(--fg);stroke-width:10;stroke-opacity:.3;stroke-linecap:round}
+.pvhl{stroke:var(--fg);stroke-width:8;stroke-opacity:.22;stroke-linecap:round}
+.ghost{fill:var(--sel);fill-opacity:.55} .ghost.bad{fill:var(--cinnabar)}
+.ghostline{stroke:var(--sel);stroke-width:2;stroke-dasharray:4 4;stroke-opacity:.8}
+.ghostline.bad{stroke:var(--cinnabar)}
+.hovring{fill:none;stroke:var(--sel);stroke-width:1.5;stroke-opacity:.8}
+@media (prefers-reduced-motion:no-preference){.core{transition:fill-opacity .2s}}
+</style>
+
+<div class="wrap">
+  <header>
+    <h1>星图卡组<small>原型 v0.1</small></h1>
+    <div class="runinfo" id="runinfo"></div>
+  </header>
+  <div class="grid">
+    <section class="stage">
+      <div class="board">
+        <svg id="map" viewBox="0 0 600 440" role="img" aria-label="星图">
+          <g id="bg"></g><g id="main"></g><g id="pv"></g>
+        </svg>
+      </div>
+      <div class="toolbar">
+        <div class="seg" role="group" aria-label="操作">
+          <button id="m-connect" data-mode="connect">连线 <span class="key">1</span></button>
+          <button id="m-cut" data-mode="cut">剪线 <span class="key">2</span></button>
+          <button id="m-move" data-mode="move">移动 <span class="key">3</span></button>
+        </div>
+        <button class="btn" id="undo">撤销 <span class="key">Z</span></button>
+        <span class="spacer"></span>
+        <button class="btn primary" id="endturn">结束回合 <span class="key">↵</span></button>
+      </div>
+      <div class="status" id="status" aria-live="polite"></div>
+      <details id="rulesBox" open>
+        <summary>规则速查</summary>
+        <ul class="rules" id="rules"></ul>
+      </details>
+    </section>
+    <aside>
+      <div class="card" id="enemyCard"></div>
+      <div class="card" id="youCard"></div>
+      <div class="card">
+        <div class="label">结构</div>
+        <div class="slist" id="slist"></div>
+      </div>
+      <div class="card">
+        <div class="label">预览</div>
+        <div class="pv" id="pv-panel"></div>
+      </div>
+    </aside>
+  </div>
+  <details id="cfgBox">
+    <summary>实验设置（改动后从第一战重开）</summary>
+    <div class="cfg">
+      <label for="cfg-ap">每回合行动点
+        <select id="cfg-ap"><option value="3">3</option><option value="4">4</option><option value="5">5</option></select></label>
+      <label for="cfg-act">激活结构消耗
+        <select id="cfg-act"><option value="0">0 点</option><option value="1">1 点</option><option value="2">2 点</option></select></label>
+      <label for="cfg-chain">链伤害公式
+        <select id="cfg-chain"><option value="tri">累加：1、3、6、10、15…</option><option value="lin">线性：每条线 3</option></select></label>
+      <label for="cfg-ring">环每颗星的格挡
+        <select id="cfg-ring"><option value="2">2</option><option value="3">3</option></select></label>
+      <label class="check" for="cfg-future"><input type="checkbox" id="cfg-future"> 公开敌人后续意图</label>
+      <button class="btn" id="cfg-apply">应用并重开</button>
+    </div>
+  </details>
+  <div class="foot">
+    <button class="btn" id="copyRec">复制试玩记录</button>
+    <button class="btn" id="restart">重开本局</button>
+    <span class="status" id="copyMsg"></span>
+  </div>
+  <textarea id="recordBox" hidden readonly aria-label="试玩记录"></textarea>
+</div>
+<div class="modal" id="modal" hidden></div>
+
+<script>
+(function(){
+"use strict";
+const W=600,H=440,STAR_R=9,MIN_GAP=40,PASS_GAP=13,MAX_HP=50,HEAL=10,EAT_TURNS=2,CAP=2;
+const DEFAULT_CFG={ap:4,act:1,chain:"tri",ring:2,future:false,moveRadius:120};
+const STARS0=[["jiao","角",92,108],["kang","亢",206,64],["di","氐",318,124],["fang","房",440,76],["xin","心",530,178],
+  ["wei","尾",462,296],["ji","箕",338,346],["dou","斗",198,312],["niu","牛",90,248],["nv","女",272,216]];
+const EXTRA=[["xu","虚"],["wei2","危"],["shi","室"],["bi","壁"]];
+const ENEMIES=[
+  {name:"天狗",hp:32,lore:"传说中食日月的兽。会吞掉你最大结构中间的那颗星。",passive:null,
+    intents:[{atk:6},{atk:4,eat:1},{atk:9}]},
+  {name:"孛星",hp:44,lore:"拖着长尾的彗星。扫尾会剪断星图上最长的线。",passive:null,
+    intents:[{atk:7,cut:1},{atk:10},{atk:5,cut:2}]},
+  {name:"荧惑",hp:64,lore:"荧惑守心，古人眼中的大凶之兆。会封锁心宿一带。",passive:"burn",
+    intents:[{atk:11},{atk:6,seal:["xin","fang","wei"]},{atk:15}]}
+];
+const REWARDS=[
+  [{k:"star",cat:"增加节点",nm:"新星",d:"在星图空处放一颗新星。"},
+   {k:"bright",cat:"修改节点",nm:"亮星",d:"选一颗星。含它的结构效果 +3。"},
+   {k:"gold",cat:"改造连接",nm:"金线",d:"选一条线。敌人剪不断它；算链长时它算 2 条线。"}],
+  [{k:"star",cat:"增加节点",nm:"新星",d:"在星图空处放一颗新星。"},
+   {k:"steady",cat:"修改节点",nm:"坚星",d:"选一颗星。它不会被吞、被封锁，连着它的线不会被敌人剪断。"},
+   {k:"freecut",cat:"改造连接",nm:"解缆",d:"之后每回合第一次剪线不花行动点。"}]
+];
+const MODES={connect:"连线",cut:"剪线",move:"移动"};
+
+let S=null, hover=null, hoverKey=null;
+const $=s=>document.querySelector(s);
+const esc=s=>String(s).replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+
+/* ---------- storage (convenience only) ---------- */
+function loadCfg(){try{const v=JSON.parse(localStorage.getItem("starchart-cfg")||"null");return v&&typeof v==="object"?v:{};}catch(e){return {};}}
+function saveCfg(c){try{localStorage.setItem("starchart-cfg",JSON.stringify(c));}catch(e){}}
+
+/* ---------- run / fight ---------- */
+function newRun(cfg){
+  S={cfg:{...DEFAULT_CFG,...(cfg||{})},
+    stars:STARS0.map(([id,name,x,y])=>({id,name,x,y,bright:false,steady:false,eaten:0})),
+    edges:[],hp:MAX_HP,fight:0,phase:"play",record:[],extra:0,perks:{freecut:false},
+    pending:null,mode:"connect",sel:null,msg:"",err:false,stats:[]};
+  startFight(0);
+}
+function startFight(i){
+  const d=ENEMIES[i];
+  Object.assign(S,{fight:i,enemy:{hp:d.hp,max:d.hp},intent:0,turn:1,ap:S.cfg.ap,block:0,spent:[],sealed:[],
+    freeCutUsed:false,undo:[],acts:[],phase:"play",pending:null,sel:null,err:false});
+  S.stars.forEach(s=>s.eaten=0);
+  S.stats[i]={name:d.name,connect:0,cut:0,move:0,activate:0,dealt:0,taken:0,turns:0};
+  S.msg=`第 ${i+1} 战：${d.name}。${d.lore}`;
+  S.record.push(`== 第${i+1}战 ${d.name}（${d.hp} 血）· 开战时星图：${S.edges.length} 条线 ==`);
+}
+const enemyDef=()=>ENEMIES[S.fight];
+const intentAt=k=>{const L=enemyDef().intents;return L[(S.intent+k)%L.length];};
+const fs=(stars,id)=>stars.find(s=>s.id===id);
+const st=id=>fs(S.stars,id);
+const degOf=(id,edges)=>edges.reduce((n,e)=>n+(e.a===id||e.b===id?1:0),0);
+const ek=e=>e.a+"|"+e.b;
+const names=(ids,stars)=>ids.map(id=>fs(stars||S.stars,id).name).join("");
+
+/* ---------- geometry ---------- */
+function orient(p,q,r){const v=(q.x-p.x)*(r.y-p.y)-(q.y-p.y)*(r.x-p.x);return Math.abs(v)<1e-9?0:(v>0?1:-1);}
+function onSeg(p,q,r){return Math.min(p.x,r.x)-1e-9<=q.x&&q.x<=Math.max(p.x,r.x)+1e-9&&Math.min(p.y,r.y)-1e-9<=q.y&&q.y<=Math.max(p.y,r.y)+1e-9;}
+function segCross(p1,p2,p3,p4){
+  const o1=orient(p1,p2,p3),o2=orient(p1,p2,p4),o3=orient(p3,p4,p1),o4=orient(p3,p4,p2);
+  if(o1!==o2&&o3!==o4)return true;
+  return (o1===0&&onSeg(p1,p3,p2))||(o2===0&&onSeg(p1,p4,p2))||(o3===0&&onSeg(p3,p1,p4))||(o4===0&&onSeg(p3,p2,p4));
+}
+function distPS(p,a,b){const dx=b.x-a.x,dy=b.y-a.y,L=dx*dx+dy*dy;let t=L?((p.x-a.x)*dx+(p.y-a.y)*dy)/L:0;t=Math.max(0,Math.min(1,t));
+  return Math.hypot(p.x-(a.x+t*dx),p.y-(a.y+t*dy));}
+const dist=(a,b)=>Math.hypot(a.x-b.x,a.y-b.y);
+
+/* ---------- structures ---------- */
+function structuresOf(stars,edges){
+  const adj={},pos={};stars.forEach((s,i)=>{adj[s.id]=[];pos[s.id]=i;});
+  edges.forEach(e=>{adj[e.a].push(e.b);adj[e.b].push(e.a);});
+  const seen={},out=[];
+  stars.forEach(s=>{
+    if(seen[s.id]||!adj[s.id].length)return;
+    const comp=[],stack=[s.id];seen[s.id]=1;
+    while(stack.length){const v=stack.pop();comp.push(v);adj[v].forEach(w=>{if(!seen[w]){seen[w]=1;stack.push(w);}});}
+    const ce=edges.filter(e=>comp.includes(e.a));
+    const ring=ce.length===comp.length;
+    const pool=ring?comp:comp.filter(v=>adj[v].length===1);
+    const start=pool.reduce((m,v)=>pos[v]<pos[m]?v:m);
+    const ids=[start];let prev=null,cur=start;
+    for(;;){const nx=adj[cur].find(w=>w!==prev&&!ids.includes(w));if(nx===undefined)break;ids.push(nx);prev=cur;cur=nx;}
+    const len=ce.reduce((t,e)=>t+(e.gold?2:1),0);
+    out.push({type:ring?"ring":"chain",ids,edges:ce,len,key:(ring?"R:":"C:")+ids.slice().sort().join(",")});
+  });
+  return out;
+}
+function baseVal(x,stars){
+  const br=x.ids.filter(id=>fs(stars,id).bright).length*3;
+  if(x.type==="chain"){const e=x.len;return (S.cfg.chain==="tri"?e*(e+1)/2:3*e)+br;}
+  return x.ids.length*S.cfg.ring+br;
+}
+function effVal(x,stars){return (x.type==="chain"&&enemyDef().passive==="burn"&&x.len<4)?0:baseVal(x,stars);}
+function desc(x,stars){
+  const v=effVal(x,stars),b=baseVal(x,stars);
+  return x.type==="chain"?`链「${names(x.ids,stars)}」${x.len} 线 · 攻 ${v}${v!==b?"（被灼甲抵消）":""}`
+    :`环「${names(x.ids,stars)}」${x.ids.length} 星 · 挡 ${v}`;
+}
+function activationBlock(x){
+  if(S.phase!=="play")return "现在不能操作";
+  if(x.ids.some(id=>S.spent.includes(id)))return "含本回合已激活过的星";
+  if(x.ids.some(id=>S.sealed.includes(id)))return "含被封锁的星";
+  if(S.ap<S.cfg.act)return "行动点不足";
+  return "";
+}
+
+/* ---------- enemy targeting (live) ---------- */
+function eatTarget(stars,edges){
+  const sts=structuresOf(stars,edges).sort((a,b)=>b.ids.length-a.ids.length);
+  for(const x of sts){
+    let order=x.ids;
+    if(x.type==="chain"){const m=Math.floor((x.ids.length-1)/2);order=[...x.ids].sort((a,b)=>Math.abs(x.ids.indexOf(a)-m)-Math.abs(x.ids.indexOf(b)-m));}
+    const t=order.find(id=>!fs(stars,id).steady);if(t)return t;
+  }
+  return null;
+}
+function cutTargets(n,stars,edges){
+  return edges.filter(e=>!e.gold&&!fs(stars,e.a).steady&&!fs(stars,e.b).steady)
+    .map(e=>({e,l:dist(fs(stars,e.a),fs(stars,e.b))})).sort((p,q)=>q.l-p.l).slice(0,n).map(o=>o.e);
+}
+function targetsFor(stars,edges){
+  const it=intentAt(0),t={eat:null,cut:[],seal:[]};
+  if(it.eat)t.eat=eatTarget(stars,edges);
+  if(it.cut)t.cut=cutTargets(it.cut,stars,edges);
+  if(it.seal)t.seal=it.seal.filter(id=>{const s=fs(stars,id);return s&&!s.steady;});
+  return t;
+}
+function targetsText(t,stars){
+  const p=[];
+  if(t.eat)p.push(`吞 ${fs(stars,t.eat).name}`);
+  if(t.cut.length)p.push(`剪 ${t.cut.map(e=>fs(stars,e.a).name+"–"+fs(stars,e.b).name).join("、")}`);
+  if(t.seal.length)p.push(`封锁 ${names(t.seal,stars)}`);
+  return p.join("；");
+}
+
+/* ---------- validation ---------- */
+function edgeError(a,b,stars,edges){
+  const A=fs(stars,a),B=fs(stars,b);
+  if(A.eaten||B.eaten)return `${(A.eaten?A:B).name} 被吞了，暂时不能连线`;
+  if(edges.some(e=>(e.a===a&&e.b===b)||(e.a===b&&e.b===a)))return "这两颗星已经连着";
+  if(degOf(a,edges)>=CAP)return `${A.name} 已经连满 ${CAP} 条线`;
+  if(degOf(b,edges)>=CAP)return `${B.name} 已经连满 ${CAP} 条线`;
+  for(const e of edges){
+    if(e.a===a||e.a===b||e.b===a||e.b===b)continue;
+    const P=fs(stars,e.a),Q=fs(stars,e.b);
+    if(segCross(A,B,P,Q))return `会和 ${P.name}–${Q.name} 交叉`;
+  }
+  for(const s of stars){if(s.id!==a&&s.id!==b&&distPS(s,A,B)<PASS_GAP)return `会穿过 ${s.name}`;}
+  return null;
+}
+function moveError(id,pt){
+  const s=st(id);
+  if(s.eaten)return "被吞的星不能移动";
+  if(dist(s,pt)>S.cfg.moveRadius)return "太远了，只能在虚线圈内移动";
+  if(pt.x<24||pt.x>W-24||pt.y<24||pt.y>H-28)return "超出星图";
+  for(const o of S.stars)if(o.id!==id&&dist(o,pt)<MIN_GAP)return `离 ${o.name} 太近`;
+  const ns=S.stars.map(o=>o.id===id?{...o,x:pt.x,y:pt.y}:o);
+  const mine=S.edges.filter(e=>e.a===id||e.b===id),others=S.edges.filter(e=>e.a!==id&&e.b!==id);
+  for(const e of mine){
+    const A=fs(ns,e.a),B=fs(ns,e.b);
+    for(const f of others){
+      if(f.a===e.a||f.a===e.b||f.b===e.a||f.b===e.b)continue;
+      const P=fs(ns,f.a),Q=fs(ns,f.b);
+      if(segCross(A,B,P,Q))return `连线会和 ${P.name}–${Q.name} 交叉`;
+    }
+    for(const o of ns)if(o.id!==e.a&&o.id!==e.b&&distPS(o,A,B)<PASS_GAP)return `连线会穿过 ${o.name}`;
+  }
+  for(const f of others){if(distPS(pt,fs(ns,f.a),fs(ns,f.b))<PASS_GAP)return `会压在 ${st(f.a).name}–${st(f.b).name} 线上`;}
+  return null;
+}
+function placeError(pt){
+  if(pt.x<24||pt.x>W-24||pt.y<24||pt.y>H-28)return "超出星图";
+  for(const o of S.stars)if(dist(o,pt)<MIN_GAP)return `离 ${o.name} 太近`;
+  for(const f of S.edges)if(distPS(pt,st(f.a),st(f.b))<PASS_GAP)return "不能放在线上";
+  return null;
+}
+const cutCost=()=>(S.perks.freecut&&!S.freeCutUsed)?0:1;
+
+/* ---------- actions ---------- */
+function say(m,err){S.msg=m;S.err=!!err;}
+function pushUndo(){S.undo.push(JSON.stringify({stars:S.stars,edges:S.edges,ap:S.ap,block:S.block,spent:S.spent,ehp:S.enemy.hp,fc:S.freeCutUsed,acts:S.acts,stats:S.stats[S.fight]}));}
+function undo(){
+  if(S.phase!=="play"||!S.undo.length){say("本回合没有可以撤销的操作",true);return;}
+  const u=JSON.parse(S.undo.pop());
+  Object.assign(S,{stars:u.stars,edges:u.edges,ap:u.ap,block:u.block,spent:u.spent,freeCutUsed:u.fc,acts:u.acts});
+  S.enemy.hp=u.ehp;S.stats[S.fight]=u.stats;S.sel=null;say("已撤销");
+}
+function doConnect(a,b){
+  const err=edgeError(a,b,S.stars,S.edges);if(err){say(err,true);return;}
+  if(S.ap<1){say("行动点不足",true);return;}
+  pushUndo();S.edges.push({a,b,gold:false});S.ap--;S.stats[S.fight].connect++;
+  S.acts.push(`连${st(a).name}–${st(b).name}`);S.sel=b;say(`连接 ${st(a).name}–${st(b).name}。已选中 ${st(b).name}，可以继续延长。`);
+}
+function doCut(e){
+  const c=cutCost();if(S.ap<c){say("行动点不足",true);return;}
+  pushUndo();S.edges=S.edges.filter(x=>x!==e);S.ap-=c;if(c===0)S.freeCutUsed=true;S.stats[S.fight].cut++;
+  S.acts.push(`剪${st(e.a).name}–${st(e.b).name}${c===0?"(免费)":""}`);say(`剪断 ${st(e.a).name}–${st(e.b).name}`);
+}
+function doMove(id,pt){
+  const err=moveError(id,pt);if(err){say(err,true);return;}
+  if(S.ap<1){say("行动点不足",true);return;}
+  pushUndo();const s=st(id);s.x=Math.round(pt.x);s.y=Math.round(pt.y);S.ap--;S.stats[S.fight].move++;
+  S.acts.push(`移${s.name}`);S.sel=null;say(`移动 ${s.name}`);
+}
+function doActivate(key){
+  const x=structuresOf(S.stars,S.edges).find(y=>y.key===key);if(!x)return;
+  const why=activationBlock(x);if(why){say(why,true);return;}
+  pushUndo();S.ap-=S.cfg.act;S.spent.push(...x.ids);S.stats[S.fight].activate++;
+  const v=effVal(x,S.stars);
+  if(x.type==="chain"){
+    const d=Math.min(v,S.enemy.hp);S.enemy.hp-=d;S.stats[S.fight].dealt+=d;
+    S.acts.push(`激活链[${names(x.ids)}]攻${v}`);say(`链「${names(x.ids)}」造成 ${v} 伤害`);
+    if(S.enemy.hp<=0)winFight();
+  }else{
+    S.block+=v;S.acts.push(`激活环[${names(x.ids)}]挡${v}`);say(`环「${names(x.ids)}」提供 ${v} 格挡`);
+  }
+}
+function endTurn(){
+  if(S.phase!=="play")return;
+  const E=enemyDef(),it=intentAt(0),blk=S.block,dmg=Math.max(0,it.atk-blk);
+  S.hp-=dmg;S.stats[S.fight].taken+=dmg;S.stats[S.fight].turns++;
+  const eff=[];
+  S.stars.forEach(s=>{if(s.eaten>0)s.eaten--;});
+  if(it.eat){const t=eatTarget(S.stars,S.edges);
+    if(t){S.edges=S.edges.filter(e=>e.a!==t&&e.b!==t);st(t).eaten=EAT_TURNS;eff.push(`${E.name}吞掉了${st(t).name}`);}
+    else eff.push("没有可吞的星");}
+  if(it.cut){const ts=cutTargets(it.cut,S.stars,S.edges);
+    if(ts.length){S.edges=S.edges.filter(e=>!ts.includes(e));eff.push(`剪断 ${ts.map(e=>st(e.a).name+"–"+st(e.b).name).join("、")}`);}
+    else eff.push("没有可剪的线");}
+  let sealNext=[];
+  if(it.seal){sealNext=it.seal.filter(id=>!st(id).steady);if(sealNext.length)eff.push(`封锁 ${names(sealNext)}（下回合）`);}
+  S.record.push(`第${S.turn}回合：${S.acts.join("；")||"无操作"} → 攻${it.atk}−挡${blk}，受到 ${dmg}${eff.length?"；"+eff.join("；"):""}`);
+  if(S.hp<=0){S.hp=0;S.phase="lost";S.record.push(`战败于第${S.fight+1}战第${S.turn}回合`);say("你被击败了",true);return;}
+  Object.assign(S,{turn:S.turn+1,intent:(S.intent+1)%E.intents.length,ap:S.cfg.ap,block:0,spent:[],sealed:sealNext,freeCutUsed:false,undo:[],acts:[],sel:null});
+  say(`${E.name} 攻击 ${it.atk}，格挡 ${blk}，你受到 ${dmg} 伤害。${eff.join("；")}`);
+}
+function winFight(){
+  S.stats[S.fight].turns++;
+  S.record.push(`第${S.turn}回合：${S.acts.join("；")} → 击败${enemyDef().name}`);
+  S.sel=null;S.undo=[];
+  if(S.fight<ENEMIES.length-1){S.hp=Math.min(MAX_HP,S.hp+HEAL);S.phase="reward";say(`击败 ${enemyDef().name}！恢复 ${HEAL} 生命，选一个成长。`);}
+  else{S.phase="won";S.record.push("三战全胜");say("三战全胜！");}
+}
+function chooseReward(k){
+  const r=REWARDS[S.fight].find(x=>x.k===k);
+  if(k==="freecut"){S.perks.freecut=true;S.record.push(`奖励：${r.nm}`);startFight(S.fight+1);return;}
+  if(k==="gold"&&!S.edges.some(e=>!e.gold)){say("星图上没有可以改造的线",true);return;}
+  S.pending=k;S.phase="pick";
+  say({star:"点击星图空处，放置新星。",bright:"点击一颗星，把它变成亮星。",steady:"点击一颗星，把它变成坚星。",gold:"点击一条线，把它改成金线。"}[k]);
+}
+function pickClick(h,p){
+  const k=S.pending;let done="";
+  if(k==="star"){if(h.star){say("要点在空处",true);return;}const err=placeError(p);if(err){say(err,true);return;}
+    const [id,name]=EXTRA[S.extra++%EXTRA.length];S.stars.push({id,name,x:Math.round(p.x),y:Math.round(p.y),bright:false,steady:false,eaten:0});done=`新星 ${name}`;}
+  else if(k==="bright"||k==="steady"){if(!h.star){say("请点一颗星",true);return;}const s=st(h.star);s[k]=true;done=`${k==="bright"?"亮星":"坚星"} ${s.name}`;}
+  else if(k==="gold"){if(!h.edge){say("请点一条线",true);return;}if(h.edge.gold){say("这条已经是金线",true);return;}h.edge.gold=true;done=`金线 ${st(h.edge.a).name}–${st(h.edge.b).name}`;}
+  S.record.push(`奖励：${done}`);startFight(S.fight+1);
+}
+
+/* ---------- pointer ---------- */
+const svg=$("#map");
+function svgPoint(e){const pt=svg.createSVGPoint();pt.x=e.clientX;pt.y=e.clientY;return pt.matrixTransform(svg.getScreenCTM().inverse());}
+function hitTest(p){
+  const scale=svg.getBoundingClientRect().width/W||1;
+  const rS=Math.max(20,22/scale),rE=Math.max(9,14/scale);
+  let best=null,bd=1e9;
+  S.stars.forEach(s=>{const d=dist(s,p);if(d<rS&&d<bd){bd=d;best=s.id;}});
+  if(best)return {star:best};
+  let be=null;bd=1e9;
+  S.edges.forEach(e=>{const d=distPS(p,st(e.a),st(e.b));if(d<rE&&d<bd){bd=d;be=e;}});
+  return be?{edge:be}:{};
+}
+svg.addEventListener("click",e=>{
+  if(!S)return;const p=svgPoint(e),h=hitTest(p);
+  if(S.phase==="pick"){pickClick(h,p);render();return;}
+  if(S.phase!=="play")return;
+  if(S.mode==="connect"){
+    if(h.star){
+      if(!S.sel){if(st(h.star).eaten)say(`${st(h.star).name} 被吞了，暂时不能连线`,true);else{S.sel=h.star;say(`已选中 ${st(h.star).name}，再点另一颗星连线`);}}
+      else if(S.sel===h.star){S.sel=null;say("");}
+      else doConnect(S.sel,h.star);
+    }else{S.sel=null;say("");}
+  }else if(S.mode==="cut"){if(h.edge)doCut(h.edge);}
+  else if(S.mode==="move"){
+    if(h.star){S.sel=S.sel===h.star?null:h.star;if(S.sel)say(`已选中 ${st(S.sel).name}，点虚线圈内的空处移动它`);}
+    else if(S.sel)doMove(S.sel,p);
+  }
+  hover=null;render();
+});
+svg.addEventListener("pointermove",e=>{if(!S||e.pointerType!=="mouse")return;const p=svgPoint(e);hover={...hitTest(p),pt:p};renderPreview();});
+svg.addEventListener("pointerleave",()=>{hover=null;if(S)renderPreview();});
+
+/* ---------- hypothetical for preview ---------- */
+function hypo(){
+  if(!hover)return null;
+  if(S.phase==="pick"){
+    if(S.pending==="star"&&!hover.star){const err=placeError(hover.pt);return {title:"放置新星",err,ghost:hover.pt};}
+    return null;
+  }
+  if(S.phase!=="play")return null;
+  if(S.mode==="connect"&&S.sel&&hover.star&&hover.star!==S.sel){
+    const err=edgeError(S.sel,hover.star,S.stars,S.edges)||(S.ap<1?"行动点不足":null);
+    return {title:`连接 ${st(S.sel).name}–${st(hover.star).name}（1 点）`,err,stars:S.stars,edges:[...S.edges,{a:S.sel,b:hover.star,gold:false}]};
+  }
+  if(S.mode==="cut"&&hover.edge){
+    const c=cutCost();
+    return {title:`剪断 ${st(hover.edge.a).name}–${st(hover.edge.b).name}（${c} 点）`,err:S.ap<c?"行动点不足":null,stars:S.stars,edges:S.edges.filter(e=>e!==hover.edge)};
+  }
+  if(S.mode==="move"&&S.sel&&!hover.star){
+    const err=moveError(S.sel,hover.pt)||(S.ap<1?"行动点不足":null);
+    const ns=S.stars.map(o=>o.id===S.sel?{...o,x:hover.pt.x,y:hover.pt.y}:o);
+    return {title:`移动 ${st(S.sel).name}（1 点）`,err,stars:ns,edges:S.edges,ghost:hover.pt};
+  }
+  return null;
+}
+function diffLines(s1,e1,s2,e2){
+  const a=structuresOf(s1,e1).map(x=>desc(x,s1)),b=structuresOf(s2,e2).map(x=>desc(x,s2));
+  const out=[];
+  a.filter(d=>!b.includes(d)).forEach(d=>out.push(["minus","− "+d]));
+  b.filter(d=>!a.includes(d)).forEach(d=>out.push(["plus","+ "+d]));
+  const t1=targetsText(targetsFor(s1,e1),s1),t2=targetsText(targetsFor(s2,e2),s2);
+  if(t1!==t2)out.push(["tgt",`敌人目标：${t1||"无"} → ${t2||"无"}`]);
+  if(!out.length)out.push(["h","结构不变"]);
+  return out;
+}
+
+/* ---------- render ---------- */
+function renderBg(){
+  let seed=7,h="";const rnd=()=>(seed=(seed*16807)%2147483647)/2147483647;
+  for(let i=0;i<90;i++)h+=`<circle class="bgdot" cx="${(rnd()*W).toFixed(1)}" cy="${(rnd()*H).toFixed(1)}" r="${(0.5+rnd()*1.1).toFixed(2)}" fill-opacity="${(0.12+rnd()*0.35).toFixed(2)}"/>`;
+  $("#bg").innerHTML=h;
+}
+function renderMain(){
+  const sts=structuresOf(S.stars,S.edges),of={};
+  sts.forEach(x=>x.edges.forEach(e=>of[ek(e)]=x));
+  const playing=S.phase==="play",tg=playing?targetsFor(S.stars,S.edges):{eat:null,cut:[],seal:[]};
+  let h="";
+  if(playing&&S.mode==="move"&&S.sel){const s=st(S.sel);h+=`<circle class="reach" cx="${s.x}" cy="${s.y}" r="${S.cfg.moveRadius}"/>`;}
+  S.edges.forEach(e=>{
+    const A=st(e.a),B=st(e.b),x=of[ek(e)],spent=x.ids.some(id=>S.spent.includes(id));
+    if(e.gold)h+=`<line class="goldunder" x1="${A.x}" y1="${A.y}" x2="${B.x}" y2="${B.y}"/>`;
+    h+=`<line class="edge ${x.type}${spent?" spent":""}" x1="${A.x}" y1="${A.y}" x2="${B.x}" y2="${B.y}"/>`;
+    if(e.gold){const mx=(A.x+B.x)/2,my=(A.y+B.y)/2;h+=`<rect class="goldmark" x="${mx-4}" y="${my-4}" width="8" height="8" transform="rotate(45 ${mx} ${my})"/>`;}
+  });
+  tg.cut.forEach(e=>{const A=st(e.a),B=st(e.b),mx=(A.x+B.x)/2,my=(A.y+B.y)/2;
+    h+=`<line class="cutmark" x1="${A.x}" y1="${A.y}" x2="${B.x}" y2="${B.y}" transform="translate(0,-6)"/><text class="tag" x="${mx}" y="${my-14}">将被剪</text>`;});
+  sts.forEach(x=>{
+    const cx=x.ids.reduce((t,id)=>t+st(id).x,0)/x.ids.length,cy=x.ids.reduce((t,id)=>t+st(id).y,0)/x.ids.length;
+    const spent=x.ids.some(id=>S.spent.includes(id)),v=effVal(x,S.stars);
+    const txt=spent?"已激活":(x.type==="chain"?`攻 ${v}`:`挡 ${v}`),w=txt.length*9+14;
+    h+=`<g class="pill ${spent?"spent":x.type}"><rect x="${cx-w/2}" y="${cy-10}" width="${w}" height="20" rx="10"/><text x="${cx}" y="${cy}">${txt}</text></g>`;
+  });
+  S.stars.forEach(s=>{
+    const spent=S.spent.includes(s.id),deg=degOf(s.id,S.edges);
+    let g=`<g transform="translate(${s.x},${s.y})">`;
+    if(s.bright)g+=`<circle class="brighthalo" r="17"/>`;
+    if(s.steady)g+=`<rect class="steadybox" x="-13" y="-13" width="26" height="26" transform="rotate(45)"/>`;
+    if(S.sel===s.id)g+=`<circle class="selring" r="15"/>`;
+    if(s.eaten)g+=`<circle class="eaten" r="${STAR_R}"/><text class="tag" y="-18">被吞 ${s.eaten}</text>`;
+    else g+=`<circle class="glow" r="14"/><circle class="core${spent?" spent":""}" r="${STAR_R}"/>`;
+    if(S.sealed.includes(s.id))g+=`<circle class="sealring" r="13"/><text class="tag" y="-18">封锁</text>`;
+    if(tg.eat===s.id)g+=`<circle class="threat" r="18"/><text class="tag" y="-23">将被吞</text>`;
+    if(tg.seal.includes(s.id))g+=`<circle class="threat" r="18"/><text class="tag" y="-23">将封锁</text>`;
+    for(let i=0;i<CAP;i++)g+=`<circle class="pip${i<deg?" on":""}" cx="15" cy="${-4+i*7}" r="2.4"/>`;
+    g+=`<text class="sname${s.eaten?" dim":""}" y="30">${esc(s.name)}</text></g>`;
+    h+=g;
+  });
+  $("#main").innerHTML=h;
+}
+function renderPreview(){
+  let h="";
+  if(hoverKey){const x=structuresOf(S.stars,S.edges).find(y=>y.key===hoverKey);
+    if(x)x.edges.forEach(e=>{const A=st(e.a),B=st(e.b);h+=`<line class="pvhl" x1="${A.x}" y1="${A.y}" x2="${B.x}" y2="${B.y}"/>`;});}
+  const hy=hypo();
+  if(hover&&hover.star&&(S.phase==="play"||S.pending==="bright"||S.pending==="steady")){const s=st(hover.star);h+=`<circle class="hovring" cx="${s.x}" cy="${s.y}" r="19"/>`;}
+  if(S.phase==="pick"&&S.pending==="gold"&&hover&&hover.edge){const A=st(hover.edge.a),B=st(hover.edge.b);h+=`<line class="pvgold" x1="${A.x}" y1="${A.y}" x2="${B.x}" y2="${B.y}"/>`;}
+  if(hy){
+    if(S.mode==="connect"&&S.phase==="play"){const A=st(S.sel),B=st(hover.star);h+=`<line class="pvline ${hy.err?"bad":"ok"}" x1="${A.x}" y1="${A.y}" x2="${B.x}" y2="${B.y}"/>`;}
+    if(S.mode==="cut"&&S.phase==="play"){const A=st(hover.edge.a),B=st(hover.edge.b);h+=`<line class="pvcut" x1="${A.x}" y1="${A.y}" x2="${B.x}" y2="${B.y}"/>`;}
+    if(hy.ghost){
+      if(S.phase==="play")S.edges.filter(e=>e.a===S.sel||e.b===S.sel).forEach(e=>{const o=st(e.a===S.sel?e.b:e.a);h+=`<line class="ghostline${hy.err?" bad":""}" x1="${o.x}" y1="${o.y}" x2="${hy.ghost.x}" y2="${hy.ghost.y}"/>`;});
+      h+=`<circle class="ghost${hy.err?" bad":""}" cx="${hy.ghost.x}" cy="${hy.ghost.y}" r="${STAR_R}"/>`;
+    }
+  }
+  $("#pv").innerHTML=h;
+  renderPreviewPanel(hy);
+}
+function renderPreviewPanel(hy){
+  let h="";
+  if(hoverKey){const x=structuresOf(S.stars,S.edges).find(y=>y.key===hoverKey);
+    if(x){const why=activationBlock(x);h=`<div class="t">${esc(desc(x,S.stars))}</div><div class="${why?"e":"h"}">${why?"不能激活："+esc(why):`激活花 ${S.cfg.act} 点。${x.type==="chain"?"立即对敌人造成伤害。":"格挡本回合敌人的攻击。"}`}</div>`;}}
+  else if(hy){
+    h=`<div class="t">${esc(hy.title)}</div>`;
+    if(hy.err)h+=`<div class="e">不能这样做：${esc(hy.err)}</div>`;
+    else if(hy.edges)h+=diffLines(S.stars,S.edges,hy.stars,hy.edges).map(([c,t])=>`<div class="${c}">${esc(t)}</div>`).join("");
+    else h+=`<div class="h">可以放在这里</div>`;
+  }else{
+    const hint=S.phase==="pick"?S.msg:
+      {connect:"点一颗星，再点另一颗星连线。连好后终点自动选中，方便继续延长。",
+       cut:"点一条线把它剪断。剪线也能改变敌人的目标。",
+       move:"先点一颗星，再点虚线圈内的空处。它的连线会跟着走。"}[S.mode];
+    h=`<div class="h">${esc(hint)}</div><div class="h">把鼠标停在星、线或结构上，这里会显示操作前后的变化。</div>`;
+  }
+  $("#pv-panel").innerHTML=h;
+}
+function intentText(it,tg){
+  const p=[`攻击 <b>${it.atk}</b>`];
+  if(it.eat)p.push(`吞星：${tg?(tg.eat?`<b>${esc(st(tg.eat).name)}</b>`:"（没有目标）"):"最大结构的中间星"}`);
+  if(it.cut)p.push(`剪线 ×${it.cut}：${tg?(tg.cut.length?tg.cut.map(e=>`<b>${esc(st(e.a).name)}–${esc(st(e.b).name)}</b>`).join("、"):"（没有目标）"):"最长的线"}`);
+  if(it.seal)p.push(`封锁：<b>${esc(names(it.seal.filter(id=>!st(id).steady))||"无")}</b>（下回合含它们的结构不能激活）`);
+  return p.join(" · ");
+}
+function renderSide(){
+  const E=enemyDef(),it=intentAt(0),playing=S.phase==="play";
+  const tg=playing?targetsFor(S.stars,S.edges):null;
+  let fut="";
+  if(S.cfg.future)fut=`<div class="future">之后：${[1,2].map(k=>intentText(intentAt(k),null).replace(/<\/?b>/g,"")).join("　→　")}</div>`;
+  $("#enemyCard").innerHTML=`
+    <div class="row"><span class="label">敌人 · 第 ${S.fight+1}/${ENEMIES.length} 战</span><span class="num">${S.enemy.hp} / ${S.enemy.max}</span></div>
+    <div class="enemy-name">${esc(E.name)}</div>
+    <div class="bar hp-enemy"><i style="width:${100*S.enemy.hp/S.enemy.max}%"></i></div>
+    <div class="lore">${esc(E.lore)}</div>
+    ${E.passive==="burn"?`<div class="passive">被动「灼甲」：少于 4 条线的链造成 0 伤害。</div>`:""}
+    <div class="intent">本回合意图：${intentText(it,tg)}</div>${fut}`;
+  const pips=Array.from({length:S.cfg.ap},(_,i)=>`<i class="${i<S.ap?"on":""}"></i>`).join("");
+  const inc=Math.max(0,it.atk-S.block);
+  $("#youCard").innerHTML=`
+    <div class="row"><span class="label">你</span><span class="num">生命 ${S.hp} / ${MAX_HP}</span></div>
+    <div class="bar hp-you"><i style="width:${100*S.hp/MAX_HP}%"></i></div>
+    <div class="stats">
+      <div class="stat"><span class="label">行动点</span><div class="pips" aria-label="剩余 ${S.ap} 点">${pips}</div></div>
+      <div class="stat"><span class="label">格挡</span><span class="v">${S.block}</span></div>
+      <div class="stat"><span class="label">回合</span><span class="v">${S.turn}</span></div>
+    </div>
+    <div class="incoming">结束回合时：攻击 ${it.atk} − 格挡 ${S.block} = 受到 <b>${inc}</b> 伤害${S.perks.freecut?` · 解缆：${S.freeCutUsed?"本回合已用":"本回合第一次剪线免费"}`:""}</div>`;
+  const sts=structuresOf(S.stars,S.edges);
+  $("#slist").innerHTML=sts.length?sts.map(x=>{
+    const why=activationBlock(x);
+    return `<div class="srow" data-key="${x.key}"><span class="chip ${x.type}">${x.type==="chain"?"链":"环"}</span>
+      <span class="sdesc">${esc(desc(x,S.stars))}${why&&playing?`<span class="why">${esc(why)}</span>`:""}</span>
+      <button class="act ${x.type}" data-key="${x.key}" ${why?"disabled":""}>激活 ${S.cfg.act}</button></div>`;
+  }).join(""):`<div class="empty">还没有结构。连两颗星就是一条链，首尾相接就是环。</div>`;
+}
+function renderRules(){
+  const c=S.cfg;
+  $("#rules").innerHTML=[
+    `每回合 ${c.ap} 个行动点。连线、移动星各 1 点，剪线 1 点，激活结构 ${c.act} 点。`,
+    `每颗星最多连 ${CAP} 条线。线不能交叉，也不能穿过其他星。`,
+    "连在一起的星组成结构：首尾相接是「环」，否则是「链」。",
+    c.chain==="tri"?"激活链：立即造成伤害 1+2+…+线数（2 线 3，3 线 6，4 线 10，5 线 15）。":"激活链：立即造成伤害，每条线 3。",
+    `激活环：本回合格挡 = 星数 × ${c.ring}。格挡在回合结束后清零。`,
+    "每颗星每回合只能参与一次激活。",
+    "星图在三场战斗之间保留，生命也保留（每胜一场恢复 10）。",
+    "结束回合前随时可以撤销。敌人按意图行动，红色标记是它这回合的目标，会随你的星图实时变化。"
+  ].map(t=>`<li>${esc(t)}</li>`).join("");
+}
+function renderModal(){
+  const m=$("#modal");
+  if(S.phase==="reward"){
+    const opts=REWARDS[S.fight].map(r=>{const dis=r.k==="gold"&&!S.edges.some(e=>!e.gold);
+      return `<button class="choice" data-reward="${r.k}" ${dis?"disabled":""}><span class="cat">${r.cat}</span><span class="nm">${r.nm}</span><span class="d">${esc(r.d)}${dis?"（现在没有线）":""}</span></button>`;}).join("");
+    m.innerHTML=`<div class="sheet" role="dialog" aria-label="选择成长"><h2>击败${esc(enemyDef().name)}</h2>
+      <div class="lore">恢复 ${HEAL} 生命（现在 ${S.hp}/${MAX_HP}）。星图会原样带进下一战：${esc(ENEMIES[S.fight+1].name)}。选一个成长：</div>
+      <div class="choices">${opts}</div></div>`;
+    m.hidden=false;return;
+  }
+  if(S.phase==="won"||S.phase==="lost"){
+    const rows=S.stats.map((t,i)=>`<tr><td>${i+1}. ${esc(t.name)}</td><td>${t.turns}</td><td>${t.connect}</td><td>${t.cut}</td><td>${t.move}</td><td>${t.activate}</td><td>${t.dealt}</td><td>${t.taken}</td></tr>`).join("");
+    m.innerHTML=`<div class="sheet" role="dialog" aria-label="结算"><h2>${S.phase==="won"?"三战全胜":"星图熄灭"}</h2>
+      <div class="lore">${S.phase==="won"?`剩余生命 ${S.hp}。`:`倒在第 ${S.fight+1} 战。`}下面是每一战的操作次数，剪线和移动多不多，能看出旧结构是在帮你还是在拖你。</div>
+      <div class="tablewrap"><table><thead><tr><th>战斗</th><th>回合</th><th>连线</th><th>剪线</th><th>移动</th><th>激活</th><th>造成</th><th>承受</th></tr></thead><tbody>${rows}</tbody></table></div>
+      <div class="foot"><button class="btn primary" id="again">再试一种构筑</button><button class="btn" id="copy2">复制试玩记录</button><span class="status" id="copyMsg2"></span></div></div>`;
+    m.hidden=false;return;
+  }
+  m.hidden=true;m.innerHTML="";
+}
+function render(){
+  $("#runinfo").textContent=`第 ${S.fight+1}/${ENEMIES.length} 战 · 第 ${S.turn} 回合 · 星 ${S.stars.length} · 线 ${S.edges.length}`;
+  Object.keys(MODES).forEach(k=>$("#m-"+k).setAttribute("aria-pressed",String(S.mode===k)));
+  $("#undo").disabled=S.phase!=="play"||!S.undo.length;
+  $("#endturn").disabled=S.phase!=="play";
+  const stEl=$("#status");stEl.textContent=S.msg;stEl.className="status"+(S.err?" err":"");
+  renderMain();renderSide();renderRules();renderModal();renderPreview();
+}
+
+/* ---------- record ---------- */
+function recordText(){
+  const c=S.cfg;
+  return [`星图卡组原型 v0.1 试玩记录`,
+    `设置：行动点 ${c.ap}；激活消耗 ${c.act}；链公式 ${c.chain==="tri"?"累加":"线性"}；环每星 ${c.ring}；公开后续意图 ${c.future?"是":"否"}`,
+    ...S.record,
+    `—— 汇总 ——`,
+    ...S.stats.map((t,i)=>`第${i+1}战 ${t.name}：${t.turns} 回合，连线 ${t.connect}，剪线 ${t.cut}，移动 ${t.move}，激活 ${t.activate}，造成 ${t.dealt}，承受 ${t.taken}`),
+    `最终星图：${S.stars.map(s=>`${s.name}(${s.x},${s.y})${s.bright?"亮":""}${s.steady?"坚":""}`).join(" ")}`,
+    `连线：${S.edges.map(e=>st(e.a).name+"–"+st(e.b).name+(e.gold?"(金)":"")).join(" ")||"无"}`
+  ].join("\n");
+}
+function copyRecord(msgSel){
+  const txt=recordText(),box=$("#recordBox");
+  const fallback=()=>{box.value=txt;box.hidden=false;box.focus();box.select();$(msgSel).textContent="已展开记录，请手动复制";};
+  try{navigator.clipboard.writeText(txt).then(()=>{$(msgSel).textContent="已复制";},fallback);}catch(e){fallback();}
+}
+
+/* ---------- controls ---------- */
+document.querySelectorAll("[data-mode]").forEach(b=>b.addEventListener("click",()=>{S.mode=b.dataset.mode;S.sel=null;say("");render();}));
+$("#undo").addEventListener("click",()=>{undo();render();});
+$("#endturn").addEventListener("click",()=>{endTurn();render();});
+$("#slist").addEventListener("click",e=>{const b=e.target.closest("button[data-key]");if(b){doActivate(b.dataset.key);hoverKey=null;render();}});
+$("#slist").addEventListener("mouseover",e=>{const r=e.target.closest(".srow");const k=r?r.dataset.key:null;if(k!==hoverKey){hoverKey=k;renderPreview();}});
+$("#slist").addEventListener("mouseleave",()=>{hoverKey=null;renderPreview();});
+$("#modal").addEventListener("click",e=>{
+  const r=e.target.closest("[data-reward]");if(r){chooseReward(r.dataset.reward);render();return;}
+  if(e.target.closest("#again")){newRun(S.cfg);render();return;}
+  if(e.target.closest("#copy2"))copyRecord("#copyMsg2");
+});
+$("#copyRec").addEventListener("click",()=>copyRecord("#copyMsg"));
+$("#restart").addEventListener("click",()=>{newRun(S.cfg);render();});
+function syncCfgForm(){const c=S.cfg;$("#cfg-ap").value=String(c.ap);$("#cfg-act").value=String(c.act);$("#cfg-chain").value=c.chain;$("#cfg-ring").value=String(c.ring);$("#cfg-future").checked=!!c.future;}
+$("#cfg-apply").addEventListener("click",()=>{
+  const c={ap:+$("#cfg-ap").value,act:+$("#cfg-act").value,chain:$("#cfg-chain").value,ring:+$("#cfg-ring").value,future:$("#cfg-future").checked};
+  saveCfg(c);newRun(c);render();
+});
+document.addEventListener("keydown",e=>{
+  if(!S||e.target.closest("input,select,textarea"))return;
+  if(e.key==="1"||e.key==="2"||e.key==="3"){S.mode=["connect","cut","move"][+e.key-1];S.sel=null;render();}
+  else if(e.key==="z"||e.key==="Z"){undo();render();}
+  else if(e.key==="Enter"&&S.phase==="play"&&!e.target.closest("button")){endTurn();render();}
+  else if(e.key==="Escape"){S.sel=null;say("");render();}
+});
+
+/* ---------- boot ---------- */
+function boot(data){
+  renderBg();
+  if(data&&data.S&&Array.isArray(data.S.stars))S=data.S;else newRun(loadCfg());
+  syncCfgForm();render();
+}
+try{window.claude?.hot?.snapshot?.(()=>({S:JSON.parse(JSON.stringify(S))}));}catch(e){}
+if(window.claude?.hot?.ready)window.claude.hot.ready(boot);else boot(window.claude?.hot?.data??{});
+})();
+</script>
