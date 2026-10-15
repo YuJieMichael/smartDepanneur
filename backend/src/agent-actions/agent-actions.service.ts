@@ -8,9 +8,10 @@ import { AgentActionStatus, Prisma } from '@prisma/client';
 import { AuditTrailService } from '../audit-trail/audit-trail.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { PurchaseOrdersService } from '../purchase-orders/purchase-orders.service';
-import type {
-  MinStockProposalPayload,
-  PurchaseOrderProposalPayload,
+import {
+  proposeMinStockChange,
+  type MinStockProposalPayload,
+  type PurchaseOrderProposalPayload,
 } from './agent-action-proposals';
 
 interface Operator {
@@ -47,6 +48,25 @@ export class AgentActionsService {
       select: actionSelect,
       orderBy: { createdAt: 'desc' },
       take: 50,
+    });
+  }
+
+  /** Staff propose a reviewed minimum; the owner still approves it. */
+  proposeMinStock(
+    input: { productId?: number; newMinStock?: number },
+    operator: Operator,
+  ) {
+    const productId = Number(input.productId);
+    const newMinStock = Number(input.newMinStock);
+    if (!Number.isInteger(productId) || productId <= 0) {
+      throw new BadRequestException('productId must be a positive integer');
+    }
+    return proposeMinStockChange(this.prisma, {
+      productId,
+      newMinStock,
+      rationale: `Minimum stock review recommends ${newMinStock} from forecast demand`,
+      source: 'min-stock-review',
+      requestedById: operator.id,
     });
   }
 

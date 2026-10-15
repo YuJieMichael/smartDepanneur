@@ -2,7 +2,12 @@ import { BadRequestException } from '@nestjs/common';
 import { AgentActionType, Prisma } from '@prisma/client';
 import type { PrismaService } from '../prisma/prisma.service';
 
-export type AgentActionSource = 'openai-agent' | 'local-agent' | 'mcp';
+export type AgentActionSource =
+  | 'openai-agent'
+  | 'local-agent'
+  | 'mcp'
+  // A staff member proposing a change from the minimum stock review.
+  | 'min-stock-review';
 
 export interface PurchaseOrderProposalPayload {
   language: 'en' | 'fr' | 'zh';

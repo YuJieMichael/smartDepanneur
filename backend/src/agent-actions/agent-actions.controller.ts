@@ -30,6 +30,14 @@ export class AgentActionsController {
     );
   }
 
+  @Post('min-stock')
+  proposeMinStock(
+    @Body() body: { productId?: number; newMinStock?: number },
+    @Request() req: { user: { id: number; email: string } },
+  ) {
+    return this.agentActionsService.proposeMinStock(body, req.user);
+  }
+
   // Only roles with agent-actions-approve (Store Owner) can let an agent
   // proposal change store data.
   @Post(':id/approve')

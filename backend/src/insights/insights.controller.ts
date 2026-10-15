@@ -35,6 +35,16 @@ export class InsightsController {
     return this.insightsService.getSlowMovers();
   }
 
+  @Get('expiry-risks')
+  async getExpiryRisks(@Query('language') language?: InsightLanguage) {
+    return this.insightsService.getExpiryRisks(language ?? 'en');
+  }
+
+  @Get('min-stock-review')
+  async getMinStockReview(@Query('language') language?: InsightLanguage) {
+    return this.insightsService.getMinStockReview(language ?? 'en');
+  }
+
   @Post('ask')
   async ask(
     @Body() body: AskInsightDto,
