@@ -1,19 +1,52 @@
 import { BadRequestException, Injectable } from '@nestjs/common';
 import { InsightType, Prisma } from '@prisma/client';
+import {
+  AgentActionProposal,
+  AgentActionSource,
+  proposeMinStockChange,
+  proposePurchaseOrders,
+} from '../agent-actions/agent-action-proposals';
 import { PrismaService } from '../prisma/prisma.service';
+import {
+  FORECAST_HISTORY_DAYS,
+  forecastFromSales,
+  SaleQuantity,
+  storeDateKey,
+} from './forecast';
+import {
+  findStoreAgentTool,
+  InsightAgentTool,
+  selectLocalAgentTool,
+  STORE_AGENT_TOOL_NAMES,
+  toOpenAiToolDefinitions,
+} from './store-agent-tools';
+
+export {
+  STORE_AGENT_TOOLS,
+  type InsightAgentTool,
+} from './store-agent-tools';
 
 const REORDER_DAYS_WINDOW = 7;
+const REORDER_HORIZON_DAYS = 14;
 const SLOW_MOVER_DAYS_WINDOW = 30;
 const TOP_SELLER_LIMIT = 10;
 const SLOW_MOVER_LIMIT = 10;
+const EXPIRY_WINDOW_DAYS = 14;
+// No per-supplier lead time is stored yet, so reviews assume two days.
+const SUPPLIER_LEAD_TIME_DAYS = 2;
+const MIN_STOCK_REVIEW_LIMIT = 20;
+const DAY_MS = 86_400_000;
 
 export type InsightLanguage = 'en' | 'fr' | 'zh';
 type InsightProvider = 'openai-agent' | 'local-agent';
-type InsightAgentTool =
-  | 'get_reorder_suggestions'
-  | 'get_top_sellers'
-  | 'get_slow_movers'
-  | 'get_store_summary';
+
+export interface AgentToolContext {
+  source: AgentActionSource;
+  requestedBy: { id: number; email: string } | null;
+  language?: InsightLanguage;
+  // Proposals recorded while answering, returned so the UI can show them.
+  proposals?: AgentActionProposal[];
+}
 
 interface InsightAnswer {
   result: string;
@@ -47,67 +80,7 @@ interface OpenAiFunctionCall {
   arguments: string;
 }
 
-const AGENT_TOOLS: InsightAgentTool[] = [
-  'get_reorder_suggestions',
-  'get_top_sellers',
-  'get_slow_movers',
-  'get_store_summary',
-];
-
-const RESPONSE_TOOL_DEFINITIONS = [
-  {
-    type: 'function',
-    name: 'get_reorder_suggestions',
-    description:
-      'Return products at or below minimum stock, recent sales velocity, recommended order quantities, suppliers, urgency, and estimated cost.',
-    parameters: {
-      type: 'object',
-      properties: {},
-      required: [],
-      additionalProperties: false,
-    },
-    strict: true,
-  },
-  {
-    type: 'function',
-    name: 'get_top_sellers',
-    description:
-      'Return the best-selling products ranked by units sold, with revenue and current stock.',
-    parameters: {
-      type: 'object',
-      properties: {},
-      required: [],
-      additionalProperties: false,
-    },
-    strict: true,
-  },
-  {
-    type: 'function',
-    name: 'get_slow_movers',
-    description:
-      'Return active products with stock but no sales in the last 30 days, including stock value and expiration information.',
-    parameters: {
-      type: 'object',
-      properties: {},
-      required: [],
-      additionalProperties: false,
-    },
-    strict: true,
-  },
-  {
-    type: 'function',
-    name: 'get_store_summary',
-    description:
-      'Return today sale count, active product count, and low-stock product count.',
-    parameters: {
-      type: 'object',
-      properties: {},
-      required: [],
-      additionalProperties: false,
-    },
-    strict: true,
-  },
-] as const;
+const RESPONSE_TOOL_DEFINITIONS = toOpenAiToolDefinitions();
 
 @Injectable()
 export class InsightsService {
@@ -160,13 +133,21 @@ export class InsightsService {
       _sum: { quantity: true },
     });
     const velocityMap = new Map(salesData.map((row) => [row.productId, row._sum?.quantity ?? 0]));
+    const history = await this.loadSalesHistory(productIds);
+    const now = new Date();
 
     const suggestions = lowStockProducts.map((product) => {
       const soldLast7Days = velocityMap.get(product.id) ?? 0;
-      const dailyVelocity = soldLast7Days / REORDER_DAYS_WINDOW;
+      // Weekday-aware demand for the next 14 days; falls back to the 7-day
+      // average for products with under two weeks of sales history.
+      const forecast = forecastFromSales(
+        history.get(product.id) ?? [],
+        now,
+        REORDER_HORIZON_DAYS,
+      );
       const suggestedReorderQty = Math.max(
         1,
-        Math.ceil(dailyVelocity * 14 + product.minStock - product.currentStock),
+        Math.ceil(forecast.total + product.minStock - product.currentStock),
       );
 
       const urgency: 'critical' | 'high' | 'medium' =
@@ -199,6 +180,8 @@ export class InsightsService {
         currentStock: product.currentStock,
         minStock: product.minStock,
         soldLast7Days,
+        forecastNext14Days: Math.round(forecast.total * 10) / 10,
+        forecastMethod: forecast.method,
         suggestedReorderQty,
         unitCost: new Prisma.Decimal(product.costPrice),
         estimatedCost: new Prisma.Decimal(product.costPrice).times(suggestedReorderQty),
@@ -325,6 +308,213 @@ export class InsightsService {
     };
   }
 
+  /**
+   * Perishables that are forecast not to sell out before they expire, with a
+   * markdown that grows as the date gets closer.
+   */
+  async getExpiryRisks(language: InsightLanguage = 'en') {
+    const normalizedLanguage = this.normalizeLanguage(language);
+    const now = new Date();
+    const products = await this.prisma.product.findMany({
+      where: {
+        isActive: true,
+        currentStock: { gt: 0 },
+        expirationDate: { lte: new Date(now.getTime() + EXPIRY_WINDOW_DAYS * DAY_MS) },
+      },
+      select: {
+        id: true,
+        name: true,
+        unit: true,
+        currentStock: true,
+        costPrice: true,
+        sellingPrice: true,
+        expirationDate: true,
+        category: { select: { id: true, name: true } },
+      },
+      orderBy: { expirationDate: 'asc' },
+    });
+
+    const history = await this.loadSalesHistory(products.map((product) => product.id));
+    const today = storeDateKey(now);
+    const risks = products.flatMap((product) => {
+      if (!product.expirationDate) return [];
+      const expiryKey = storeDateKey(product.expirationDate);
+      const daysLeft = Math.round(
+        (Date.parse(`${expiryKey}T12:00:00Z`) - Date.parse(`${today}T12:00:00Z`)) / DAY_MS,
+      );
+      const forecast = forecastFromSales(
+        history.get(product.id) ?? [],
+        now,
+        EXPIRY_WINDOW_DAYS,
+      );
+      // Units expected to sell on the days still left before expiry (the
+      // expiry day itself is not counted).
+      const expectedSales =
+        daysLeft <= 0
+          ? 0
+          : forecast.daily.slice(0, daysLeft).reduce((sum, value) => sum + value, 0);
+      const atRiskUnits = Math.max(0, product.currentStock - Math.floor(expectedSales));
+      if (atRiskUnits === 0) return [];
+
+      const expired = daysLeft < 0;
+      const discountPct = expired
+        ? null
+        : daysLeft <= 1
+          ? 50
+          : daysLeft <= 3
+            ? 30
+            : daysLeft <= 7
+              ? 20
+              : 10;
+      const sellingPrice = new Prisma.Decimal(product.sellingPrice);
+      const costPrice = new Prisma.Decimal(product.costPrice);
+      const suggestedPrice =
+        discountPct === null
+          ? null
+          : sellingPrice.times(100 - discountPct).dividedBy(100).toDecimalPlaces(2);
+
+      return [
+        {
+          productId: product.id,
+          productName: product.name,
+          unit: product.unit,
+          category: product.category,
+          expirationDate: expiryKey,
+          daysLeft,
+          currentStock: product.currentStock,
+          expectedSalesBeforeExpiry: Math.round(expectedSales * 10) / 10,
+          atRiskUnits,
+          atRiskCost: costPrice.times(atRiskUnits),
+          action: expired ? ('remove' as const) : ('markdown' as const),
+          suggestedDiscountPct: discountPct,
+          sellingPrice,
+          suggestedPrice,
+          belowCost: suggestedPrice !== null && suggestedPrice.lessThan(costPrice),
+        },
+      ];
+    });
+
+    risks.sort((a, b) => b.atRiskCost.comparedTo(a.atRiskCost));
+    const totalAtRiskCost = risks.reduce(
+      (sum, risk) => sum.plus(risk.atRiskCost),
+      new Prisma.Decimal(0),
+    );
+    const total = totalAtRiskCost.toFixed(2);
+    const summary =
+      risks.length === 0
+        ? normalizedLanguage === 'zh'
+          ? '没有临期商品会在过期前卖不完。'
+          : normalizedLanguage === 'fr'
+            ? 'Aucun produit périssable ne risque d’expirer avant d’être vendu.'
+            : 'No perishable product is at risk of expiring before it sells.'
+        : normalizedLanguage === 'zh'
+          ? `${risks.length} 个商品可能在过期前卖不完，按成本计约 $${total}。`
+          : normalizedLanguage === 'fr'
+            ? `${risks.length} produit(s) risquent d’expirer avant d’être vendus, environ ${total} $ au coût.`
+            : `${risks.length} product(s) may expire before they sell, about $${total} at cost.`;
+
+    return { windowDays: EXPIRY_WINDOW_DAYS, totalAtRiskCost, risks, summary };
+  }
+
+  /**
+   * Flags minimum stock levels that no longer match demand. The minimum is the
+   * reorder trigger, so it should cover demand over the supplier lead time
+   * plus a buffer of half the busiest forecast day.
+   */
+  async getMinStockReview(language: InsightLanguage = 'en') {
+    const normalizedLanguage = this.normalizeLanguage(language);
+    const products = await this.prisma.product.findMany({
+      where: { isActive: true },
+      select: { id: true, name: true, unit: true, minStock: true, currentStock: true },
+    });
+    const history = await this.loadSalesHistory(products.map((product) => product.id));
+    const now = new Date();
+
+    const reviews = products.flatMap((product) => {
+      const forecast = forecastFromSales(
+        history.get(product.id) ?? [],
+        now,
+        REORDER_HORIZON_DAYS,
+      );
+      // Not enough history to judge the minimum.
+      if (forecast.method !== 'weekday-seasonal') return [];
+      const recommendedMinStock = Math.ceil(
+        forecast.averageDaily * SUPPLIER_LEAD_TIME_DAYS + 0.5 * forecast.peakDaily,
+      );
+      const difference = recommendedMinStock - product.minStock;
+      if (Math.abs(difference) < Math.max(2, Math.ceil(recommendedMinStock * 0.25))) {
+        return [];
+      }
+      return [
+        {
+          productId: product.id,
+          productName: product.name,
+          unit: product.unit,
+          currentStock: product.currentStock,
+          currentMinStock: product.minStock,
+          recommendedMinStock,
+          direction: difference > 0 ? ('raise' as const) : ('lower' as const),
+          averageDailyForecast: Math.round(forecast.averageDaily * 10) / 10,
+          peakDailyForecast: Math.round(forecast.peakDaily * 10) / 10,
+        },
+      ];
+    });
+
+    reviews.sort(
+      (a, b) =>
+        Math.abs(b.recommendedMinStock - b.currentMinStock) -
+        Math.abs(a.recommendedMinStock - a.currentMinStock),
+    );
+    const limited = reviews.slice(0, MIN_STOCK_REVIEW_LIMIT);
+    const raise = limited.filter((review) => review.direction === 'raise').length;
+    const lower = limited.length - raise;
+    const summary =
+      limited.length === 0
+        ? normalizedLanguage === 'zh'
+          ? '最低库存设置与预测需求基本一致。'
+          : normalizedLanguage === 'fr'
+            ? 'Les stocks minimums correspondent à la demande prévue.'
+            : 'Minimum stock levels match forecast demand.'
+        : normalizedLanguage === 'zh'
+          ? `${limited.length} 个商品的最低库存需要调整：${raise} 个偏低，${lower} 个偏高。`
+          : normalizedLanguage === 'fr'
+            ? `${limited.length} stock(s) minimum à ajuster : ${raise} trop bas, ${lower} trop élevé(s).`
+            : `${limited.length} minimum stock level(s) need adjusting: ${raise} too low, ${lower} too high.`;
+
+    return {
+      leadTimeDays: SUPPLIER_LEAD_TIME_DAYS,
+      reviews: limited,
+      summary,
+    };
+  }
+
+  private async loadSalesHistory(
+    productIds: number[],
+  ): Promise<Map<number, SaleQuantity[]>> {
+    const history = new Map<number, SaleQuantity[]>();
+    if (productIds.length === 0) return history;
+
+    const rows = await this.prisma.saleItem.findMany({
+      where: {
+        productId: { in: productIds },
+        sale: {
+          createdAt: { gte: new Date(Date.now() - (FORECAST_HISTORY_DAYS + 1) * DAY_MS) },
+        },
+      },
+      select: {
+        productId: true,
+        quantity: true,
+        sale: { select: { createdAt: true } },
+      },
+    });
+    for (const row of rows) {
+      const sales = history.get(row.productId) ?? [];
+      sales.push({ quantity: row.quantity, createdAt: row.sale.createdAt });
+      history.set(row.productId, sales);
+    }
+    return history;
+  }
+
   async ask(
     question: string,
     language: InsightLanguage,
@@ -332,11 +522,13 @@ export class InsightsService {
   ) {
     const normalizedQuestion = this.normalizeQuestion(question);
     const normalizedLanguage = this.normalizeLanguage(language);
-    const fallback = await this.getLocalAgentAnswer(
-      normalizedQuestion,
-      normalizedLanguage,
-    );
-    let answer = fallback;
+    const context: AgentToolContext = {
+      source: 'openai-agent',
+      requestedBy: operator,
+      language: normalizedLanguage,
+      proposals: [],
+    };
+    let answer: InsightAnswer | null = null;
     let fallbackReason: string | null = process.env.OPENAI_API_KEY
       ? null
       : 'OPENAI_API_KEY is not configured';
@@ -346,11 +538,23 @@ export class InsightsService {
         answer = await this.getOpenAiAgentAnswer(
           normalizedQuestion,
           normalizedLanguage,
+          context,
         );
       } catch (error) {
         fallbackReason =
           error instanceof Error ? error.message : 'Unknown OpenAI error';
       }
+    }
+
+    // The local agent runs only when the OpenAI agent is unavailable, so a
+    // question never produces proposals from both agents.
+    if (!answer) {
+      context.source = 'local-agent';
+      answer = await this.getLocalAgentAnswer(
+        normalizedQuestion,
+        normalizedLanguage,
+        context,
+      );
     }
 
     await this.prisma.aiInsightLog.create({
@@ -381,12 +585,14 @@ export class InsightsService {
       provider: answer.provider,
       toolsUsed: answer.toolsUsed,
       fallbackReason,
+      proposals: context.proposals ?? [],
     };
   }
 
   private async getOpenAiAgentAnswer(
     question: string,
     language: InsightLanguage,
+    context: AgentToolContext,
   ): Promise<InsightAnswer> {
     const apiKey = process.env.OPENAI_API_KEY;
     if (!apiKey) throw new Error('OPENAI_API_KEY is not configured');
@@ -399,7 +605,8 @@ export class InsightsService {
     }[language];
     const instructions =
       'You are the SmartDepanneur Store Operations Agent for a Quebec convenience store owner. ' +
-      'Call one or more provided read-only business tools before answering. Use only returned tool data; never invent products, sales, or stock. ' +
+      'Call one or more provided business tools before answering. Use only returned tool data; never invent products, sales, or stock. ' +
+      'You cannot change store data. The propose_* tools only record a pending proposal that the owner approves in the app: use them when the owner asks you to prepare or change something, and say plainly that it awaits approval. ' +
       `Answer only in ${languageName}, regardless of the language used in the question. ` +
       'Lead with the decision, then give concise reasons and next actions.';
     const agentSignal = AbortSignal.timeout(12_000);
@@ -429,7 +636,9 @@ export class InsightsService {
       toolCalls.map(async (toolCall) => ({
         type: 'function_call_output',
         call_id: toolCall.call_id,
-        output: JSON.stringify(await this.executeAgentTool(toolCall.name)),
+        output: JSON.stringify(
+          await this.executeAgentToolCall(toolCall, context),
+        ),
       })),
     );
     const firstOutput: unknown[] =
@@ -491,7 +700,7 @@ export class InsightsService {
         item.type !== 'function_call' ||
         typeof item.call_id !== 'string' ||
         typeof item.name !== 'string' ||
-        !AGENT_TOOLS.includes(item.name as InsightAgentTool) ||
+        !STORE_AGENT_TOOL_NAMES.includes(item.name as InsightAgentTool) ||
         typeof item.arguments !== 'string'
       ) {
         return [];
@@ -566,16 +775,95 @@ export class InsightsService {
     };
   }
 
-  private async executeAgentTool(tool: InsightAgentTool): Promise<unknown> {
+  /**
+   * Runs one Store Agent tool. Read-only tools return data; proposal tools
+   * validate their arguments and record a pending proposal, never a change.
+   */
+  async executeAgentTool(
+    tool: InsightAgentTool,
+    args: Record<string, unknown> = {},
+    context: AgentToolContext = { source: 'mcp', requestedBy: null },
+  ): Promise<unknown> {
+    const definition = findStoreAgentTool(tool);
+    if (!definition) throw new BadRequestException(`Unknown tool ${tool}`);
+    const parsed = definition.input.safeParse(args);
+    if (!parsed.success) {
+      throw new BadRequestException(
+        `Invalid arguments for ${tool}: ${parsed.error.issues
+          .map((issue) => `${issue.path.join('.') || 'input'} ${issue.message}`)
+          .join('; ')}`,
+      );
+    }
+    const language = context.language ?? 'en';
+
     switch (tool) {
       case 'get_reorder_suggestions':
-        return this.getReorderSuggestions();
+        return this.getReorderSuggestions(language);
       case 'get_top_sellers':
         return this.getTopSellers();
       case 'get_slow_movers':
         return this.getSlowMovers();
       case 'get_store_summary':
         return this.getStoreSummaryData();
+      case 'get_expiry_risks':
+        return this.getExpiryRisks(language);
+      case 'get_min_stock_review':
+        return this.getMinStockReview(language);
+      case 'propose_purchase_orders': {
+        const reorder = await this.getReorderSuggestions(language);
+        if (reorder.suggestions.length === 0) {
+          return { proposed: false, message: 'Nothing needs reordering, so no purchase orders were proposed.' };
+        }
+        const proposal = await proposePurchaseOrders(this.prisma, {
+          language,
+          preview: {
+            businessDate: storeDateKey(new Date()),
+            itemCount: reorder.suggestions.length,
+            supplierCount: new Set(
+              reorder.suggestions.map((item) => item.supplier?.id ?? 'none'),
+            ).size,
+            estimatedTotal: reorder.suggestions
+              .reduce((sum, item) => sum.plus(item.estimatedCost), new Prisma.Decimal(0))
+              .toFixed(2),
+          },
+          rationale: reorder.summary,
+          source: context.source,
+          requestedById: context.requestedBy?.id ?? null,
+        });
+        context.proposals?.push(proposal);
+        return { proposed: true, proposal };
+      }
+      case 'propose_min_stock_change': {
+        const input = parsed.data as {
+          productId: number;
+          newMinStock: number;
+          reason: string;
+        };
+        const proposal = await proposeMinStockChange(this.prisma, {
+          productId: input.productId,
+          newMinStock: input.newMinStock,
+          rationale: input.reason,
+          source: context.source,
+          requestedById: context.requestedBy?.id ?? null,
+        });
+        context.proposals?.push(proposal);
+        return { proposed: true, proposal };
+      }
+    }
+  }
+
+  /** A model tool call: bad arguments go back to the model as an error. */
+  private async executeAgentToolCall(
+    toolCall: OpenAiFunctionCall,
+    context: AgentToolContext,
+  ) {
+    try {
+      const args = JSON.parse(toolCall.arguments) as Record<string, unknown>;
+      return await this.executeAgentTool(toolCall.name, args, context);
+    } catch (error) {
+      return {
+        error: error instanceof Error ? error.message : 'Tool failed',
+      };
     }
   }
 
@@ -585,54 +873,98 @@ export class InsightsService {
       get_top_sellers: InsightType.top_sellers,
       get_slow_movers: InsightType.slow_movers,
       get_store_summary: InsightType.sales_summary,
+      get_expiry_risks: InsightType.expiry_risks,
+      get_min_stock_review: InsightType.min_stock_review,
+      propose_purchase_orders: InsightType.agent_action,
+      propose_min_stock_change: InsightType.agent_action,
     };
     return types[tool];
-  }
-
-  private selectLocalAgentTool(question: string): InsightAgentTool {
-    const normalizedQuestion = question.toLowerCase();
-    const asksForReorder =
-      normalizedQuestion.includes('restock') ||
-      normalizedQuestion.includes('reorder') ||
-      normalizedQuestion.includes('low stock') ||
-      normalizedQuestion.includes('réapprovision') ||
-      normalizedQuestion.includes('reapprovision') ||
-      normalizedQuestion.includes('stock faible') ||
-      normalizedQuestion.includes('commander') ||
-      question.includes('补货') ||
-      question.includes('进货') ||
-      question.includes('库存');
-    const asksForSlowMovers =
-      normalizedQuestion.includes('slow') ||
-      normalizedQuestion.includes('not selling') ||
-      normalizedQuestion.includes('dead') ||
-      normalizedQuestion.includes('se vendent mal') ||
-      normalizedQuestion.includes('vente lente') ||
-      normalizedQuestion.includes('stagn') ||
-      question.includes('滞销') ||
-      question.includes('卖不动') ||
-      question.includes('不好卖');
-    const asksForTopSellers =
-      normalizedQuestion.includes('top') ||
-      normalizedQuestion.includes('best') ||
-      normalizedQuestion.includes('popular') ||
-      normalizedQuestion.includes('meilleures ventes') ||
-      normalizedQuestion.includes('se vendent le mieux') ||
-      question.includes('热销') ||
-      question.includes('卖得最好') ||
-      question.includes('销量');
-
-    if (asksForReorder) return 'get_reorder_suggestions';
-    if (asksForSlowMovers) return 'get_slow_movers';
-    if (asksForTopSellers) return 'get_top_sellers';
-    return 'get_store_summary';
   }
 
   private async getLocalAgentAnswer(
     question: string,
     language: InsightLanguage,
+    context: AgentToolContext,
   ): Promise<InsightAnswer> {
-    const tool = this.selectLocalAgentTool(question);
+    const tool = selectLocalAgentTool(question);
+
+    if (tool === 'propose_purchase_orders') {
+      const output = (await this.executeAgentTool(tool, {}, context)) as
+        | { proposed: false }
+        | { proposed: true; proposal: AgentActionProposal };
+      if (!output.proposed) {
+        return {
+          type: InsightType.agent_action,
+          provider: 'local-agent',
+          toolsUsed: [tool],
+          result:
+            language === 'zh'
+              ? '目前没有需要补货的商品，所以没有生成采购单提案。'
+              : language === 'fr'
+                ? 'Rien n’est à réapprovisionner, donc aucun bon de commande n’a été proposé.'
+                : 'Nothing needs reordering right now, so no purchase orders were proposed.',
+        };
+      }
+      const preview = output.proposal.payload as {
+        itemCount: number;
+        supplierCount: number;
+        estimatedTotal: string;
+      };
+      return {
+        type: InsightType.agent_action,
+        provider: 'local-agent',
+        toolsUsed: [tool],
+        result:
+          language === 'zh'
+            ? `已准备采购单提案：${preview.itemCount} 个商品，${preview.supplierCount} 个供应商，预计 $${preview.estimatedTotal}。在“待审批操作”中批准之前不会下单。`
+            : language === 'fr'
+              ? `Proposition de bons de commande prête : ${preview.itemCount} produit(s), ${preview.supplierCount} fournisseur(s), environ ${preview.estimatedTotal} $. Rien n’est commandé avant votre approbation dans « Actions en attente ».`
+              : `I prepared a purchase-order proposal: ${preview.itemCount} product(s) from ${preview.supplierCount} supplier(s), about $${preview.estimatedTotal}. Nothing is ordered until you approve it under Pending actions.`,
+      };
+    }
+
+    if (tool === 'get_expiry_risks') {
+      const { risks, summary } = await this.getExpiryRisks(language);
+      const lines = risks.slice(0, 5).map((risk) => {
+        const price = risk.suggestedPrice?.toFixed(2);
+        if (language === 'zh') {
+          return risk.action === 'remove'
+            ? `- ${risk.productName}：已于 ${risk.expirationDate} 过期，请下架 ${risk.currentStock} 件`
+            : `- ${risk.productName}：${risk.expirationDate} 过期，预计有 ${risk.atRiskUnits} 件卖不完，建议打 ${100 - (risk.suggestedDiscountPct ?? 0)} 折价 $${price}`;
+        }
+        if (language === 'fr') {
+          return risk.action === 'remove'
+            ? `- ${risk.productName} : expiré le ${risk.expirationDate}, retirer ${risk.currentStock} unité(s)`
+            : `- ${risk.productName} : expire le ${risk.expirationDate}, ${risk.atRiskUnits} unité(s) risquent de rester; rabais de ${risk.suggestedDiscountPct} % à ${price} $`;
+        }
+        return risk.action === 'remove'
+          ? `- ${risk.productName}: expired on ${risk.expirationDate}, remove ${risk.currentStock} from the shelf`
+          : `- ${risk.productName}: expires ${risk.expirationDate}, ${risk.atRiskUnits} may not sell; mark down ${risk.suggestedDiscountPct}% to $${price}`;
+      });
+      return {
+        type: InsightType.expiry_risks,
+        provider: 'local-agent',
+        toolsUsed: [tool],
+        result: lines.length > 0 ? `${summary}\n\n${lines.join('\n')}` : summary,
+      };
+    }
+
+    if (tool === 'get_min_stock_review') {
+      const { reviews, summary } = await this.getMinStockReview(language);
+      const lines = reviews.slice(0, 5).map((review) =>
+        language === 'zh'
+          ? `- ${review.productName}：最低库存 ${review.currentMinStock} → 建议 ${review.recommendedMinStock}`
+          : language === 'fr'
+            ? `- ${review.productName} : minimum ${review.currentMinStock} → ${review.recommendedMinStock} suggéré`
+            : `- ${review.productName}: minimum ${review.currentMinStock} -> suggested ${review.recommendedMinStock}`,
+      );
+      return {
+        type: InsightType.min_stock_review,
+        provider: 'local-agent',
+        toolsUsed: [tool],
+        result: lines.length > 0 ? `${summary}\n\n${lines.join('\n')}` : summary,
+      };
+    }
 
     if (tool === 'get_reorder_suggestions') {
       const { suggestions, summary } = await this.getReorderSuggestions();

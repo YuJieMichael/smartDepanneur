@@ -32,10 +32,23 @@ Inventory waste and adjustments use the same conditional-update pattern.
 
 ## Agent boundary
 
-The Store Agent exposes four read-only tools: reorder suggestions, top sellers,
-slow movers, and store summary. OpenAI first selects one or more tools, the
-backend executes them against PostgreSQL, and a second Responses API call
-turns only those tool results into an owner-friendly answer.
+The Store Agent exposes six read-only tools (reorder suggestions, top sellers,
+slow movers, store summary, expiry risks, minimum stock review) and two
+proposal tools (purchase-order drafts, minimum stock change). OpenAI first
+selects one or more tools, the backend validates their arguments with zod and
+executes them against PostgreSQL, and a second Responses API call turns only
+those tool results into an owner-friendly answer.
+
+Proposal tools never change store data. They write a pending `agent_actions`
+row (identical pending proposals are reused). A Store Owner approves or rejects
+it; approval claims the row with a conditional update so it runs once,
+re-checks that the data has not changed since the proposal, executes, and
+writes the audit trail. The same tools, with the same rule, are served over MCP.
+
+Reorder quantities, expiry risk and the minimum stock review share one demand
+forecast (`insights/forecast.ts`): a deseasonalized 28-day level times a
+weekday profile on completed store days in America/Toronto, falling back to a
+rolling seven-day average for products with under two weeks of history.
 
 The UI sends `en`, `fr`, or `zh` explicitly, so the answer language follows
 the user's selected interface rather than guessing from the question. A

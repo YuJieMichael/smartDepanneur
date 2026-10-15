@@ -9,5 +9,6 @@ import { PurchaseOrdersService } from './purchase-orders.service';
   imports: [PrismaModule, InsightsModule, AuditTrailModule],
   controllers: [PurchaseOrdersController],
   providers: [PurchaseOrdersService],
+  exports: [PurchaseOrdersService],
 })
 export class PurchaseOrdersModule {}

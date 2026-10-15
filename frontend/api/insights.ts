@@ -9,6 +9,8 @@ export interface ReorderSuggestion {
   currentStock: number;
   minStock: number;
   soldLast7Days: number;
+  forecastNext14Days: number;
+  forecastMethod: 'weekday-seasonal' | 'moving-average';
   suggestedReorderQty: number;
   unitCost: string;
   estimatedCost: string;
@@ -101,7 +103,61 @@ export type InsightAgentTool =
   | 'get_reorder_suggestions'
   | 'get_top_sellers'
   | 'get_slow_movers'
-  | 'get_store_summary';
+  | 'get_store_summary'
+  | 'get_expiry_risks'
+  | 'get_min_stock_review'
+  | 'propose_purchase_orders'
+  | 'propose_min_stock_change';
+
+export interface ExpiryRisk {
+  productId: number;
+  productName: string;
+  unit: string;
+  category: { id: number; name: string } | null;
+  expirationDate: string;
+  daysLeft: number;
+  currentStock: number;
+  expectedSalesBeforeExpiry: number;
+  atRiskUnits: number;
+  atRiskCost: string;
+  action: 'markdown' | 'remove';
+  suggestedDiscountPct: number | null;
+  sellingPrice: string;
+  suggestedPrice: string | null;
+  belowCost: boolean;
+}
+
+export function apiGetExpiryRisks(language: Locale) {
+  return request<{ windowDays: number; totalAtRiskCost: string; risks: ExpiryRisk[]; summary: string }>(
+    `/api/insights/expiry-risks?language=${encodeURIComponent(language)}`,
+  );
+}
+
+export interface MinStockReview {
+  productId: number;
+  productName: string;
+  unit: string;
+  currentStock: number;
+  currentMinStock: number;
+  recommendedMinStock: number;
+  direction: 'raise' | 'lower';
+  averageDailyForecast: number;
+  peakDailyForecast: number;
+}
+
+export function apiGetMinStockReview(language: Locale) {
+  return request<{ leadTimeDays: number; reviews: MinStockReview[]; summary: string }>(
+    `/api/insights/min-stock-review?language=${encodeURIComponent(language)}`,
+  );
+}
+
+export interface AgentActionProposal {
+  id: number;
+  type: 'generate_purchase_orders' | 'set_min_stock';
+  status: 'pending';
+  created: boolean;
+  rationale: string;
+}
 
 export function apiAskInsight(question: string, language: Locale) {
   return request<{
@@ -112,6 +168,7 @@ export function apiAskInsight(question: string, language: Locale) {
     provider: 'openai-agent' | 'local-agent';
     toolsUsed: InsightAgentTool[];
     fallbackReason: string | null;
+    proposals: AgentActionProposal[];
   }>('/api/insights/ask', {
     method: 'POST',
     body: JSON.stringify({ question, language }),

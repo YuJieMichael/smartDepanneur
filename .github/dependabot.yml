@@ -1,5 +1,7 @@
 version: 2
 updates:
+  # Major upgrades (for example Prisma 7's adapter-based client or TypeScript 7's
+  # native compiler) need code migrations, so they are reviewed by hand.
   - package-ecosystem: npm
     directory: /backend
     schedule:
@@ -7,6 +9,10 @@ updates:
     groups:
       backend-dependencies:
         patterns: ["*"]
+        update-types: ["minor", "patch"]
+    ignore:
+      - dependency-name: "*"
+        update-types: ["version-update:semver-major"]
 
   - package-ecosystem: npm
     directory: /frontend
@@ -15,6 +21,10 @@ updates:
     groups:
       frontend-dependencies:
         patterns: ["*"]
+        update-types: ["minor", "patch"]
+    ignore:
+      - dependency-name: "*"
+        update-types: ["version-update:semver-major"]
 
   - package-ecosystem: github-actions
     directory: /
