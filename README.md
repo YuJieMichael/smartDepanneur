@@ -28,6 +28,9 @@ steps, known boundaries, and resume positioning.
 - Atomic stock updates that prevent negative inventory
 - OpenAI Responses API tool calling with a deterministic local Agent fallback
 - The same Store Agent tools served to any MCP client over stdio
+- Agent actions gated by owner approval: the agent proposes, a person decides
+- A weekday-aware demand forecast, backtested against the old rule
+- Supplier invoices read by a vision model and reviewed before stock-in
 - English, French, and Simplified Chinese user interfaces
 - Repeatable Docker development and production-style builds
 - Automated typechecking, linting, tests, builds, and container validation
@@ -52,6 +55,9 @@ flowchart LR
 - Product catalogue with barcode, SKU, category, supplier, unit, cost, price,
   minimum stock, and expiration settings
 - Stock-in, manual adjustment, waste, return, and sales movement history
+- Supplier invoice photo or PDF read into a reviewable receipt: catalogue
+  matching, cost-change flags, duplicate-invoice protection, and one-transaction
+  stock-in after the owner confirms
 - POS-style checkout with Quebec tax, payment method, estimated profit, and
   automatic inventory deduction
 - Checkout category filtering with product counts and name, barcode, or SKU
@@ -68,11 +74,18 @@ flowchart LR
 
 ### Store Agent
 
-- Reorder quantities derived from seven-day sales velocity and a fourteen-day
-  planning horizon
-- Top-seller and slow-mover analysis
-- Read-only tools for reorder suggestions, top sellers, slow movers, and store
-  summaries
+- Reorder quantities from a 14-day weekday-aware demand forecast (seven-day
+  average for products with under two weeks of history)
+- Top-seller, slow-mover, expiry-risk, and minimum-stock analysis
+- Six read-only tools (reorder suggestions, top sellers, slow movers, store
+  summary, expiry risks, minimum stock review) and two proposal tools
+  (purchase-order drafts, minimum stock change)
+- Proposals wait under Pending actions until the Store Owner approves or
+  rejects them; nothing the agent proposes changes data on its own
+- Expiry risks: perishables forecast not to sell before their date, with units
+  and cost at risk and a markdown that deepens as the date nears
+- Minimum stock review: minimums that no longer match forecast demand over the
+  supplier lead time, with a recommended value staff can propose
 - OpenAI function calling chooses the business tools needed for each question
 - The selected UI language (`en`, `fr`, or `zh`) controls both suggested
   questions and the answer language
@@ -91,6 +104,9 @@ flowchart LR
 - Cashier access restricted to checkout; sales update inventory automatically
 - Server-enforced sale void ownership, time window, reason, and large-void
   approval rules
+- Agent proposals need the `agent-actions-approve` permission (Store Owner);
+  each approval is claimed atomically, runs once, re-checks for changes made
+  since the proposal, and is audited
 - Required environment validation at startup
 - No hard-coded production JWT fallback
 - Conditional database updates that prevent concurrent sales or adjustments
@@ -163,7 +179,7 @@ Default ports are frontend `3100`, backend `3101`, and PostgreSQL `5432`.
 
 ## Store Agent tools over MCP
 
-The four read-only Store Agent tools are also served over the
+The Store Agent tools are also served over the
 [Model Context Protocol](https://modelcontextprotocol.io), so an owner can ask
 Claude Desktop, Claude Code, or any MCP client about live store data without
 opening the app. The MCP server and the in-app agent share one tool
@@ -191,12 +207,15 @@ Claude Desktop configuration (`claude_desktop_config.json`):
 }
 ```
 
-The MCP process loads only Prisma and the insight service: no HTTP routes,
-no JWT secret, and every tool is annotated read-only.
+The MCP process loads only Prisma and the insight service: no HTTP routes and
+no JWT secret. The six analysis tools are annotated read-only. The two
+`propose_*` tools only record a pending proposal, so an MCP client can
+suggest a purchase order or a minimum stock change, but only the owner can
+approve it in the app.
 
 ## Store Agent eval
 
-`npm run eval:agent` (in `backend/`) scores the Store Agent on 78 owner
+`npm run eval:agent` (in `backend/`) scores the Store Agent on 133 owner
 questions in English, French, and Chinese against an in-memory fixture store,
 so it needs neither PostgreSQL nor an API key. Each answer is checked for:
 
@@ -204,16 +223,19 @@ so it needs neither PostgreSQL nor an API key. Each answer is checked for:
 - **Language**: the answer is in the selected UI language
 - **Grounding**: every product it names came back from a tool it called
 - **Required facts**: it surfaces the fixture's key fact (for example, the
-  out-of-stock product for a restocking question)
+  out-of-stock product for a restocking question), and an action request ends
+  in a pending proposal
 
-Cases come in three splits: `dev` (may guide changes), `holdout` (written
-alongside dev, never tuned on), and `blind` (written by a separate model from
-a description of the four tools, without seeing any agent code).
+Cases come in four splits: `dev` (may guide changes), `holdout` (written
+alongside dev, never tuned on), `blind` (written by a separate model from a
+description of the tools, without seeing any agent code), and `blind-v2`
+(the same, for the expiry, minimum stock and proposal tools; the developer read
+it before writing those rules, so it is a weaker check than `blind`).
 
 The first run showed the deterministic fallback agent, which answers whenever
 OpenAI is unavailable, routed only 42% of questions correctly: "Are we running
 out of anything?" got a generic store summary. Replacing single keywords with
-multilingual intent groups raised it to:
+multilingual intent groups raised the original 78 cases to:
 
 | Split | Cases | Before | After |
 | --- | --- | --- | --- |
@@ -222,6 +244,10 @@ multilingual intent groups raised it to:
 | blind | 36 | 44.4% | 66.7% |
 | overall | 78 | 42.3% | 84.6% |
 
+With the expiry, minimum stock and proposal tools added, all 133 cases route
+90.2% correctly: dev and holdout 100%, `blind` 66.7% (unchanged), and
+`blind-v2` 96.3%.
+
 The blind failures are idiomatic phrasings ("What's flying off the shelves?",
 "rendus à sec") that keyword rules cannot cover; that gap is why the LLM agent
 is primary. A Jest test keeps these scores from regressing in CI.
@@ -229,6 +255,41 @@ is primary. A Jest test keeps these scores from regressing in CI.
 `npm run eval:agent -- --agent=openai` runs the same cases against the live
 OpenAI agent (needs `OPENAI_API_KEY`) and adds fallback rate and latency.
 Reports are written to `backend/eval/results/`.
+
+## Demand forecast backtest
+
+Reorder quantities used to spread the last seven days evenly over the next 14,
+which under-orders before weekends, when a depanneur sells most of its beer,
+ice and chips. The forecast now multiplies a deseasonalized 28-day level by a
+weekday profile, computed on completed store days in Montreal time.
+
+`npm run eval:forecast` backtests both rules with the app's reorder policy
+(two-day supplier lead time) on simulated demand: nine depanneur-like products,
+30 random seeds, 84 test days each.
+
+| Metric | 7-day average | Weekday forecast |
+| --- | --- | --- |
+| 7-day forecast error (WAPE) | 35.3% | 28.2% |
+| Fill rate | 97.7% | 98.7% |
+| Lost sales per run | 131 units | 73 units (-44.5%) |
+| Average units on hand | 55.3 | 54.4 |
+
+Products without a weekday rhythm (milk, cigarettes) score the same under both
+rules. The demand is synthetic, so this shows the method works on weekday
+seasonal demand; it is not a measurement from a real store.
+
+## Supplier invoice scanning
+
+Inventory > Scan invoice reads a photo (JPEG, PNG, WebP, GIF) or PDF with an
+OpenAI vision model and strict structured output. Each line is matched to the
+catalogue by SKU or barcode, then by a name similarity that handles French and
+English supplier wording, accents, sizes and pack counts. Lines whose unit cost
+moved more than 5% are flagged. Nothing is stocked until the owner reviews the
+lines and confirms; the receipt is one transaction, audited, and an invoice
+number can be received only once per supplier.
+
+Scanning needs `OPENAI_API_KEY` (and optionally `OPENAI_VISION_MODEL`);
+without it the scanner explains why and manual stock-in still works.
 
 ## Demo accounts
 
@@ -263,8 +324,14 @@ Current backend tests cover:
 - Idempotent supplier-grouped purchase-order draft generation
 - Dashboard closeout, trends, and void metrics
 - AI local fallback and question validation
-- MCP tool listing, read-only annotations, results, and error reporting
-- Store Agent eval score gates for routing, answer language, and grounding
+- MCP tool listing, read-only and proposal annotations, arguments, results,
+  and error reporting
+- Store Agent eval score gates for routing, answer language, grounding, and
+  proposals
+- Weekday forecast, store-day bucketing, and short-history fallback
+- Agent action approval: run-once claims, stale minimum stock, rejection
+- Invoice extraction requests and output validation, catalogue matching, cost
+  change flags, one-transaction receipt, and duplicate invoices
 
 GitHub Actions runs backend and frontend typechecking, linting, tests and
 production builds. A final job validates Compose and builds both images.
@@ -275,13 +342,17 @@ production builds. A final job validates Compose and builds both images.
 .
 ├── backend/
 │   ├── prisma/                 PostgreSQL schema, migrations, demo seed
+│   ├── eval/                   Agent eval cases and forecast backtest
 │   └── src/
 │       ├── auth/               JWT authentication
 │       ├── products/           Product catalogue
 │       ├── inventory/          Stock movements and expiration alerts
 │       ├── sales/              Transactional POS workflow
 │       ├── dashboard/          Store KPIs
-│       └── insights/           Reorder analysis and AI explanations
+│       ├── insights/           Store Agent, tools, forecast, expiry and minimum stock
+│       ├── agent-actions/      Agent proposals and owner approval
+│       ├── invoices/           Supplier invoice reading and receipt
+│       └── mcp/                MCP server for the Store Agent tools
 ├── frontend/
 │   ├── app/                    Next.js routes
 │   ├── api/                    Typed API clients
@@ -302,10 +373,11 @@ production builds. A final job validates Compose and builds both images.
 ## Current scope
 
 The portfolio release is intentionally a single-store system. Draft purchase
-orders are implemented; sending, receiving, and lot-level expiration remain
-future increments. Multi-store tenant isolation, POS imports, invoice OCR, and
-shelf vision are also documented future work rather than claimed as finished
-functionality.
+orders and invoice-based receiving are implemented; sending orders to
+suppliers and lot-level expiration remain future increments. Supplier lead time
+is a fixed two days in the minimum stock review. Multi-store tenant isolation,
+POS imports, and shelf vision are also documented future work rather than
+claimed as finished functionality.
 
 ## Resume summary
 
@@ -317,9 +389,15 @@ functionality.
 - Implemented atomic stock reservation in PostgreSQL transactions to prevent
   concurrent checkouts and inventory adjustments from producing negative
   stock.
-- Developed data-driven reorder recommendations from sales velocity, minimum
-  stock thresholds, and procurement cost, with OpenAI explanations and a
-  resilient deterministic fallback.
+- Built a tool-using Store Agent (OpenAI Responses API, also served over MCP)
+  whose purchase-order and minimum-stock proposals take effect only after the
+  owner approves them.
+- Replaced a flat seven-day average with a weekday-aware demand forecast; on a
+  simulated backtest it cut lost sales 44.5% without raising inventory.
+- Built a trilingual 133-question agent eval that found the fallback agent
+  routed 42% of questions correctly and now gates the improved 90% in CI.
+- Added supplier invoice reading with a vision model, catalogue matching, cost
+  change flags, and reviewed one-transaction stock-in.
 - Added audited sale void controls, dashboard closeout and trend analytics, and
   idempotent supplier-grouped purchase-order drafts.
 - Automated TypeScript validation, linting, Jest tests, application builds, and
