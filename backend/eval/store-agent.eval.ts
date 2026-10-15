@@ -51,7 +51,8 @@ export interface EvalReport {
   results: CaseResult[];
 }
 
-const FRENCH_MARKERS = /\b(le|la|les|des|du|est|sont|aucun|aucune|produits?|ventes?|et|en|magasin|jours)\b/gi;
+const FRENCH_MARKERS =
+  /(?<![\p{L}])(le|la|les|des|du|est|sont|aucun|aucune|produits?|ventes?|et|en|magasin|jours|à|trop|au|aux|pour|sugg[ée]r[ée]|ajuster|unit[ée]s?)(?![\p{L}])/giu;
 const ENGLISH_MARKERS = /\b(the|is|are|and|in|of|no|sold|units|products?|sales?|days|store)\b/gi;
 const CJK = /[一-鿿]/g;
 
@@ -161,6 +162,14 @@ export async function runStoreAgentEval(
       const missingFacts = (testCase.mustMention ?? []).filter(
         (fact) => !response.answer.toLowerCase().includes(fact.toLowerCase()),
       );
+      // An action request must end in a proposal awaiting approval, not a
+      // change and not just a description.
+      if (
+        testCase.expectedTool.startsWith('propose_') &&
+        response.proposals.length === 0
+      ) {
+        missingFacts.push('a pending proposal');
+      }
 
       const routedCorrectly = response.toolsUsed.includes(testCase.expectedTool);
       const languageCorrect =

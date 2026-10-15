@@ -50,7 +50,7 @@ async function main() {
   console.log('Seeded dictionary: poststate');
 
   // Seed permissions and assign to Admin role
-  const permissions = ['create-permission', 'edit-permission', 'create-user', 'edit-user', 'view-admin', 'edit-role', 'template-edit', 'edit-dictionary', 'post-edit', 'post-view', 'product-edit', 'inventory-edit', 'sales-edit', 'dashboard-view', 'insights-view', 'audit-view-store'];
+  const permissions = ['create-permission', 'edit-permission', 'create-user', 'edit-user', 'view-admin', 'edit-role', 'template-edit', 'edit-dictionary', 'post-edit', 'post-view', 'product-edit', 'inventory-edit', 'sales-edit', 'dashboard-view', 'insights-view', 'audit-view-store', 'agent-actions-approve'];
 
   for (const name of permissions) {
     await prisma.permission.upsert({
@@ -70,7 +70,7 @@ async function main() {
     where: { name: 'Store Owner' },
     data: {
       permissions: {
-        set: ['product-edit', 'inventory-edit', 'sales-edit', 'dashboard-view', 'insights-view', 'audit-view-store'].map((name) => ({ name })),
+        set: ['product-edit', 'inventory-edit', 'sales-edit', 'dashboard-view', 'insights-view', 'audit-view-store', 'agent-actions-approve'].map((name) => ({ name })),
       },
     },
   });

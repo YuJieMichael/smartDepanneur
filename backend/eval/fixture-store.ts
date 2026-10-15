@@ -33,8 +33,10 @@ const CATEGORIES = [
 ];
 
 // A small depanneur catalogue with one clear answer per question type:
-// Red Bull is out of stock, Coca-Cola is the top seller, and the scented
-// candle is the largest slow mover.
+// Red Bull is out of stock, Coca-Cola is the top seller (with five weeks of
+// daily history and a minimum stock set far too high), the scented candle is
+// the largest slow mover, and the yogurt expires in two days with far more
+// stock than will sell.
 const PRODUCTS: FixtureProduct[] = [
   { id: 1, name: 'Coca-Cola 355ml', sku: 'DRK-COKE-355', unit: 'can', currentStock: 30, minStock: 24, costPrice: '0.95', sellingPrice: '1.79', expirationDate: null, supplierId: 1, categoryId: 1 },
   { id: 2, name: 'Red Bull 250ml', sku: 'DRK-RB-250', unit: 'can', currentStock: 0, minStock: 18, costPrice: '1.85', sellingPrice: '3.99', expirationDate: null, supplierId: 1, categoryId: 1 },
@@ -48,11 +50,26 @@ const PRODUCTS: FixtureProduct[] = [
   { id: 10, name: 'Bottled Water 500ml', sku: 'DRK-WATER-500', unit: 'bottle', currentStock: 50, minStock: 24, costPrice: '0.30', sellingPrice: '1.29', expirationDate: null, supplierId: 1, categoryId: 1 },
   { id: 11, name: 'Phone Charger', sku: 'HOU-CHARGER', unit: 'unit', currentStock: 10, minStock: 3, costPrice: '7.00', sellingPrice: '14.99', expirationDate: null, supplierId: 4, categoryId: 5 },
   { id: 12, name: 'Eggs (dozen)', sku: 'DAI-EGGS-12', unit: 'carton', currentStock: 12, minStock: 6, costPrice: '3.10', sellingPrice: '4.99', expirationDate: new Date(Date.now() + 14 * DAY_MS), supplierId: 2, categoryId: 2 },
+  { id: 13, name: 'Yogurt Cup 100g', sku: 'DAI-YOGURT', unit: 'cup', currentStock: 24, minStock: 6, costPrice: '0.90', sellingPrice: '1.79', expirationDate: new Date(Date.now() + 2 * DAY_MS), supplierId: 2, categoryId: 2 },
 ];
+
+// Coca-Cola sells every day, more at the end of the week.
+const COKE_BY_WEEKDAY = [3, 2, 2, 2, 3, 5, 6];
+const COKE_HISTORY: [number, number, number][] = Array.from(
+  { length: 35 },
+  (_, index) => [1, COKE_BY_WEEKDAY[index % 7], index + 1],
+);
+// One yogurt a day for three weeks.
+const YOGURT_HISTORY: [number, number, number][] = Array.from(
+  { length: 21 },
+  (_, index) => [13, 1, index + 1],
+);
 
 // [productId, quantity, daysAgo]
 const SALES: [number, number, number][] = [
-  [1, 20, 0], [1, 15, 3], [1, 10, 12],
+  ...COKE_HISTORY,
+  ...YOGURT_HISTORY,
+  [1, 20, 0],
   [2, 12, 1], [2, 8, 5],
   [3, 9, 0], [3, 5, 4],
   [4, 6, 1], [4, 3, 6],
@@ -70,6 +87,7 @@ const MIN_STOCK_FIELD = { __field: 'minStock' };
 interface DateRange {
   gte?: Date;
   lt?: Date;
+  lte?: Date;
 }
 
 // The subset of Prisma filters the insight service uses.
@@ -77,8 +95,9 @@ type Where =
   | {
       isActive?: boolean;
       currentStock?: { lte?: number | typeof MIN_STOCK_FIELD; gt?: number };
-      id?: { in?: number[]; notIn?: number[] };
+      id?: number | { in?: number[]; notIn?: number[] };
       productId?: { in?: number[] };
+      expirationDate?: DateRange;
       createdAt?: DateRange;
       sale?: { createdAt?: DateRange };
     }
@@ -123,8 +142,13 @@ function matchesProduct(product: ReturnType<typeof hydrate>, where: Where) {
     if (product.currentStock > limit) return false;
   }
   if (stock?.gt !== undefined && !(product.currentStock > stock.gt)) return false;
-  if (where.id?.in && !where.id.in.includes(product.id)) return false;
-  if (where.id?.notIn && where.id.notIn.includes(product.id)) return false;
+  const ids = typeof where.id === 'object' ? where.id : undefined;
+  if (ids?.in && !ids.in.includes(product.id)) return false;
+  if (ids?.notIn && ids.notIn.includes(product.id)) return false;
+  if (typeof where.id === 'number' && product.id !== where.id) return false;
+  if (where.expirationDate?.lte) {
+    if (!product.expirationDate || product.expirationDate > where.expirationDate.lte) return false;
+  }
   return true;
 }
 
@@ -158,6 +182,7 @@ export function createFixturePrisma(): PrismaService {
   const now = Date.now();
   const products = PRODUCTS.map(hydrate);
   const sales = salesRows(now);
+  const agentActions: { id: number; status: string; dedupeKey: string }[] = [];
 
   const prisma = {
     product: {
@@ -168,8 +193,17 @@ export function createFixturePrisma(): PrismaService {
           const direction = args.orderBy.currentStock === 'asc' ? 1 : -1;
           rows = [...rows].sort((a, b) => direction * (a.currentStock - b.currentStock));
         }
+        if (args.orderBy?.expirationDate) {
+          rows = [...rows].sort(
+            (a, b) => (a.expirationDate?.getTime() ?? 0) - (b.expirationDate?.getTime() ?? 0),
+          );
+        }
         if (args.take) rows = rows.slice(0, args.take);
         return Promise.resolve(rows.map((row) => pick(row, args.select)));
+      },
+      findFirst: (args: { where?: Where; select?: Select }) => {
+        const row = products.find((product) => matchesProduct(product, args.where));
+        return Promise.resolve(row ? pick(row, args.select) : null);
       },
       count: (args: { where?: Where }) =>
         Promise.resolve(products.filter((product) => matchesProduct(product, args?.where)).length),
@@ -192,9 +226,19 @@ export function createFixturePrisma(): PrismaService {
         if (args.take) rows = rows.slice(0, args.take);
         return Promise.resolve(rows);
       },
-      findMany: (args: { where?: Where }) => {
-        const ids = new Set(sales.filter((sale) => matchesSale(sale, args.where)).map((sale) => sale.productId));
-        return Promise.resolve([...ids].map((productId) => ({ productId })));
+      findMany: (args: { where?: Where; distinct?: string[] }) => {
+        const rows = sales.filter((sale) => matchesSale(sale, args.where));
+        if (args.distinct) {
+          const ids = new Set(rows.map((sale) => sale.productId));
+          return Promise.resolve([...ids].map((productId) => ({ productId })));
+        }
+        return Promise.resolve(
+          rows.map((sale) => ({
+            productId: sale.productId,
+            quantity: sale.quantity,
+            sale: { createdAt: sale.createdAt },
+          })),
+        );
       },
     },
     sale: {
@@ -203,6 +247,22 @@ export function createFixturePrisma(): PrismaService {
     },
     aiInsightLog: {
       create: () => Promise.resolve({ id: 1 }),
+    },
+    agentAction: {
+      findFirst: (args: { where: { dedupeKey: string; status: string } }) =>
+        Promise.resolve(
+          agentActions.find(
+            (action) =>
+              action.dedupeKey === args.where.dedupeKey &&
+              action.status === args.where.status,
+          ) ?? null,
+        ),
+      create: (args: { data: { dedupeKey: string } }) => {
+        const action = { id: agentActions.length + 1, status: 'pending', ...args.data };
+        agentActions.push(action);
+        return Promise.resolve({ id: action.id });
+      },
+      update: () => Promise.resolve({}),
     },
     $transaction: (operations: Promise<unknown>[]) => Promise.all(operations),
   };

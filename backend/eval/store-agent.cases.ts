@@ -7,8 +7,10 @@ export interface StoreAgentEvalCase {
   id: string;
   // dev cases may guide changes to the agent; holdout and blind cases must
   // not. Blind cases were written by a separate model that never saw the
-  // agent's code or intent rules.
-  split: 'dev' | 'holdout' | 'blind';
+  // agent's code or intent rules. blind-v2 covers the expiry, minimum-stock
+  // and proposal tools; it was also written blind, but the developer read it
+  // before writing those rules, so it is a weaker check than blind.
+  split: 'dev' | 'holdout' | 'blind' | 'blind-v2';
   language: InsightLanguage;
   question: string;
   expectedTool: InsightAgentTool;
@@ -20,6 +22,9 @@ const REORDER = 'get_reorder_suggestions';
 const TOP = 'get_top_sellers';
 const SLOW = 'get_slow_movers';
 const SUMMARY = 'get_store_summary';
+const EXPIRY = 'get_expiry_risks';
+const MIN_STOCK = 'get_min_stock_review';
+const PROPOSE_PO = 'propose_purchase_orders';
 
 // Questions phrased the way depanneur owners and cashiers actually ask, not
 // only the keywords the local agent was written around.
@@ -111,4 +116,64 @@ export const STORE_AGENT_EVAL_CASES: StoreAgentEvalCase[] = [
   { id: "zh-b10", split: 'blind', language: 'zh', question: "今天店里生意怎么样？", expectedTool: SUMMARY },
   { id: "zh-b11", split: 'blind', language: 'zh', question: "给我看一下今天的整体情况", expectedTool: SUMMARY },
   { id: "zh-b12", split: 'blind', language: 'zh', question: "今天已经卖了多少单，店里一共有多少种商品在卖？", expectedTool: SUMMARY },
+  // Expiry, minimum stock and proposals: dev
+  { id: 'en-11', split: 'dev', language: 'en', question: 'Which products expire soon?', expectedTool: EXPIRY, mustMention: ['Yogurt'] },
+  { id: 'en-12', split: 'dev', language: 'en', question: "What's about to pass its best-before date?", expectedTool: EXPIRY, mustMention: ['Yogurt'] },
+  { id: 'en-13', split: 'dev', language: 'en', question: 'Are my minimum stock levels right?', expectedTool: MIN_STOCK, mustMention: ['Coca-Cola'] },
+  { id: 'en-14', split: 'dev', language: 'en', question: 'Should I change any reorder points?', expectedTool: MIN_STOCK, mustMention: ['Coca-Cola'] },
+  { id: 'en-15', split: 'dev', language: 'en', question: 'Prepare the purchase orders for me', expectedTool: PROPOSE_PO },
+  { id: 'en-16', split: 'dev', language: 'en', question: "Draft today's orders for my suppliers", expectedTool: PROPOSE_PO },
+  { id: 'en-17', split: 'dev', language: 'en', question: 'Which products are below minimum stock?', expectedTool: REORDER, mustMention: ['Red Bull'] },
+  { id: 'fr-11', split: 'dev', language: 'fr', question: 'Quels produits vont expirer bientôt?', expectedTool: EXPIRY, mustMention: ['Yogurt'] },
+  { id: 'fr-12', split: 'dev', language: 'fr', question: 'Qu’est-ce qui approche de la date de péremption?', expectedTool: EXPIRY, mustMention: ['Yogurt'] },
+  { id: 'fr-13', split: 'dev', language: 'fr', question: 'Mes seuils de stock minimum sont-ils bons?', expectedTool: MIN_STOCK, mustMention: ['Coca-Cola'] },
+  { id: 'fr-14', split: 'dev', language: 'fr', question: 'Faut-il ajuster mes stocks de sécurité?', expectedTool: MIN_STOCK, mustMention: ['Coca-Cola'] },
+  { id: 'fr-15', split: 'dev', language: 'fr', question: 'Prépare les bons de commande', expectedTool: PROPOSE_PO },
+  { id: 'fr-16', split: 'dev', language: 'fr', question: 'Crée les commandes pour mes fournisseurs', expectedTool: PROPOSE_PO },
+  { id: 'zh-11', split: 'dev', language: 'zh', question: '哪些商品快过期了？', expectedTool: EXPIRY, mustMention: ['Yogurt'] },
+  { id: 'zh-12', split: 'dev', language: 'zh', question: '有没有临期商品需要打折？', expectedTool: EXPIRY, mustMention: ['Yogurt'] },
+  { id: 'zh-13', split: 'dev', language: 'zh', question: '最低库存设置合理吗？', expectedTool: MIN_STOCK, mustMention: ['Coca-Cola'] },
+  { id: 'zh-14', split: 'dev', language: 'zh', question: '安全库存要不要调整？', expectedTool: MIN_STOCK, mustMention: ['Coca-Cola'] },
+  { id: 'zh-15', split: 'dev', language: 'zh', question: '帮我生成采购单', expectedTool: PROPOSE_PO },
+  { id: 'zh-16', split: 'dev', language: 'zh', question: '帮我把订单准备好', expectedTool: PROPOSE_PO },
+
+  // Expiry, minimum stock and proposals: holdout
+  { id: 'en-h5', split: 'holdout', language: 'en', question: 'Anything I should discount before it spoils?', expectedTool: EXPIRY, mustMention: ['Yogurt'] },
+  { id: 'en-h6', split: 'holdout', language: 'en', question: 'Is my safety stock too high anywhere?', expectedTool: MIN_STOCK, mustMention: ['Coca-Cola'] },
+  { id: 'en-h7', split: 'holdout', language: 'en', question: 'Create the supplier orders now', expectedTool: PROPOSE_PO },
+  { id: 'fr-h5', split: 'holdout', language: 'fr', question: 'Des produits à écouler avant qu’ils périment?', expectedTool: EXPIRY, mustMention: ['Yogurt'] },
+  { id: 'fr-h6', split: 'holdout', language: 'fr', question: 'Mes niveaux minimums sont-ils trop bas?', expectedTool: MIN_STOCK, mustMention: ['Coca-Cola'] },
+  { id: 'fr-h7', split: 'holdout', language: 'fr', question: 'Rédige les commandes fournisseurs', expectedTool: PROPOSE_PO },
+  { id: 'zh-h5', split: 'holdout', language: 'zh', question: '哪些东西要过保质期了？', expectedTool: EXPIRY, mustMention: ['Yogurt'] },
+  { id: 'zh-h6', split: 'holdout', language: 'zh', question: '补货点需要调高吗？', expectedTool: MIN_STOCK, mustMention: ['Coca-Cola'] },
+  { id: 'zh-h7', split: 'holdout', language: 'zh', question: '直接帮我下采购单', expectedTool: PROPOSE_PO },
+
+  // Blind v2: expiry, minimum stock and proposal tools.
+  { id: "en-c01", split: 'blind-v2', language: 'en', question: "What's going to go bad on me this week? Got a lot of milk and bread sitting around.", expectedTool: EXPIRY, mustMention: ['Yogurt'] },
+  { id: "en-c02", split: 'blind-v2', language: 'en', question: "any eggs or bananas about to expire that I should mark down?", expectedTool: EXPIRY, mustMention: ['Yogurt'] },
+  { id: "en-c03", split: 'blind-v2', language: 'en', question: "Which perishables should I put on sale before they hit their best-before date?", expectedTool: EXPIRY, mustMention: ['Yogurt'] },
+  { id: "en-c04", split: 'blind-v2', language: 'en', question: "Are my reorder trigger levels set right? Feels like I'm holding too much safety stock on some stuff.", expectedTool: MIN_STOCK, mustMention: ['Coca-Cola'] },
+  { id: "en-c05", split: 'blind-v2', language: 'en', question: "review my minimum stock settings against what's actually forecast to sell", expectedTool: MIN_STOCK, mustMention: ['Coca-Cola'] },
+  { id: "en-c06", split: 'blind-v2', language: 'en', question: "Is the min level on my products too low? I keep running out of chips before the truck comes.", expectedTool: MIN_STOCK, mustMention: ['Coca-Cola'] },
+  { id: "en-c07", split: 'blind-v2', language: 'en', question: "Go ahead and draft the purchase orders for my suppliers now.", expectedTool: PROPOSE_PO },
+  { id: "en-c08", split: 'blind-v2', language: 'en', question: "can you put together the POs for this week's restock, I'll look them over after", expectedTool: PROPOSE_PO },
+  { id: "en-c09", split: 'blind-v2', language: 'en', question: "Please prepare orders to send to each vendor based on what we need.", expectedTool: PROPOSE_PO },
+  { id: "fr-c01", split: 'blind-v2', language: 'fr', question: "Qu'est-ce qui risque de périmer bientôt? J'ai trop de lait pis de pain.", expectedTool: EXPIRY, mustMention: ['Yogurt'] },
+  { id: "fr-c02", split: 'blind-v2', language: 'fr', question: "Des produits frais à liquidider avant la date de péremption, avec un rabais suggéré?", expectedTool: EXPIRY, mustMention: ['Yogurt'] },
+  { id: "fr-c03", split: 'blind-v2', language: 'fr', question: "Mes bananes et mes oeufs vont-ils passer date? Je devrais-tu les mettre en spécial?", expectedTool: EXPIRY, mustMention: ['Yogurt'] },
+  { id: "fr-c04", split: 'blind-v2', language: 'fr', question: "Est-ce que mes seuils de réapprovisionnement sont trop élevés par rapport à la demande prévue?", expectedTool: MIN_STOCK, mustMention: ['Coca-Cola'] },
+  { id: "fr-c05", split: 'blind-v2', language: 'fr', question: "Vérifie mon stock minimum, je pense que mon stock de sécurité est mal ajusté.", expectedTool: MIN_STOCK, mustMention: ['Coca-Cola'] },
+  { id: "fr-c06", split: 'blind-v2', language: 'fr', question: "Mes minimums sont-ils trop bas? Je tombe toujours à sec sur les boissons énergisantes.", expectedTool: MIN_STOCK, mustMention: ['Coca-Cola'] },
+  { id: "fr-c07", split: 'blind-v2', language: 'fr', question: "Prépare-moi les bons de commande pour mes fournisseurs, là, tout de suite.", expectedTool: PROPOSE_PO },
+  { id: "fr-c08", split: 'blind-v2', language: 'fr', question: "Peux-tu me monter les commandes d'achat à envoyer cette semaine? Je les validerai après.", expectedTool: PROPOSE_PO },
+  { id: "fr-c09", split: 'blind-v2', language: 'fr', question: "Crée les commandes fournisseurs pour ce qui manque, stp.", expectedTool: PROPOSE_PO },
+  { id: "zh-c01", split: 'blind-v2', language: 'zh', question: "这周有哪些牛奶面包快过期了？库存是不是太多卖不完？", expectedTool: EXPIRY, mustMention: ['Yogurt'] },
+  { id: "zh-c02", split: 'blind-v2', language: 'zh', question: "鸡蛋和香蕉还能放几天，要不要打折清掉？", expectedTool: EXPIRY, mustMention: ['Yogurt'] },
+  { id: "zh-c03", split: 'blind-v2', language: 'zh', question: "帮我看看有没有临期的生鲜该降价处理", expectedTool: EXPIRY, mustMention: ['Yogurt'] },
+  { id: "zh-c04", split: 'blind-v2', language: 'zh', question: "我的最低库存线设得合理吗？感觉有些商品安全库存压太多了", expectedTool: MIN_STOCK, mustMention: ['Coca-Cola'] },
+  { id: "zh-c05", split: 'blind-v2', language: 'zh', question: "对照预测销量，检查一下各个商品的补货触发点是高了还是低了", expectedTool: MIN_STOCK, mustMention: ['Coca-Cola'] },
+  { id: "zh-c06", split: 'blind-v2', language: 'zh', question: "薯片老是断货，是不是最低库存设太低了？", expectedTool: MIN_STOCK, mustMention: ['Coca-Cola'] },
+  { id: "zh-c07", split: 'blind-v2', language: 'zh', question: "现在就帮我给供应商生成采购订单草稿", expectedTool: PROPOSE_PO },
+  { id: "zh-c08", split: 'blind-v2', language: 'zh', question: "把这周要补的货整理成采购单，我待会儿过目", expectedTool: PROPOSE_PO },
+  { id: "zh-c09", split: 'blind-v2', language: 'zh', question: "帮我下单吧，按缺的货给每个供应商各拟一份订单", expectedTool: PROPOSE_PO },
 ];

@@ -15,19 +15,21 @@ model User {
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
 
-  roles              Role[] // 多对多：一个用户可以有多个角色
-  jobPostTemplates   JobPostTemplate[]
-  jobPosts           JobPost[]
-  applicantInfo      ApplicantInformation?
-  applications       Application[]
-  notifications      Notification[]
-  products           Product[]
-  inventoryMovements InventoryMovement[]
-  sales              Sale[]                @relation("SaleCashier")
-  voidedSales        Sale[]                @relation("SaleVoider")
-  approvedSaleVoids  Sale[]                @relation("SaleVoidApprover")
-  aiInsightLogs      AiInsightLog[]
-  purchaseOrders     PurchaseOrder[]
+  roles                 Role[] // 多对多：一个用户可以有多个角色
+  jobPostTemplates      JobPostTemplate[]
+  jobPosts              JobPost[]
+  applicantInfo         ApplicantInformation?
+  applications          Application[]
+  notifications         Notification[]
+  products              Product[]
+  inventoryMovements    InventoryMovement[]
+  sales                 Sale[]                @relation("SaleCashier")
+  voidedSales           Sale[]                @relation("SaleVoider")
+  approvedSaleVoids     Sale[]                @relation("SaleVoidApprover")
+  aiInsightLogs         AiInsightLog[]
+  purchaseOrders        PurchaseOrder[]
+  requestedAgentActions AgentAction[]         @relation("AgentActionRequester")
+  decidedAgentActions   AgentAction[]         @relation("AgentActionDecider")
 
   @@map("users")
 }
@@ -175,6 +177,21 @@ enum InsightType {
   sales_summary
   slow_movers
   top_sellers
+  expiry_risks
+  min_stock_review
+  agent_action
+}
+
+enum AgentActionType {
+  generate_purchase_orders
+  set_min_stock
+}
+
+enum AgentActionStatus {
+  pending
+  approved
+  rejected
+  failed
 }
 
 enum PurchaseOrderStatus {
@@ -407,4 +424,31 @@ model Notification {
   user   User @relation(fields: [userId], references: [id])
 
   @@map("notifications")
+}
+
+// A change the Store Agent proposed. Nothing is applied until a person with
+// the agent-actions-approve permission approves it.
+model AgentAction {
+  id        Int               @id @default(autoincrement())
+  type      AgentActionType
+  status    AgentActionStatus @default(pending)
+  // Identical pending proposals share a key, so repeated asks do not pile up.
+  dedupeKey String            @map("dedupe_key")
+  payload   Json
+  rationale String
+  source    String
+  result    Json?
+  error     String?
+  createdAt DateTime          @default(now()) @map("created_at")
+  decidedAt DateTime?         @map("decided_at")
+
+  requestedById Int?  @map("requested_by_id")
+  requestedBy   User? @relation("AgentActionRequester", fields: [requestedById], references: [id])
+
+  decidedById Int?  @map("decided_by_id")
+  decidedBy   User? @relation("AgentActionDecider", fields: [decidedById], references: [id])
+
+  @@index([status, createdAt])
+  @@index([dedupeKey, status])
+  @@map("agent_actions")
 }

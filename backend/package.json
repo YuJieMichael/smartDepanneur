@@ -15,6 +15,7 @@
     "mcp": "node dist/src/mcp/main.js",
     "mcp:dev": "ts-node --transpile-only src/mcp/main.ts",
     "eval:agent": "ts-node --transpile-only eval/run-store-agent-eval.ts",
+    "eval:forecast": "ts-node --transpile-only eval/forecast-backtest.ts",
     "migrate:deploy": "prisma migrate deploy",
     "seed:demo": "node prisma/seed-test-data.mjs",
     "typecheck": "tsc --noEmit --incremental false",

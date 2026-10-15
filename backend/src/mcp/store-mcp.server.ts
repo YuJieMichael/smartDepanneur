@@ -7,14 +7,15 @@ import {
 export const STORE_MCP_SERVER_NAME = 'smartdepanneur-store';
 
 /**
- * Exposes the Store Agent's read-only business tools over the Model Context
- * Protocol, so any MCP client (Claude Desktop, Claude Code, IDE agents) can
- * query live store data with the same tools the in-app agent uses.
+ * Exposes the Store Agent tools over the Model Context Protocol, so any MCP
+ * client (Claude Desktop, Claude Code, IDE agents) can query live store data
+ * with the same tools the in-app agent uses. Proposal tools only record a
+ * pending change; approving it stays a human step in the app.
  */
 export function createStoreMcpServer(insights: InsightsService): McpServer {
   const server = new McpServer({
     name: STORE_MCP_SERVER_NAME,
-    version: '1.0.0',
+    version: '1.1.0',
   });
 
   for (const tool of STORE_AGENT_TOOLS) {
@@ -23,16 +24,21 @@ export function createStoreMcpServer(insights: InsightsService): McpServer {
       {
         title: tool.title,
         description: tool.description,
+        inputSchema: tool.input.shape,
         annotations: {
-          readOnlyHint: true,
+          readOnlyHint: tool.readOnly,
           destructiveHint: false,
+          // Repeating a proposal updates the same pending proposal.
           idempotentHint: true,
           openWorldHint: false,
         },
       },
-      async () => {
+      async (args: Record<string, unknown>) => {
         try {
-          const result = await insights.executeAgentTool(tool.name);
+          const result = await insights.executeAgentTool(tool.name, args, {
+            source: 'mcp',
+            requestedBy: null,
+          });
           return {
             content: [{ type: 'text', text: JSON.stringify(result, null, 2) }],
           };
