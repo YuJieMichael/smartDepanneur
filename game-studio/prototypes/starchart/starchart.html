@@ -123,6 +123,12 @@ td{font-family:var(--mono);font-variant-numeric:tabular-nums}
 .pill.chain rect{stroke:var(--gold)} .pill.ring rect{stroke:var(--jade)} .pill.spent rect{stroke:var(--faint)}
 .pill text{font-family:var(--mono);font-size:12px;text-anchor:middle;dominant-baseline:central}
 .pill.chain text{fill:var(--gold)} .pill.ring text{fill:var(--jade)} .pill.spent text{fill:var(--faint)}
+.pill.can{cursor:pointer}
+.pill.can.chain rect{fill:var(--gold)} .pill.can.ring rect{fill:var(--jade)}
+.pill.can text{fill:var(--ink);font-weight:600}
+.pill.can:hover rect{stroke:var(--fg);stroke-width:2}
+#pv{pointer-events:none}
+.btn.primary.confirm{background:var(--cinnabar);border-color:var(--cinnabar);color:var(--fg)}
 .core{fill:var(--fg)} .core.spent{fill-opacity:.4}
 .glow{fill:var(--fg);fill-opacity:.12}
 .brighthalo{fill:var(--gold);fill-opacity:.22;stroke:var(--gold);stroke-opacity:.7}
@@ -149,7 +155,7 @@ td{font-family:var(--mono);font-variant-numeric:tabular-nums}
 
 <div class="wrap">
   <header>
-    <h1>星图卡组<small>原型 v0.1</small></h1>
+    <h1>星图卡组<small>原型 v0.2</small></h1>
     <div class="runinfo" id="runinfo"></div>
   </header>
   <div class="grid">
@@ -170,6 +176,10 @@ td{font-family:var(--mono);font-variant-numeric:tabular-nums}
         <button class="btn primary" id="endturn">结束回合 <span class="key">↵</span></button>
       </div>
       <div class="status" id="status" aria-live="polite"></div>
+      <div class="card">
+        <div class="label">结构 · 点按钮或地图上发亮的数字标签来激活</div>
+        <div class="slist" id="slist"></div>
+      </div>
       <details id="rulesBox" open>
         <summary>规则速查</summary>
         <ul class="rules" id="rules"></ul>
@@ -178,10 +188,6 @@ td{font-family:var(--mono);font-variant-numeric:tabular-nums}
     <aside>
       <div class="card" id="enemyCard"></div>
       <div class="card" id="youCard"></div>
-      <div class="card">
-        <div class="label">结构</div>
-        <div class="slist" id="slist"></div>
-      </div>
       <div class="card">
         <div class="label">预览</div>
         <div class="pv" id="pv-panel"></div>
@@ -396,7 +402,20 @@ const cutCost=()=>(S.perks.freecut&&!S.freeCutUsed)?0:1;
 
 /* ---------- actions ---------- */
 function say(m,err){S.msg=m;S.err=!!err;}
-function pushUndo(){S.undo.push(JSON.stringify({stars:S.stars,edges:S.edges,ap:S.ap,block:S.block,spent:S.spent,ehp:S.enemy.hp,fc:S.freeCutUsed,acts:S.acts,stats:S.stats[S.fight]}));}
+const tgtNow=()=>targetsText(targetsFor(S.stars,S.edges),S.stars);
+function noteTarget(before){const after=tgtNow();if(after&&after!==before)S.msg+=` 注意：${enemyDef().name}现在的目标是「${after}」。`;}
+const readyStructs=()=>S.phase==="play"?structuresOf(S.stars,S.edges).filter(x=>!activationBlock(x)):[];
+function requestEndTurn(){
+  if(S.phase!=="play")return;
+  const ready=readyStructs();
+  if(ready.length&&!S.confirmEnd){
+    S.confirmEnd=true;
+    say(`还有 ${ready.length} 个结构可以激活：${ready.map(x=>desc(x,S.stars)).join("；")}。不激活就不会生效。再点一次「确认结束」继续。`,true);
+    return;
+  }
+  endTurn();
+}
+function pushUndo(){S.confirmEnd=false;S.undo.push(JSON.stringify({stars:S.stars,edges:S.edges,ap:S.ap,block:S.block,spent:S.spent,ehp:S.enemy.hp,fc:S.freeCutUsed,acts:S.acts,stats:S.stats[S.fight]}));}
 function undo(){
   if(S.phase!=="play"||!S.undo.length){say("本回合没有可以撤销的操作",true);return;}
   const u=JSON.parse(S.undo.pop());
@@ -406,19 +425,25 @@ function undo(){
 function doConnect(a,b){
   const err=edgeError(a,b,S.stars,S.edges);if(err){say(err,true);return;}
   if(S.ap<1){say("行动点不足",true);return;}
+  const t0=tgtNow();
   pushUndo();S.edges.push({a,b,gold:false});S.ap--;S.stats[S.fight].connect++;
   S.acts.push(`连${st(a).name}–${st(b).name}`);S.sel=b;say(`连接 ${st(a).name}–${st(b).name}。已选中 ${st(b).name}，可以继续延长。`);
+  noteTarget(t0);
 }
 function doCut(e){
   const c=cutCost();if(S.ap<c){say("行动点不足",true);return;}
+  const t0=tgtNow();
   pushUndo();S.edges=S.edges.filter(x=>x!==e);S.ap-=c;if(c===0)S.freeCutUsed=true;S.stats[S.fight].cut++;
   S.acts.push(`剪${st(e.a).name}–${st(e.b).name}${c===0?"(免费)":""}`);say(`剪断 ${st(e.a).name}–${st(e.b).name}`);
+  noteTarget(t0);
 }
 function doMove(id,pt){
   const err=moveError(id,pt);if(err){say(err,true);return;}
   if(S.ap<1){say("行动点不足",true);return;}
+  const t0=tgtNow();
   pushUndo();const s=st(id);s.x=Math.round(pt.x);s.y=Math.round(pt.y);S.ap--;S.stats[S.fight].move++;
   S.acts.push(`移${s.name}`);S.sel=null;say(`移动 ${s.name}`);
+  noteTarget(t0);
 }
 function doActivate(key){
   const x=structuresOf(S.stars,S.edges).find(y=>y.key===key);if(!x)return;
@@ -436,6 +461,7 @@ function doActivate(key){
 function endTurn(){
   if(S.phase!=="play")return;
   const E=enemyDef(),it=intentAt(0),blk=S.block,dmg=Math.max(0,it.atk-blk);
+  const unused=readyStructs(),apLeft=S.ap;
   S.hp-=dmg;S.stats[S.fight].taken+=dmg;S.stats[S.fight].turns++;
   const eff=[];
   S.stars.forEach(s=>{if(s.eaten>0)s.eaten--;});
@@ -447,9 +473,10 @@ function endTurn(){
     else eff.push("没有可剪的线");}
   let sealNext=[];
   if(it.seal){sealNext=it.seal.filter(id=>!st(id).steady);if(sealNext.length)eff.push(`封锁 ${names(sealNext)}（下回合）`);}
-  S.record.push(`第${S.turn}回合：${S.acts.join("；")||"无操作"} → 攻${it.atk}−挡${blk}，受到 ${dmg}${eff.length?"；"+eff.join("；"):""}`);
+  S.record.push(`第${S.turn}回合：${S.acts.join("；")||"无操作"} → 攻${it.atk}−挡${blk}，受到 ${dmg}${eff.length?"；"+eff.join("；"):""}`
+    +`（剩 ${apLeft} 点${unused.length?`；没激活的可用结构：${unused.map(x=>desc(x,S.stars)).join("、")}`:""}）`);
   if(S.hp<=0){S.hp=0;S.phase="lost";S.record.push(`战败于第${S.fight+1}战第${S.turn}回合`);say("你被击败了",true);return;}
-  Object.assign(S,{turn:S.turn+1,intent:(S.intent+1)%E.intents.length,ap:S.cfg.ap,block:0,spent:[],sealed:sealNext,freeCutUsed:false,undo:[],acts:[],sel:null});
+  Object.assign(S,{turn:S.turn+1,intent:(S.intent+1)%E.intents.length,ap:S.cfg.ap,block:0,spent:[],sealed:sealNext,freeCutUsed:false,undo:[],acts:[],sel:null,confirmEnd:false});
   say(`${E.name} 攻击 ${it.atk}，格挡 ${blk}，你受到 ${dmg} 伤害。${eff.join("；")}`);
 }
 function winFight(){
@@ -489,7 +516,11 @@ function hitTest(p){
   return be?{edge:be}:{};
 }
 svg.addEventListener("click",e=>{
-  if(!S)return;const p=svgPoint(e),h=hitTest(p);
+  if(!S)return;
+  const pill=e.target.closest&&e.target.closest("[data-pill]");
+  if(pill&&S.phase==="play"){const x=structuresOf(S.stars,S.edges).find(y=>y.key===pill.dataset.pill);
+    if(x&&!activationBlock(x)){doActivate(x.key);hover=null;render();return;}}
+  const p=svgPoint(e),h=hitTest(p);
   if(S.phase==="pick"){pickClick(h,p);render();return;}
   if(S.phase!=="play")return;
   if(S.mode==="connect"){
@@ -564,9 +595,9 @@ function renderMain(){
     h+=`<line class="cutmark" x1="${A.x}" y1="${A.y}" x2="${B.x}" y2="${B.y}" transform="translate(0,-6)"/><text class="tag" x="${mx}" y="${my-14}">将被剪</text>`;});
   sts.forEach(x=>{
     const cx=x.ids.reduce((t,id)=>t+st(id).x,0)/x.ids.length,cy=x.ids.reduce((t,id)=>t+st(id).y,0)/x.ids.length;
-    const spent=x.ids.some(id=>S.spent.includes(id)),v=effVal(x,S.stars);
-    const txt=spent?"已激活":(x.type==="chain"?`攻 ${v}`:`挡 ${v}`),w=txt.length*9+14;
-    h+=`<g class="pill ${spent?"spent":x.type}"><rect x="${cx-w/2}" y="${cy-10}" width="${w}" height="20" rx="10"/><text x="${cx}" y="${cy}">${txt}</text></g>`;
+    const spent=x.ids.some(id=>S.spent.includes(id)),v=effVal(x,S.stars),can=playing&&!activationBlock(x);
+    const txt=spent?"已激活":(x.type==="chain"?`攻 ${v}`:`挡 ${v}`)+(can?" ▸":""),w=txt.length*9+14;
+    h+=`<g class="pill ${spent?"spent":x.type}${can?" can":""}" data-pill="${x.key}"><rect x="${cx-w/2}" y="${cy-10}" width="${w}" height="20" rx="10"/><text x="${cx}" y="${cy}">${txt}</text></g>`;
   });
   S.stars.forEach(s=>{
     const spent=S.spent.includes(s.id),deg=degOf(s.id,S.edges);
@@ -696,7 +727,8 @@ function render(){
   $("#runinfo").textContent=`第 ${S.fight+1}/${ENEMIES.length} 战 · 第 ${S.turn} 回合 · 星 ${S.stars.length} · 线 ${S.edges.length}`;
   Object.keys(MODES).forEach(k=>$("#m-"+k).setAttribute("aria-pressed",String(S.mode===k)));
   $("#undo").disabled=S.phase!=="play"||!S.undo.length;
-  $("#endturn").disabled=S.phase!=="play";
+  const eb=$("#endturn");eb.disabled=S.phase!=="play";eb.classList.toggle("confirm",!!S.confirmEnd);
+  eb.firstChild.textContent=S.confirmEnd?"确认结束 ":"结束回合 ";
   const stEl=$("#status");stEl.textContent=S.msg;stEl.className="status"+(S.err?" err":"");
   renderMain();renderSide();renderRules();renderModal();renderPreview();
 }
@@ -704,7 +736,7 @@ function render(){
 /* ---------- record ---------- */
 function recordText(){
   const c=S.cfg;
-  return [`星图卡组原型 v0.1 试玩记录`,
+  return [`星图卡组原型 v0.2 试玩记录`,
     `设置：行动点 ${c.ap}；激活消耗 ${c.act}；链公式 ${c.chain==="tri"?"累加":"线性"}；环每星 ${c.ring}；公开后续意图 ${c.future?"是":"否"}`,
     ...S.record,
     `—— 汇总 ——`,
@@ -720,9 +752,9 @@ function copyRecord(msgSel){
 }
 
 /* ---------- controls ---------- */
-document.querySelectorAll("[data-mode]").forEach(b=>b.addEventListener("click",()=>{S.mode=b.dataset.mode;S.sel=null;say("");render();}));
+document.querySelectorAll("[data-mode]").forEach(b=>b.addEventListener("click",()=>{S.mode=b.dataset.mode;S.sel=null;S.confirmEnd=false;say("");render();}));
 $("#undo").addEventListener("click",()=>{undo();render();});
-$("#endturn").addEventListener("click",()=>{endTurn();render();});
+$("#endturn").addEventListener("click",()=>{requestEndTurn();render();});
 $("#slist").addEventListener("click",e=>{const b=e.target.closest("button[data-key]");if(b){doActivate(b.dataset.key);hoverKey=null;render();}});
 $("#slist").addEventListener("mouseover",e=>{const r=e.target.closest(".srow");const k=r?r.dataset.key:null;if(k!==hoverKey){hoverKey=k;renderPreview();}});
 $("#slist").addEventListener("mouseleave",()=>{hoverKey=null;renderPreview();});
@@ -742,7 +774,7 @@ document.addEventListener("keydown",e=>{
   if(!S||e.target.closest("input,select,textarea"))return;
   if(e.key==="1"||e.key==="2"||e.key==="3"){S.mode=["connect","cut","move"][+e.key-1];S.sel=null;render();}
   else if(e.key==="z"||e.key==="Z"){undo();render();}
-  else if(e.key==="Enter"&&S.phase==="play"&&!e.target.closest("button")){endTurn();render();}
+  else if(e.key==="Enter"&&S.phase==="play"&&!e.target.closest("button")){requestEndTurn();render();}
   else if(e.key==="Escape"){S.sel=null;say("");render();}
 });
 
