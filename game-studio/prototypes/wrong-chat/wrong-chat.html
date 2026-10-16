@@ -73,6 +73,12 @@ h1 small{font-family:var(--mono);font-size:12px;color:var(--muted);letter-spacin
 .tray{padding:10px;border-top:1px solid var(--line);display:flex;flex-direction:column;gap:8px}
 .tray .lbl{font-size:12px;color:var(--muted);display:flex;justify-content:space-between;gap:8px;flex-wrap:wrap}
 .tray .lbl b{color:var(--fg)}
+.composer{display:flex;gap:8px;align-items:stretch}
+.draft{flex:1;min-width:0;min-height:40px;border:1px solid var(--line);border-radius:9px;background:var(--panel);padding:8px 10px;font-size:14px;display:flex;align-items:center;word-break:break-word}
+.draft.empty{color:var(--muted)}
+.draft .caret{display:inline-block;width:2px;height:1.1em;background:var(--sel);margin-left:1px;vertical-align:middle}
+@media (prefers-reduced-motion:no-preference){.draft .caret{animation:blink 1s steps(1) infinite}@keyframes blink{50%{opacity:0}}}
+#sendBtn:disabled{opacity:.45;cursor:default}
 .cards{display:grid;grid-template-columns:repeat(auto-fill,minmax(min(100%,170px),1fr));gap:6px}
 .card{position:relative;text-align:left;background:var(--panel-2);border:1px solid var(--line);border-radius:9px;padding:7px 10px 7px 28px;font-size:13.5px;min-height:40px}
 .card:hover{border-color:var(--sel)}
@@ -126,8 +132,8 @@ textarea#recordBox{width:100%;min-height:160px;background:var(--panel-2);color:v
 
 <div class="wrap">
   <header>
-    <h1>发错群了<small>原型 v0.1</small></h1>
-    <div class="keys"><kbd>Q</kbd><kbd>W</kbd><kbd>E</kbd><kbd>R</kbd> 切换聊天 · <kbd>1</kbd>–<kbd>8</kbd> 发送回复 · <kbd>Z</kbd> 撤回</div>
+    <h1>发错群了<small>原型 v0.2</small></h1>
+    <div class="keys"><kbd>Q</kbd><kbd>W</kbd><kbd>E</kbd><kbd>R</kbd> 切换聊天 · <kbd>1</kbd>–<kbd>5</kbd> 选回复 · <kbd>Enter</kbd> 发送 · <kbd>Z</kbd> 撤回</div>
   </header>
   <div class="app">
     <nav class="pane list" id="list" aria-label="聊天列表"></nav>
@@ -135,7 +141,8 @@ textarea#recordBox{width:100%;min-height:160px;background:var(--panel-2);color:v
       <div class="chead"><span class="t" id="ctitle"></span><span class="s" id="csub"></span></div>
       <div class="msgs" id="msgs" aria-live="polite"></div>
       <div class="tray">
-        <div class="lbl"><span>回复会发进<b id="target"></b> · 卡片不写是回谁的，自己记</span><span id="pending"></span></div>
+        <div class="composer"><div class="draft" id="draft"></div><button class="btn primary" id="sendBtn">发送 ↵</button></div>
+        <div class="lbl"><span>点卡片会把字打进输入框，打完按 Enter 发进<b>当前打开</b>的聊天。切换聊天时输入框里的字不会消失。</span><span id="pending"></span></div>
         <div class="cards" id="cards"></div>
       </div>
     </section>
@@ -158,7 +165,7 @@ textarea#recordBox{width:100%;min-height:160px;background:var(--panel-2);color:v
 <script>
 (function(){
 "use strict";
-const DAY=180, MAX_PENDING_PER_CHAT=2, RECALLS=3;
+const DAY=180, MAX_PENDING_PER_CHAT=2, MAX_PENDING=5, RECALLS=3;
 const PEOPLE={
   boss:{n:"王总",c:"m-boss"},li:{n:"小李",c:"m-li"},hr:{n:"HR 张姐",c:"m-hr"},
   mom:{n:"妈",c:"m-mom"},dad:{n:"爸",c:"m-dad"},aunt:{n:"二姨",c:"m-aunt"},uncle:{n:"三舅",c:"m-uncle"},grandma:{n:"奶奶",c:"m-grandma"},
@@ -277,7 +284,7 @@ const sfx={ping:()=>{blip(880,0.08,0.05);blip(1320,0.1,0.05,"sine",0,0.07);},sen
 /* ---------- state ---------- */
 function newDay(){
   S={t:0,phase:"intro",open:"work",chats:{},cards:[],asks:[],rel:{work:70,family:70,love:70,friends:70},shame:0,recalls:RECALLS,
-    nextAsk:2,nextChatter:3.5,wrongs:[],shots:[],record:[],uid:0,msg:"",stats:{right:0,wrong:0,expired:0,recalled:0},ending:null,used:{work:[],family:[],love:[],friends:[]}};
+    nextAsk:2,nextChatter:3.5,draft:null,wrongs:[],shots:[],record:[],uid:0,msg:"",stats:{right:0,wrong:0,expired:0,recalled:0},ending:null,used:{work:[],family:[],love:[],friends:[]}};
   ORDER.forEach(k=>S.chats[k]={msgs:[],unread:0});
   addMsg("work",{who:"boss",text:"今天大家都打起精神来"});
   addMsg("family",{who:"uncle",text:"[早安图片]"});
@@ -292,13 +299,14 @@ function addMsg(chat,m){m.id=++S.uid;m.at=S.t;S.chats[chat].msgs.push(m);if(chat
 /* ---------- spawning ---------- */
 function pendingIn(chat){return S.asks.filter(a=>a.chat===chat&&!a.done).length;}
 function spawnAsk(){
+  if(S.asks.filter(a=>!a.done).length>=MAX_PENDING)return;
   const options=ORDER.filter(k=>pendingIn(k)<MAX_PENDING_PER_CHAT);if(!options.length)return;
   const chat=pick(options);
   let pool=ASKS[chat].filter((a,i)=>!S.used[chat].includes(i)&&!S.asks.some(x=>!x.done&&x.src===a));
   if(!pool.length){S.used[chat]=[];pool=ASKS[chat].filter(a=>!S.asks.some(x=>!x.done&&x.src===a));}
   if(!pool.length)return;
   const a=pick(pool);S.used[chat].push(ASKS[chat].indexOf(a));
-  const life=Math.round(clamp(20-S.t/DAY*8,12,20));
+  const life=Math.round(clamp(24-S.t/DAY*8,16,24));
   const ask={id:++S.uid,chat,src:a,born:S.t,deadline:S.t+life,life,done:false};
   ask.msgId=addMsg(chat,{who:a.p,text:a.q,ask:ask.id}).id;
   S.asks.push(ask);
@@ -314,9 +322,23 @@ function spawnChatter(){
 
 /* ---------- actions ---------- */
 function openChat(k){if(!S||S.phase!=="play")return;S.open=k;S.chats[k].unread=0;render();}
-function sendCard(idx){
+function pickCard(idx){
   if(S.phase!=="play")return;const card=S.cards[idx];if(!card)return;audio();
-  S.cards.splice(idx,1);const to=S.open,ask=S.asks.find(a=>a.id===card.ask);
+  S.cards.splice(idx,1);
+  if(S.draft)S.cards.push(S.draft.card);
+  S.draft={card,start:S.t,dur:clamp(card.text.length/11,0.9,2.2)};
+  say("正在输入……");render();
+}
+function typedText(){if(!S.draft)return "";const f=clamp((S.t-S.draft.start)/S.draft.dur,0,1);return S.draft.card.text.slice(0,Math.ceil(f*S.draft.card.text.length));}
+const draftDone=()=>S.draft&&S.t-S.draft.start>=S.draft.dur;
+function sendDraft(){
+  if(S.phase!=="play"||!S.draft)return;
+  if(!draftDone()){say("还没打完字");render();return;}
+  const card=S.draft.card;S.draft=null;audio();
+  const to=S.open,ask=S.asks.find(a=>a.id===card.ask);
+  if(card.cat===to&&ask&&ask.done){
+    addMsg(to,{me:true,text:card.text,read:true});log(`… 回晚了（${CHATS[to].name}）：${card.text}`);say("回晚了，对方已经不想理你了。");sfx.send();render();return;
+  }
   if(card.cat===to&&ask&&!ask.done){
     ask.done=true;addMsg(to,{me:true,text:card.text,read:true});S.rel[to]=clamp(S.rel[to]+8,0,100);S.stats.right++;sfx.good();
     log(`✓ 回${CHATS[to].name}：${card.text}`);
@@ -354,10 +376,10 @@ function tick(now){
   const dt=Math.min(0.25,(now-last)/1000);last=now;
   if(S.phase==="play"){
     S.t+=dt;
-    if(S.t>=S.nextAsk){spawnAsk();const gap=clamp(5.2-S.t/DAY*3.6,1.6,5.2);S.nextAsk=S.t+gap*rand(0.7,1.3);}
+    if(S.t>=S.nextAsk){spawnAsk();const gap=clamp(6-S.t/DAY*3.6,2.4,6);S.nextAsk=S.t+gap*rand(0.7,1.3);}
     if(S.t>=S.nextChatter){spawnChatter();S.nextChatter=S.t+rand(3,6);}
     for(let i=timers.length-1;i>=0;i--)if(S.t>=timers[i].at){const f=timers[i].fn;timers.splice(i,1);f();}
-    S.asks.forEach(a=>{if(!a.done&&S.t>=a.deadline){a.done=true;a.expired=true;S.rel[a.chat]=clamp(S.rel[a.chat]-14,0,100);S.stats.expired++;
+    S.asks.forEach(a=>{if(!a.done&&S.t>=a.deadline){a.done=true;a.expired=true;S.rel[a.chat]=clamp(S.rel[a.chat]-10,0,100);S.stats.expired++;
       const ci=S.cards.findIndex(c=>c.ask===a.id);if(ci>=0)S.cards.splice(ci,1);
       const [who,text]=pick(TIMEOUT[a.chat]);addMsg(a.chat,{who,text});sfx.timeout();log(`⌛ 没回${CHATS[a.chat].name}：${a.src.q}`);}});
     S.wrongs.forEach(w=>{if(w.state==="sent"&&S.t>=w.readAt){w.state="read";
@@ -422,7 +444,10 @@ function render(fromTick){
   }
   pendingAsks.forEach(a=>{const el=document.querySelector(`[data-timer="${a.id}"]`);if(el)el.style.width=clamp(100*(a.deadline-S.t)/a.life,0,100)+"%";});
   // tray
-  $("#target").textContent=`「${CHATS[S.open].name}」`;
+  const d=$("#draft"),tt=typedText();
+  if(S.draft){d.className="draft";d.innerHTML=esc(tt)+(draftDone()?"":`<span class="caret"></span>`);}
+  else{d.className="draft empty";d.textContent="点一张回复卡片开始打字";}
+  $("#sendBtn").disabled=!draftDone();
   const totalPending=S.asks.filter(a=>!a.done).length;
   $("#pending").textContent=totalPending?`待回复 ${totalPending} 条`:"";
   const cardsKey=S.cards.map(c=>c.id).join(",");
@@ -446,7 +471,8 @@ function renderModal(){
     m.innerHTML=`<div class="sheet" role="dialog" aria-label="开始"><h2>发错群了</h2>
       <div>周一早上 9:00。工作群、家族群、对象、死党群会同时找你。撑到 18:00 下班。</div>
       <ul>
-        <li>左边点聊天（或按 <b>Q W E R</b>）切换；下面的回复卡片点一下（或按 <b>1–8</b>）就会发进<b>当前打开</b>的聊天。</li>
+        <li>左边点聊天（或按 <b>Q W E R</b>）切换。点下面的回复卡片（或按 <b>1–5</b>），字会打进输入框；打完按 <b>Enter</b> 发进<b>当前打开</b>的聊天。</li>
+        <li>切换聊天时，输入框里的字不会消失。打字的时候去别的群看一眼，回来别按错了。</li>
         <li>卡片上不写是回谁的。回对了关系变好；拖太久没回关系变差；有一段关系掉到 0，今天就结束了。</li>
         <li>发错了？在对方显示「已读」之前按 <b>Z</b> 撤回，一天只有 3 次。</li>
       </ul>
@@ -471,7 +497,7 @@ function renderModal(){
 
 /* ---------- record ---------- */
 function recordText(){
-  return ["发错群了 原型 v0.1 试玩记录",...S.record,"—— 汇总 ——",
+  return ["发错群了 原型 v0.2 试玩记录",...S.record,"—— 汇总 ——",
     `社死值 ${S.shame}；回对 ${S.stats.right}，发错 ${S.stats.wrong}，没回 ${S.stats.expired}，撤回 ${S.stats.recalled}`,
     `关系：${ORDER.map(k=>CHATS[k].rel+" "+Math.round(S.rel[k])).join("，")}`,
     S.ending?`提前结束：${ENDING[S.ending]}`:(S.phase==="end"?"撑到了下班":"（还没结束）")].join("\n");
@@ -484,7 +510,8 @@ function copyRecord(sel){
 
 /* ---------- events ---------- */
 $("#list").addEventListener("click",e=>{const b=e.target.closest("[data-chat]");if(b)openChat(b.dataset.chat);});
-$("#cards").addEventListener("click",e=>{const b=e.target.closest("[data-card]");if(b)sendCard(+b.dataset.card);});
+$("#cards").addEventListener("click",e=>{const b=e.target.closest("[data-card]");if(b)pickCard(+b.dataset.card);});
+$("#sendBtn").addEventListener("click",()=>sendDraft());
 $("#msgs").addEventListener("click",e=>{if(e.target.closest("[data-recall]"))recall();});
 $("#bannerHost").addEventListener("click",e=>{const b=e.target.closest("[data-open]");if(b){openChat(b.dataset.open);$("#bannerHost").innerHTML="";}});
 $("#mute").addEventListener("click",()=>{muted=!muted;$("#mute").textContent=muted?"已静音":"静音";});
@@ -501,7 +528,8 @@ document.addEventListener("keydown",e=>{
   if(S.phase!=="play")return;
   const ci={q:"work",w:"family",e:"love",r:"friends"}[k];
   if(ci){openChat(ci);return;}
-  if(/^[1-9]$/.test(k)){sendCard(+k-1);return;}
+  if(/^[1-9]$/.test(k)){pickCard(+k-1);return;}
+  if(k==="enter"){e.preventDefault();sendDraft();return;}
   if(k==="z")recall();
 });
 
