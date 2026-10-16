@@ -1,0 +1,511 @@
+<title>发错群了</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;600&family=ZCOOL+QingKe+HuangYou&display=swap">
+<style>
+/* Layout: a desktop chat client. Chat list on the left, the open chat in the middle with the reply tray under it,
+   the workday status (clock, relationships, embarrassment) on the right. Stacks on phones.
+   Sky blue = your bubbles, tomato = embarrassment, everything else quiet office greys. */
+:root{
+  --bg:#e9ecf1; --panel:#ffffff; --panel-2:#f4f6f9; --fg:#1d2330; --muted:#647086; --line:#d6dbe4;
+  --me:#cfe2ff; --me-fg:#16253f; --tomato:#e5484d; --ok:#2f9e6b; --amber:#c98a12; --sel:#3b6fd8;
+  --display:"ZCOOL QingKe HuangYou","PingFang SC","Microsoft YaHei",sans-serif;
+  --body:"PingFang SC","Hiragino Sans GB","Microsoft YaHei","Noto Sans SC",system-ui,sans-serif;
+  --mono:"IBM Plex Mono",ui-monospace,Menlo,monospace;
+}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
+  --bg:#12151b; --panel:#1a1e26; --panel-2:#222733; --fg:#e6e9ef; --muted:#97a1b4; --line:#2e3542;
+  --me:#2a4a7c; --me-fg:#e8f0ff; --tomato:#ff6b6f; --ok:#4cc38a; --amber:#e6a93a; --sel:#7aa2ff; color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#12151b; --panel:#1a1e26; --panel-2:#222733; --fg:#e6e9ef; --muted:#97a1b4; --line:#2e3542;
+  --me:#2a4a7c; --me-fg:#e8f0ff; --tomato:#ff6b6f; --ok:#4cc38a; --amber:#e6a93a; --sel:#7aa2ff; color-scheme:dark}
+html,body{background:var(--bg);color:var(--fg)}
+[hidden]{display:none!important}
+body{font-family:var(--body);font-size:14px;line-height:1.5;
+  padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));padding-block:12px 28px}
+button{font:inherit;color:inherit;cursor:pointer}
+button:focus-visible{outline:2px solid var(--sel);outline-offset:2px}
+.wrap{max-width:1200px;margin:0 auto;display:flex;flex-direction:column;gap:12px}
+header{display:flex;align-items:baseline;justify-content:space-between;gap:8px 16px;flex-wrap:wrap}
+h1{font-family:var(--display);font-weight:400;font-size:34px;margin:0;line-height:1;color:var(--tomato);letter-spacing:.04em}
+h1 small{font-family:var(--mono);font-size:12px;color:var(--muted);letter-spacing:.06em;margin-left:8px}
+.keys{font-size:12.5px;color:var(--muted)}
+.keys kbd{font-family:var(--mono);font-size:11px;border:1px solid var(--line);border-bottom-width:2px;border-radius:4px;padding:0 4px;background:var(--panel)}
+.app{display:grid;grid-template-columns:minmax(0,230px) minmax(0,1fr) minmax(0,250px);gap:12px;align-items:stretch}
+@media (max-width:980px){.app{grid-template-columns:minmax(0,200px) minmax(0,1fr)}.side{grid-column:1 / -1}}
+@media (max-width:640px){.app{grid-template-columns:minmax(0,1fr)}}
+.pane{background:var(--panel);border:1px solid var(--line);border-radius:12px;min-width:0;display:flex;flex-direction:column}
+/* chat list */
+.list{padding:6px}
+.ci{display:grid;grid-template-columns:40px minmax(0,1fr) auto;gap:4px 10px;align-items:center;padding:8px;border-radius:9px;border:0;background:transparent;text-align:left;width:100%}
+.ci:hover{background:var(--panel-2)}
+.ci[aria-current="true"]{background:color-mix(in srgb,var(--sel) 14%,transparent)}
+.ci .av{grid-row:span 2}
+.ci .nm{font-weight:600;font-size:14px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.ci .pv{font-size:12.5px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;grid-column:2}
+.ci .badge{grid-row:1;grid-column:3;min-width:18px;height:18px;border-radius:9px;background:var(--tomato);color:#fff;font-size:11px;font-family:var(--mono);display:flex;align-items:center;justify-content:center;padding:0 5px}
+.ci .hk{grid-row:2;grid-column:3;font-family:var(--mono);font-size:11px;color:var(--muted)}
+.av{width:40px;height:40px;border-radius:10px;display:flex;align-items:center;justify-content:center;color:#fff;font-weight:600;font-size:16px;flex:none}
+.av.sm{width:32px;height:32px;border-radius:8px;font-size:13px}
+.c-work{background:#4a6fa5} .c-family{background:#c2703d} .c-love{background:#d0507a} .c-friends{background:#5c9a5a}
+.m-boss{background:#38506f}.m-li{background:#6b7f99}.m-hr{background:#8c6fb0}.m-mom{background:#c2703d}.m-dad{background:#8d6b4f}.m-aunt{background:#b5824c}.m-uncle{background:#9c8a5b}.m-grandma{background:#a55e5e}.m-bao{background:#d0507a}.m-jie{background:#5c9a5a}.m-pang{background:#4f8a7a}.m-mei{background:#8aa04f}
+/* chat window */
+.chat{min-height:520px}
+.chead{display:flex;justify-content:space-between;align-items:baseline;padding:10px 14px;border-bottom:1px solid var(--line);gap:8px}
+.chead .t{font-weight:600;font-size:15px}
+.chead .s{font-size:12px;color:var(--muted)}
+.msgs{flex:1;min-height:300px;max-height:420px;overflow-y:auto;padding:12px 14px;display:flex;flex-direction:column;gap:10px;background:var(--panel-2)}
+.m{display:flex;gap:8px;align-items:flex-start;max-width:85%}
+.m.me{align-self:flex-end;flex-direction:row-reverse}
+.m .who{font-size:11.5px;color:var(--muted);margin-bottom:2px}
+.m.me .who{text-align:right}
+.bub{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:7px 11px;font-size:14px;word-break:break-word}
+.m.me .bub{background:var(--me);color:var(--me-fg);border-color:transparent}
+.m.me.wrong .bub{box-shadow:0 0 0 2px var(--tomato)}
+.meta{font-size:11px;color:var(--muted);margin-top:2px;text-align:right;display:flex;gap:8px;justify-content:flex-end;align-items:center}
+.recall{font-size:11.5px;border:1px solid var(--tomato);color:var(--tomato);background:transparent;border-radius:6px;padding:0 6px}
+.sys{align-self:center;font-size:12px;color:var(--muted);background:color-mix(in srgb,var(--muted) 12%,transparent);border-radius:6px;padding:2px 8px}
+.ask .bub{border-color:var(--amber)}
+.timer{height:3px;border-radius:2px;background:var(--line);margin-top:4px;overflow:hidden}
+.timer>i{display:block;height:100%;background:var(--amber)}
+/* tray */
+.tray{padding:10px;border-top:1px solid var(--line);display:flex;flex-direction:column;gap:8px}
+.tray .lbl{font-size:12px;color:var(--muted);display:flex;justify-content:space-between;gap:8px;flex-wrap:wrap}
+.tray .lbl b{color:var(--fg)}
+.cards{display:grid;grid-template-columns:repeat(auto-fill,minmax(min(100%,170px),1fr));gap:6px}
+.card{position:relative;text-align:left;background:var(--panel-2);border:1px solid var(--line);border-radius:9px;padding:7px 10px 7px 28px;font-size:13.5px;min-height:40px}
+.card:hover{border-color:var(--sel)}
+.card .n{position:absolute;left:8px;top:8px;font-family:var(--mono);font-size:11px;color:var(--muted)}
+.emptytray{font-size:13px;color:var(--muted)}
+/* side */
+.side{padding:12px 14px;gap:12px}
+.clock{font-family:var(--mono);font-size:34px;font-weight:600;font-variant-numeric:tabular-nums;line-height:1}
+.dayline{font-size:12.5px;color:var(--muted)}
+.rel{display:grid;grid-template-columns:52px minmax(0,1fr) 34px;gap:6px;align-items:center;font-size:13px}
+.bar{height:8px;border-radius:4px;background:var(--line);overflow:hidden}
+.bar>i{display:block;height:100%;transition:width .25s}
+.rel .v{font-family:var(--mono);font-size:12px;text-align:right;color:var(--muted)}
+.shame{display:flex;align-items:baseline;gap:8px}
+.shame .n{font-family:var(--display);font-size:44px;color:var(--tomato);line-height:1}
+.label{font-size:11.5px;letter-spacing:.12em;color:var(--muted)}
+.recalls{font-size:13px}
+.recalls b{font-family:var(--mono)}
+.status{min-height:20px;font-size:13px;color:var(--muted)}
+/* banner + stamp */
+.banner{position:fixed;left:50%;top:calc(10px + env(safe-area-inset-top,0px));transform:translateX(-50%);z-index:20;background:var(--panel);border:1px solid var(--line);box-shadow:0 6px 24px rgba(0,0,0,.18);border-radius:12px;padding:8px 12px;display:flex;gap:10px;align-items:center;max-width:min(420px,calc(100vw - 32px));cursor:pointer}
+.banner .bt{font-size:12px;color:var(--muted)}
+.banner .bm{font-size:13.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:300px}
+.stamp{position:fixed;left:50%;top:40%;z-index:25;transform:translate(-50%,-50%) rotate(-12deg);font-family:var(--display);font-size:72px;color:var(--tomato);border:6px solid var(--tomato);border-radius:14px;padding:4px 22px;background:color-mix(in srgb,var(--panel) 70%,transparent);pointer-events:none;white-space:nowrap}
+@media (prefers-reduced-motion:no-preference){
+  .stamp{animation:slam .9s ease-out forwards}
+  @keyframes slam{0%{transform:translate(-50%,-50%) rotate(-12deg) scale(2.4);opacity:0}18%{transform:translate(-50%,-50%) rotate(-12deg) scale(1);opacity:1}80%{opacity:1}100%{opacity:0}}
+  .banner{animation:drop .25s ease-out}
+  @keyframes drop{from{transform:translate(-50%,-30px);opacity:0}to{transform:translate(-50%,0);opacity:1}}
+  .m.new{animation:pop .2s ease-out}
+  @keyframes pop{from{transform:scale(.96);opacity:.3}to{transform:none;opacity:1}}
+}
+/* overlay */
+.modal{position:fixed;inset:0;z-index:30;background:color-mix(in srgb,var(--bg) 82%,transparent);display:flex;align-items:center;justify-content:center;overflow:auto;
+  padding:max(16px,env(safe-area-inset-top,0px)) max(16px,env(safe-area-inset-right,0px)) max(16px,env(safe-area-inset-bottom,0px)) max(16px,env(safe-area-inset-left,0px))}
+.sheet{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:22px;max-width:760px;width:100%;display:flex;flex-direction:column;gap:12px}
+.sheet h2{font-family:var(--display);font-weight:400;font-size:38px;margin:0;color:var(--tomato)}
+.sheet ul{margin:0;padding-left:18px;display:flex;flex-direction:column;gap:4px}
+.btn{background:var(--panel-2);border:1px solid var(--line);border-radius:8px;padding:8px 14px}
+.btn.primary{background:var(--tomato);border-color:var(--tomato);color:#fff;font-weight:600}
+.row{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+.shots{display:grid;grid-template-columns:repeat(auto-fill,minmax(min(100%,220px),1fr));gap:10px}
+.shot{border:1px solid var(--line);border-radius:12px;overflow:hidden;background:var(--panel-2);display:flex;flex-direction:column}
+.shot .sh{padding:6px 10px;font-size:12px;font-weight:600;border-bottom:1px solid var(--line);background:var(--panel);display:flex;justify-content:space-between}
+.shot .sb{padding:8px;display:flex;flex-direction:column;gap:6px}
+.shot .l{font-size:12.5px;background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:4px 8px;align-self:flex-start;max-width:92%}
+.shot .l.me{align-self:flex-end;background:var(--me);color:var(--me-fg);border-color:transparent;box-shadow:0 0 0 2px var(--tomato)}
+.shot .l b{font-weight:600;margin-right:4px}
+textarea#recordBox{width:100%;min-height:160px;background:var(--panel-2);color:var(--fg);border:1px solid var(--line);border-radius:8px;font:12.5px/1.5 var(--mono);padding:10px;box-sizing:border-box}
+</style>
+
+<div class="wrap">
+  <header>
+    <h1>发错群了<small>原型 v0.1</small></h1>
+    <div class="keys"><kbd>Q</kbd><kbd>W</kbd><kbd>E</kbd><kbd>R</kbd> 切换聊天 · <kbd>1</kbd>–<kbd>8</kbd> 发送回复 · <kbd>Z</kbd> 撤回</div>
+  </header>
+  <div class="app">
+    <nav class="pane list" id="list" aria-label="聊天列表"></nav>
+    <section class="pane chat">
+      <div class="chead"><span class="t" id="ctitle"></span><span class="s" id="csub"></span></div>
+      <div class="msgs" id="msgs" aria-live="polite"></div>
+      <div class="tray">
+        <div class="lbl"><span>回复会发进<b id="target"></b> · 卡片不写是回谁的，自己记</span><span id="pending"></span></div>
+        <div class="cards" id="cards"></div>
+      </div>
+    </section>
+    <aside class="pane side">
+      <div><div class="clock" id="clock">09:00</div><div class="dayline" id="dayline">周一 · 18:00 下班</div></div>
+      <div class="shame"><span class="n" id="shame">0</span><span class="label">社死值</span></div>
+      <div style="display:flex;flex-direction:column;gap:6px" id="rels"></div>
+      <div class="recalls">撤回机会：<b id="recalls">3</b> 次（对方「已读」之前撤回才算数）</div>
+      <div class="status" id="status"></div>
+      <div class="row"><button class="btn" id="mute">静音</button><button class="btn" id="copyRec">复制试玩记录</button></div>
+      <div class="status" id="copyMsg"></div>
+    </aside>
+  </div>
+  <textarea id="recordBox" hidden readonly aria-label="试玩记录"></textarea>
+</div>
+<div id="bannerHost"></div>
+<div id="stampHost"></div>
+<div class="modal" id="modal"></div>
+
+<script>
+(function(){
+"use strict";
+const DAY=180, MAX_PENDING_PER_CHAT=2, RECALLS=3;
+const PEOPLE={
+  boss:{n:"王总",c:"m-boss"},li:{n:"小李",c:"m-li"},hr:{n:"HR 张姐",c:"m-hr"},
+  mom:{n:"妈",c:"m-mom"},dad:{n:"爸",c:"m-dad"},aunt:{n:"二姨",c:"m-aunt"},uncle:{n:"三舅",c:"m-uncle"},grandma:{n:"奶奶",c:"m-grandma"},
+  bao:{n:"宝",c:"m-bao"},
+  jie:{n:"阿杰",c:"m-jie"},pang:{n:"胖子",c:"m-pang"},mei:{n:"小美",c:"m-mei"}
+};
+const CHATS={
+  work:{name:"项目组",short:"工",size:"12 人 · 王总在群里",key:"Q",rel:"工作"},
+  family:{name:"相亲相爱一家人",short:"家",size:"23 人",key:"W",rel:"家人"},
+  love:{name:"宝",short:"宝",size:"对象",key:"E",rel:"对象"},
+  friends:{name:"废物联盟",short:"友",size:"4 人",key:"R",rel:"死党"}
+};
+const ORDER=["work","family","love","friends"];
+/* Each request: who asks, what, the matching reply card, its category and how bad it is to misfire (1–3). */
+const ASKS={
+  work:[
+    {p:"boss",q:"@你 方案今天能给我吗？",r:"收到王总，下午一定给您！",d:1},
+    {p:"boss",q:"在吗？",r:"在的在的，您说",d:1},
+    {p:"hr",q:"周五团建，自费，大家都要来哈",r:"好的好的，一定到！",d:1},
+    {p:"li",q:"那个文件发我一下",r:"[文件] 方案_最终版_v7_真的最终.pptx",d:1},
+    {p:"boss",q:"这周末加个班，没问题吧？",r:"没问题！随叫随到",d:1}
+  ],
+  family:[
+    {p:"mom",q:"吃饭了没",r:"吃了妈，别担心",d:1},
+    {p:"aunt",q:"[转发] 紧急扩散！！隔夜西瓜会致癌！！",r:"二姨，这是谣言哈",d:1},
+    {p:"dad",q:"[语音 59″]",r:"爸，你打字吧，我在上班",d:1},
+    {p:"mom",q:"你王阿姨家孩子也在你那个城市，周末见一面？",r:"妈！我真的在忙！",d:2},
+    {p:"uncle",q:"大家早上好[玫瑰][玫瑰][玫瑰]",r:"三舅早上好[玫瑰]",d:1}
+  ],
+  love:[
+    {p:"bao",q:"在干嘛呀",r:"在想你呀宝宝😘",d:2},
+    {p:"bao",q:"今晚吃什么",r:"听你的，火锅还是烧烤？",d:1},
+    {p:"bao",q:"你是不是不爱我了",r:"怎么可能！爱你一万年！！",d:2},
+    {p:"bao",q:"[图片] 新裙子好看吗",r:"好看！你穿什么都好看～",d:2},
+    {p:"bao",q:"想你了",r:"我也想你，么么么么哒",d:3}
+  ],
+  friends:[
+    {p:"jie",q:"今晚开黑？",r:"来！等我先把老板应付完",d:2},
+    {p:"pang",q:"你们老板今天又发疯没",r:"别提了，我们老板就是个画饼大王",d:3},
+    {p:"mei",q:"[表情包] 打工人.jpg",r:"哈哈哈哈哈哈哈哈",d:1},
+    {p:"jie",q:"借我 200，下周还",r:"上次的 500 还没还呢兄弟",d:2},
+    {p:"pang",q:"明天请假出来玩？",r:"请！就说我奶奶又病了",d:3}
+  ]
+};
+/* Generic reactions when a reply from category `from` lands in chat `to`. {t} is the text you sent. */
+const REACT={
+  love:{work:[["boss","？"],["li","……"],["hr","[捂脸]"]],
+        family:[["mom","？？？谁是宝宝"],["aunt","哎哟有对象了？[坏笑]"],["uncle","什么时候带回来看看"]],
+        friends:[["pang","？？？"],["jie","兄弟你没事吧"],["mei","截图了[狗头]"]]},
+  work:{love:[["bao","「{t}」？？"],["bao","我是你老板吗？"]],
+        family:[["mom","孩子工作辛苦了"],["dad","好好干"],["aunt","发错群了吧哈哈哈"]],
+        friends:[["jie","卷王来了"],["pang","兄弟你被盗号了？"]]},
+  family:{work:[["boss","……"],["li","哈哈哈哈哈"],["hr","上班时间注意一下哈"]],
+          love:[["bao","你在跟谁说话？"],["bao","你把我当你妈？"]],
+          friends:[["pang","实锤了，妈宝"],["jie","哈哈哈哈哈哈"]]},
+  friends:{work:[["boss","？"],["li","[震惊]"],["hr","@你 来我办公室一下"]],
+           love:[["bao","？？？"],["bao","你今晚不是说好陪我吗"]],
+           family:[["mom","你说什么呢孩子"],["dad","……"],["uncle","现在的年轻人哦"]]}
+};
+/* Hand-written reactions for the worst combinations: reply text -> target chat -> lines. */
+const SPECIAL={
+  "别提了，我们老板就是个画饼大王":{work:[["boss","……"],["boss","画饼？"],["li","[默默截图]"],["hr","@你 现在来一下我办公室"]],
+    family:[["dad","工作要踏实，别背后说领导"],["aunt","饼？什么饼？好吃吗"]]},
+  "请！就说我奶奶又病了":{work:[["boss","你奶奶这个月已经病了三次了"],["hr","@你 请假条记得补一下"]],
+    family:[["grandma","我好得很！"],["mom","你个小兔崽子"],["aunt","[笑哭][笑哭]"]],
+    love:[["bao","你奶奶又病了？？"],["bao","你是不是又要跟胖子出去玩"]]},
+  "在想你呀宝宝😘":{work:[["boss","……我也在想方案的事"],["li","？？？"],["hr","[捂脸]"]],
+    family:[["mom","？？？"],["aunt","哎呀！谈恋爱了！！"],["grandma","乖孙也想你"]]},
+  "我也想你，么么么么哒":{work:[["boss","……"],["li","我先退一下群"],["hr","请注意工作群的使用规范"]],
+    family:[["dad","……"],["mom","这孩子，多大了还撒娇"],["aunt","肯定发错了！是不是有对象了！！"]],
+    friends:[["pang","么你个头"],["jie","兄弟我们是兄弟"],["mei","已截图，明天发朋友圈"]]},
+  "上次的 500 还没还呢兄弟":{work:[["boss","谁欠你钱？"],["li","不是我！"]],
+    family:[["uncle","谁欠你钱？报我名字"],["mom","你借钱给别人了？"]],
+    love:[["bao","？？你借了谁 500"],["bao","我生日你就送了杯奶茶"]]},
+  "妈！我真的在忙！":{work:[["boss","你忙什么？方案呢"],["li","哈哈哈哈哈哈"]],
+    love:[["bao","？？我是你妈？"]],
+    friends:[["jie","叫爸爸"],["pang","哎，乖"]]},
+  "[文件] 方案_最终版_v7_真的最终.pptx":{love:[["bao","？这是什么"],["bao","约会的时候能不能别想工作"]],
+    family:[["aunt","这是病毒吗？不敢点"],["dad","打不开"]],
+    friends:[["jie","v7？？兄弟你还好吗"],["pang","真的最终[狗头]"]]},
+  "二姨，这是谣言哈":{work:[["boss","？谁是你二姨"],["li","[笑哭]"]],
+    love:[["bao","我是你二姨？？"]]},
+  "三舅早上好[玫瑰]":{work:[["boss","？"],["li","王总早上好[玫瑰]"]],
+    love:[["bao","？？三舅？？"]]},
+  "没问题！随叫随到":{love:[["bao","这么听话？"],["bao","那周末陪我逛街，随叫随到哦"]],
+    friends:[["jie","随叫随到？那今晚开黑"],["pang","记住你说的"]]},
+  "好看！你穿什么都好看～":{work:[["boss","？"],["li","王总今天穿得确实好看"]],
+    family:[["aunt","谁好看？给二姨看看"]]}
+};
+const PRAISE={work:[["boss","👍"],["boss","好"],["li","收到"]],family:[["mom","好孩子"],["aunt","[玫瑰]"],["grandma","乖"]],
+  love:[["bao","嘻嘻爱你"],["bao","哼，算你会说话"]],friends:[["jie","冲！"],["pang","哈哈哈哈"],["mei","[表情包]"]]};
+const TIMEOUT={work:[["boss","人呢？"],["boss","？"]],family:[["mom","孩子怎么不回消息"],["dad","[语音 2″]"]],
+  love:[["bao","已读不回？"],["bao","行，你忙吧。"]],friends:[["pang","装死是吧"],["jie","人呢"]]};
+const CHATTER={work:[["li","收到"],["hr","[通知] 周五下午三点开会"],["boss","大家辛苦了，再接再厉"],["li","[文件] 会议纪要.docx"]],
+  family:[["aunt","[转发] 每天喝八杯水的人，后来都怎么样了"],["uncle","[早安图片]"],["mom","[语音 3″]"],["aunt","[转发] 这三种菜千万不能一起吃"]],
+  love:[["bao","[表情包] 贴贴"]],friends:[["mei","[表情包]"],["pang","笑死"],["jie","上号上号"]]};
+const ENDING={work:"王总：你明天不用来了。",family:"你被移出了群聊「相亲相爱一家人」。",love:"宝：我们分手吧。",friends:"胖子将你移出了群聊「废物联盟」。"};
+
+let S=null, muted=false, last=0, timerId=null;
+const $=s=>document.querySelector(s);
+const esc=s=>String(s).replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+const rand=(a,b)=>a+Math.random()*(b-a);
+const pick=a=>a[Math.floor(Math.random()*a.length)];
+const clamp=(x,a,b)=>Math.max(a,Math.min(b,x));
+
+/* ---------- audio ---------- */
+let ac=null;
+function audio(){if(muted)return null;try{if(!ac)ac=new (window.AudioContext||window.webkitAudioContext)();if(ac.state==="suspended")ac.resume();}catch(e){ac=null;}return ac;}
+function blip(f,d,v,type,slide,delay){const a=audio();if(!a)return;const t=a.currentTime+(delay||0);const o=a.createOscillator(),g=a.createGain();o.type=type||"sine";
+  o.frequency.setValueAtTime(f,t);if(slide)o.frequency.exponentialRampToValueAtTime(slide,t+d);g.gain.setValueAtTime(v,t);g.gain.exponentialRampToValueAtTime(0.0001,t+d);o.connect(g).connect(a.destination);o.start(t);o.stop(t+d+0.02);}
+const sfx={ping:()=>{blip(880,0.08,0.05);blip(1320,0.1,0.05,"sine",0,0.07);},send:()=>blip(500,0.12,0.05,"triangle",900),
+  good:()=>{blip(660,0.08,0.05,"triangle");blip(990,0.12,0.05,"triangle",0,0.08);},read:()=>blip(1200,0.05,0.04,"square"),
+  shame:()=>{blip(400,0.18,0.12,"sawtooth",200);blip(260,0.35,0.12,"sawtooth",120,0.16);},recall:()=>blip(900,0.15,0.05,"sine",400),
+  timeout:()=>blip(300,0.2,0.06,"triangle",220)};
+
+/* ---------- state ---------- */
+function newDay(){
+  S={t:0,phase:"intro",open:"work",chats:{},cards:[],asks:[],rel:{work:70,family:70,love:70,friends:70},shame:0,recalls:RECALLS,
+    nextAsk:2,nextChatter:3.5,wrongs:[],shots:[],record:[],uid:0,msg:"",stats:{right:0,wrong:0,expired:0,recalled:0},ending:null,used:{work:[],family:[],love:[],friends:[]}};
+  ORDER.forEach(k=>S.chats[k]={msgs:[],unread:0});
+  addMsg("work",{who:"boss",text:"今天大家都打起精神来"});
+  addMsg("family",{who:"uncle",text:"[早安图片]"});
+  addMsg("love",{who:"bao",text:"早安～"});
+  addMsg("friends",{who:"pang",text:"又是想辞职的一天"});
+  ORDER.forEach(k=>S.chats[k].unread=0);
+}
+const clockStr=()=>{const m=9*60+Math.floor(S.t/DAY*540);return String(Math.floor(m/60)).padStart(2,"0")+":"+String(m%60).padStart(2,"0");};
+function log(s){S.record.push(`${clockStr()} ${s}`);}
+function addMsg(chat,m){m.id=++S.uid;m.at=S.t;S.chats[chat].msgs.push(m);if(chat!==S.open&&!m.me&&!m.sys)S.chats[chat].unread++;return m;}
+
+/* ---------- spawning ---------- */
+function pendingIn(chat){return S.asks.filter(a=>a.chat===chat&&!a.done).length;}
+function spawnAsk(){
+  const options=ORDER.filter(k=>pendingIn(k)<MAX_PENDING_PER_CHAT);if(!options.length)return;
+  const chat=pick(options);
+  let pool=ASKS[chat].filter((a,i)=>!S.used[chat].includes(i)&&!S.asks.some(x=>!x.done&&x.src===a));
+  if(!pool.length){S.used[chat]=[];pool=ASKS[chat].filter(a=>!S.asks.some(x=>!x.done&&x.src===a));}
+  if(!pool.length)return;
+  const a=pick(pool);S.used[chat].push(ASKS[chat].indexOf(a));
+  const life=Math.round(clamp(20-S.t/DAY*8,12,20));
+  const ask={id:++S.uid,chat,src:a,born:S.t,deadline:S.t+life,life,done:false};
+  ask.msgId=addMsg(chat,{who:a.p,text:a.q,ask:ask.id}).id;
+  S.asks.push(ask);
+  const card={id:++S.uid,text:a.r,cat:chat,d:a.d,ask:ask.id};
+  S.cards.splice(Math.floor(Math.random()*(S.cards.length+1)),0,card);
+  if(chat!==S.open)banner(chat,PEOPLE[a.p].n,a.q);
+  sfx.ping();
+}
+function spawnChatter(){
+  const chat=pick(["work","family","family","friends","friends","love"]);const [who,text]=pick(CHATTER[chat]);
+  addMsg(chat,{who,text});if(chat!==S.open&&Math.random()<0.5)banner(chat,PEOPLE[who].n,text);
+}
+
+/* ---------- actions ---------- */
+function openChat(k){if(!S||S.phase!=="play")return;S.open=k;S.chats[k].unread=0;render();}
+function sendCard(idx){
+  if(S.phase!=="play")return;const card=S.cards[idx];if(!card)return;audio();
+  S.cards.splice(idx,1);const to=S.open,ask=S.asks.find(a=>a.id===card.ask);
+  if(card.cat===to&&ask&&!ask.done){
+    ask.done=true;addMsg(to,{me:true,text:card.text,read:true});S.rel[to]=clamp(S.rel[to]+8,0,100);S.stats.right++;sfx.good();
+    log(`✓ 回${CHATS[to].name}：${card.text}`);
+    if(Math.random()<0.55){const [who,text]=pick(PRAISE[to]);later(rand(0.6,1.4),()=>{addMsg(to,{who,text});render();});}
+    say(`回复了${CHATS[to].name}`);
+  }else{
+    const m=addMsg(to,{me:true,text:card.text,wrong:true});sfx.send();
+    const w={id:m.id,msgId:m.id,to,card,sent:S.t,readAt:S.t+rand(1.6,3.0),state:"sent"};
+    S.wrongs.push(w);S.stats.wrong++;
+    log(`✗ 把「${card.text}」（本该回${CHATS[card.cat].name}）发进了${CHATS[to].name}`);
+    say(`糟了……「${card.text}」发进了${CHATS[to].name}！趁还没「已读」，按 Z 撤回！`);
+  }
+  render();
+}
+function recall(){
+  if(S.phase!=="play")return;const w=[...S.wrongs].reverse().find(x=>x.state==="sent"||x.state==="read");
+  if(!w){say("没有可以撤回的消息");render();return;}
+  if(S.recalls<=0){say("今天的撤回机会用完了");render();return;}
+  S.recalls--;S.stats.recalled++;sfx.recall();
+  const msgs=S.chats[w.to].msgs,i=msgs.findIndex(m=>m.id===w.msgId);
+  if(i>=0)msgs[i]={id:msgs[i].id,at:S.t,sys:true,text:"你撤回了一条消息"};
+  if(w.state==="sent"){w.state="recalled";log(`↩ 及时撤回（${CHATS[w.to].name}）`);say("撤回成功，没人看到。");}
+  else{w.state="recalled-late";S.shame+=1;S.rel[w.to]=clamp(S.rel[w.to]-5,0,100);
+    const who=pick(chatMembers(w.to));addMsg(w.to,{who,text:pick(["我看到了[狗头]","撤回也没用，我截图了","撤回了什么？？"])});
+    log(`↩ 撤回太晚，已被看到（${CHATS[w.to].name}）`);say("撤回晚了，已经有人看到了。");}
+  render();
+}
+function chatMembers(k){return {work:["boss","li","hr"],family:["mom","dad","aunt","uncle"],love:["bao"],friends:["jie","pang","mei"]}[k];}
+const timers=[];
+function later(sec,fn){timers.push({at:S.t+sec,fn});}
+function say(m){S.msg=m;}
+
+/* ---------- tick ---------- */
+function tick(now){
+  const dt=Math.min(0.25,(now-last)/1000);last=now;
+  if(S.phase==="play"){
+    S.t+=dt;
+    if(S.t>=S.nextAsk){spawnAsk();const gap=clamp(5.2-S.t/DAY*3.6,1.6,5.2);S.nextAsk=S.t+gap*rand(0.7,1.3);}
+    if(S.t>=S.nextChatter){spawnChatter();S.nextChatter=S.t+rand(3,6);}
+    for(let i=timers.length-1;i>=0;i--)if(S.t>=timers[i].at){const f=timers[i].fn;timers.splice(i,1);f();}
+    S.asks.forEach(a=>{if(!a.done&&S.t>=a.deadline){a.done=true;a.expired=true;S.rel[a.chat]=clamp(S.rel[a.chat]-14,0,100);S.stats.expired++;
+      const ci=S.cards.findIndex(c=>c.ask===a.id);if(ci>=0)S.cards.splice(ci,1);
+      const [who,text]=pick(TIMEOUT[a.chat]);addMsg(a.chat,{who,text});sfx.timeout();log(`⌛ 没回${CHATS[a.chat].name}：${a.src.q}`);}});
+    S.wrongs.forEach(w=>{if(w.state==="sent"&&S.t>=w.readAt){w.state="read";
+      const m=S.chats[w.to].msgs.find(x=>x.id===w.msgId);if(m)m.read=true;sfx.read();
+      later(0.9,()=>reactWrong(w));}});
+    const broken=ORDER.find(k=>S.rel[k]<=0);
+    if(broken){endDay(broken);}
+    else if(S.t>=DAY)endDay(null);
+    render(true);
+  }
+  timerId=requestAnimationFrame(tick);
+}
+function reactWrong(w){
+  if(w.state!=="read")return;w.state="reacted";
+  const lines=(SPECIAL[w.card.text]&&SPECIAL[w.card.text][w.to])||REACT[w.card.cat][w.to]||[["li","？"]];
+  const danger=w.card.d+(SPECIAL[w.card.text]&&SPECIAL[w.card.text][w.to]?1:0);
+  S.shame+=danger;S.rel[w.to]=clamp(S.rel[w.to]-8*danger,0,100);
+  const shot={chat:w.to,text:w.card.text,lines:lines.map(([p,t])=>[p,t.replace("{t}",w.card.text)]),danger};
+  S.shots.push(shot);
+  shot.lines.forEach(([p,t],i)=>later(0.7*i,()=>{addMsg(w.to,{who:p,text:t});if(i===0)stamp(`社死 +${danger}`);render();}));
+  log(`  社死 +${danger}：${shot.lines.map(([p,t])=>PEOPLE[p].n+"："+t).join(" / ")}`);
+}
+function endDay(broken){
+  S.phase="end";S.ending=broken;
+  log(broken?`结束：${ENDING[broken]}`:`下班了！`);
+  render();
+}
+
+/* ---------- ui bits ---------- */
+let bannerTimer=null;
+function banner(chat,who,text){
+  const h=$("#bannerHost");
+  h.innerHTML=`<div class="banner" data-open="${chat}" role="status"><span class="av sm c-${chat}">${CHATS[chat].short}</span><div style="min-width:0"><div class="bt">${esc(CHATS[chat].name)} · ${esc(who)}</div><div class="bm">${esc(text)}</div></div></div>`;
+  clearTimeout(bannerTimer);bannerTimer=setTimeout(()=>{h.innerHTML="";},2200);
+}
+function stamp(txt){const h=$("#stampHost");h.innerHTML=`<div class="stamp">${esc(txt)}</div>`;sfx.shame();setTimeout(()=>{if(h.firstChild&&h.firstChild.textContent===txt)h.innerHTML="";},950);}
+
+/* ---------- render ---------- */
+let lastMsgKey="",lastListKey="",lastCardsKey="";
+function render(fromTick){
+  // list
+  const listKey=ORDER.map(k=>k+S.chats[k].unread+(S.chats[k].msgs.length)+S.open).join("|");
+  if(listKey!==lastListKey){lastListKey=listKey;
+    $("#list").innerHTML=ORDER.map(k=>{const c=S.chats[k],last=c.msgs[c.msgs.length-1];
+      const pv=last?(last.sys?last.text:last.me?"我："+last.text:PEOPLE[last.who].n+"："+last.text):"";
+      return `<button class="ci" data-chat="${k}" aria-current="${S.open===k}"><span class="av c-${k}">${CHATS[k].short}</span><span class="nm">${esc(CHATS[k].name)}</span>${c.unread?`<span class="badge">${c.unread}</span>`:""}<span class="pv">${esc(pv)}</span><span class="hk">${CHATS[k].key}</span></button>`;}).join("");}
+  // chat window
+  const ch=S.chats[S.open];
+  const pendingAsks=S.asks.filter(a=>a.chat===S.open&&!a.done);
+  const msgKey=S.open+ch.msgs.length+ch.msgs.map(m=>(m.read?1:0)+(m.sys?2:0)).join("")+S.wrongs.map(w=>w.state).join("");
+  $("#ctitle").textContent=CHATS[S.open].name;$("#csub").textContent=CHATS[S.open].size;
+  if(msgKey!==lastMsgKey){lastMsgKey=msgKey;
+    const box=$("#msgs"),stick=box.scrollTop+box.clientHeight>=box.scrollHeight-40;
+    box.innerHTML=ch.msgs.map(m=>{
+      if(m.sys)return `<div class="sys">${esc(m.text)}</div>`;
+      if(m.me){const w=S.wrongs.find(x=>x.msgId===m.id);const canRecall=w&&(w.state==="sent"||w.state==="read");
+        return `<div class="m me${m.wrong?" wrong":""}"><div><div class="bub">${esc(m.text)}</div><div class="meta">${canRecall?`<button class="recall" data-recall="1">撤回 Z</button>`:""}<span>${m.read?"已读":"未读"}</span></div></div></div>`;}
+      const P=PEOPLE[m.who];const ask=m.ask&&S.asks.find(a=>a.id===m.ask);const live=ask&&!ask.done;
+      return `<div class="m${live?" ask":""}"><span class="av sm ${P.c}">${esc(P.n.slice(-1))}</span><div><div class="who">${esc(P.n)}</div><div class="bub">${esc(m.text)}</div>${live?`<div class="timer"><i data-timer="${ask.id}"></i></div>`:""}</div></div>`;
+    }).join("");
+    if(stick||!fromTick)box.scrollTop=box.scrollHeight;
+  }
+  pendingAsks.forEach(a=>{const el=document.querySelector(`[data-timer="${a.id}"]`);if(el)el.style.width=clamp(100*(a.deadline-S.t)/a.life,0,100)+"%";});
+  // tray
+  $("#target").textContent=`「${CHATS[S.open].name}」`;
+  const totalPending=S.asks.filter(a=>!a.done).length;
+  $("#pending").textContent=totalPending?`待回复 ${totalPending} 条`:"";
+  const cardsKey=S.cards.map(c=>c.id).join(",");
+  if(cardsKey!==lastCardsKey){lastCardsKey=cardsKey;
+    $("#cards").innerHTML=S.cards.length?S.cards.map((c,i)=>`<button class="card" data-card="${i}"><span class="n">${i<9?i+1:""}</span>${esc(c.text)}</button>`).join(""):`<div class="emptytray">暂时没有要回的消息。</div>`;}
+  // side
+  $("#clock").textContent=clockStr();
+  $("#shame").textContent=S.shame;
+  $("#rels").innerHTML=ORDER.map(k=>{const v=Math.round(S.rel[k]);const col=v>50?"var(--ok)":v>25?"var(--amber)":"var(--tomato)";
+    return `<div class="rel"><span>${CHATS[k].rel}</span><div class="bar"><i style="width:${v}%;background:${col}"></i></div><span class="v">${v}</span></div>`;}).join("");
+  $("#recalls").textContent=S.recalls;
+  $("#status").textContent=S.msg;
+  renderModal();
+}
+function title(){const s=S.shame;return s===0?"零社死，人间清醒":s<=3?"轻度社死":s<=8?"社死达人":s<=14?"社死专业户":"社死传说";}
+let modalKey="";
+function renderModal(){
+  const m=$("#modal"),key=S.phase+(S.phase==="end"?S.shots.length:"");
+  if(key===modalKey)return;modalKey=key;
+  if(S.phase==="intro"){
+    m.innerHTML=`<div class="sheet" role="dialog" aria-label="开始"><h2>发错群了</h2>
+      <div>周一早上 9:00。工作群、家族群、对象、死党群会同时找你。撑到 18:00 下班。</div>
+      <ul>
+        <li>左边点聊天（或按 <b>Q W E R</b>）切换；下面的回复卡片点一下（或按 <b>1–8</b>）就会发进<b>当前打开</b>的聊天。</li>
+        <li>卡片上不写是回谁的。回对了关系变好；拖太久没回关系变差；有一段关系掉到 0，今天就结束了。</li>
+        <li>发错了？在对方显示「已读」之前按 <b>Z</b> 撤回，一天只有 3 次。</li>
+      </ul>
+      <div class="row"><button class="btn primary" id="start">开始上班</button></div></div>`;
+    m.hidden=false;return;
+  }
+  if(S.phase==="end"){
+    const top=[...S.shots].sort((a,b)=>b.danger-a.danger);
+    const shots=top.length?top.map(s=>`<div class="shot"><div class="sh"><span>${esc(CHATS[s.chat].name)}</span><span style="color:var(--tomato)">社死 +${s.danger}</span></div><div class="sb">
+      <div class="l me">${esc(s.text)}</div>${s.lines.map(([p,t])=>`<div class="l"><b>${esc(PEOPLE[p].n)}</b>${esc(t)}</div>`).join("")}</div></div>`).join("")
+      :`<div>今天一条都没发错。</div>`;
+    m.innerHTML=`<div class="sheet" role="dialog" aria-label="下班结算"><h2>${S.ending?"今天提前结束了":title()}</h2>
+      ${S.ending?`<div><b>${esc(ENDING[S.ending])}</b></div>`:`<div>18:00，下班了。</div>`}
+      <div>社死值 <b>${S.shame}</b> · 回对 ${S.stats.right} 条 · 发错 ${S.stats.wrong} 条 · 没回 ${S.stats.expired} 条 · 撤回 ${S.stats.recalled} 次</div>
+      <div class="label">今日社死精选</div>
+      <div class="shots">${shots}</div>
+      <div class="row"><button class="btn primary" id="again">再过一天</button><button class="btn" id="copy2">复制试玩记录</button><span class="status" id="copyMsg2"></span></div></div>`;
+    m.hidden=false;return;
+  }
+  m.hidden=true;m.innerHTML="";
+}
+
+/* ---------- record ---------- */
+function recordText(){
+  return ["发错群了 原型 v0.1 试玩记录",...S.record,"—— 汇总 ——",
+    `社死值 ${S.shame}；回对 ${S.stats.right}，发错 ${S.stats.wrong}，没回 ${S.stats.expired}，撤回 ${S.stats.recalled}`,
+    `关系：${ORDER.map(k=>CHATS[k].rel+" "+Math.round(S.rel[k])).join("，")}`,
+    S.ending?`提前结束：${ENDING[S.ending]}`:(S.phase==="end"?"撑到了下班":"（还没结束）")].join("\n");
+}
+function copyRecord(sel){
+  const txt=recordText(),box=$("#recordBox");
+  const fb=()=>{box.value=txt;box.hidden=false;box.focus();box.select();$(sel).textContent="已展开记录，请手动复制";};
+  try{navigator.clipboard.writeText(txt).then(()=>{$(sel).textContent="已复制";},fb);}catch(e){fb();}
+}
+
+/* ---------- events ---------- */
+$("#list").addEventListener("click",e=>{const b=e.target.closest("[data-chat]");if(b)openChat(b.dataset.chat);});
+$("#cards").addEventListener("click",e=>{const b=e.target.closest("[data-card]");if(b)sendCard(+b.dataset.card);});
+$("#msgs").addEventListener("click",e=>{if(e.target.closest("[data-recall]"))recall();});
+$("#bannerHost").addEventListener("click",e=>{const b=e.target.closest("[data-open]");if(b){openChat(b.dataset.open);$("#bannerHost").innerHTML="";}});
+$("#mute").addEventListener("click",()=>{muted=!muted;$("#mute").textContent=muted?"已静音":"静音";});
+$("#copyRec").addEventListener("click",()=>copyRecord("#copyMsg"));
+$("#modal").addEventListener("click",e=>{
+  if(e.target.closest("#start")){audio();S.phase="play";S.open="work";render();}
+  else if(e.target.closest("#again")){timers.length=0;newDay();S.phase="play";modalKey="";lastMsgKey=lastListKey=lastCardsKey="";render();}
+  else if(e.target.closest("#copy2"))copyRecord("#copyMsg2");
+});
+document.addEventListener("keydown",e=>{
+  if(!S||e.target.closest("textarea"))return;
+  const k=e.key.toLowerCase();
+  if(S.phase==="intro"&&(k==="enter"||k===" ")){e.preventDefault();audio();S.phase="play";render();return;}
+  if(S.phase!=="play")return;
+  const ci={q:"work",w:"family",e:"love",r:"friends"}[k];
+  if(ci){openChat(ci);return;}
+  if(/^[1-9]$/.test(k)){sendCard(+k-1);return;}
+  if(k==="z")recall();
+});
+
+newDay();render();
+last=performance.now();timerId=requestAnimationFrame(tick);
+})();
+</script>
