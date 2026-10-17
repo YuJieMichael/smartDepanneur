@@ -75,6 +75,7 @@ h1 small{font-family:var(--mono);font-size:12px;color:var(--muted);letter-spacin
 .tray .lbl{font-size:12px;color:var(--muted);display:flex;justify-content:space-between;gap:8px;flex-wrap:wrap}
 .tray .lbl b{color:var(--fg)}
 .oops{background:color-mix(in srgb,var(--tomato) 14%,transparent);border:2px solid var(--tomato);color:var(--fg);border-radius:10px;padding:10px 12px;font-size:15.5px;font-weight:600;display:flex;justify-content:space-between;gap:10px;align-items:center;flex-wrap:wrap}
+.oops .why{display:block;font-size:13px;font-weight:400;color:var(--muted);margin-top:3px}
 .oops .cd{font-family:var(--mono);color:var(--tomato)}
 .oops button{background:var(--tomato);color:#fff;border:0;border-radius:8px;padding:6px 12px;font-weight:600}
 .composer{display:flex;gap:8px;align-items:stretch}
@@ -160,7 +161,7 @@ textarea#recordBox{width:100%;min-height:160px;background:var(--panel-2);color:v
 
 <div class="wrap">
   <header>
-    <h1>发错群了<small>原型 v0.5</small></h1>
+    <h1>发错群了<small>原型 v0.6</small></h1>
     <div class="hright">
       <div class="keys"><kbd>Q</kbd>–<kbd>Y</kbd> 切换聊天 · <kbd>1</kbd>–<kbd>6</kbd> 选回复 · <kbd>Enter</kbd> 发送 · <kbd>Z</kbd> 撤回</div>
       <button class="btn" id="dexBtn">社死图鉴</button>
@@ -451,14 +452,21 @@ function spawnChatter(){
 
 /* ---------- actions ---------- */
 function canAct(){return S.phase==="play"&&!S.paused&&!S.meeting;}
-function openChat(k){if(!canAct())return;if(S.open!==k)S.lastSwitch=S.t;S.open=k;S.chats[k].unread=0;render();}
+function openChat(k){if(!canAct())return;
+  S.misTap=null;
+  if(S.open!==k){S.lastSwitch=S.t;
+    // 点错聊天：手一滑点进了「长得像」的聊天。只在切换时发生，发送永远进屏幕上这个聊天
+    const busy=S.asks.filter(a=>!a.done).length>=4;
+    const alt=LOOKALIKE[k].filter(x=>x!==S.open&&!isOut(x)&&!(x==="blind"&&S.blindGone));
+    if(alt.length&&Math.random()<CHATS[k].slip*(busy?1.5:1)){const got=pick(alt);S.misTap={want:k,got};S.slips++;k=got;}}
+  S.open=k;S.chats[k].unread=0;render();}
 function pickCard(idx){
   if(!canAct())return;const card=S.cards[idx];if(!card)return;audio();
   if(S.t<S.lockUntil){say("还在王总办公室挨训，动不了");render();return;}
   S.cards.splice(idx,1);
   const k=S.open;
   if(S.drafts[k])S.cards.push(S.drafts[k].card);
-  S.drafts[k]={card,start:S.t,dur:clamp(card.text.length/11,0.9,2.2)};
+  S.drafts[k]={card,start:S.t,dur:clamp(card.text.length/11,0.9,2.2),misTap:S.misTap&&S.misTap.got===k?S.misTap.want:null};
   say(`正在「${CHATS[k].name}」里输入……`);render();
 }
 function typedText(k){const d=S.drafts[k];if(!d)return "";const f=clamp((S.t-d.start)/d.dur,0,1);return d.card.text.slice(0,Math.ceil(f*d.card.text.length));}
@@ -467,14 +475,10 @@ function sendDraft(){
   if(!canAct()||!S.drafts[S.open])return;
   if(S.t<S.lockUntil){say("还在王总办公室挨训，发不了消息");render();return;}
   if(!draftDone(S.open)){say("还没打完字");render();return;}
-  const from=S.open;let to=from,slipped=false;
+  const from=S.open,to=from;
   if(isOut(to)){say("你已经不在这个群里了，发不出去");render();return;}
-  {const hurry=S.t-S.lastSwitch<1.5,busy=S.asks.filter(a=>!a.done).length>=4;
-   const chance=CHATS[to].slip*(hurry?2:1)*(busy?1.5:1);
-   const alt=LOOKALIKE[to].filter(k=>!isOut(k)&&!(k==="blind"&&S.blindGone));
-   if(alt.length&&Math.random()<chance){to=pick(alt);slipped=true;S.slips++;}}
   if(to==="blind"&&S.blindGone){say("小陈已经把你删了，消息被拒收");render();return;}
-  const card=S.drafts[from].card;delete S.drafts[from];audio();
+  const card=S.drafts[from].card,misTap=S.drafts[from].misTap;delete S.drafts[from];audio();
   const ask=S.asks.find(a=>a.id===card.ask);
   if(card.cat===to&&ask&&ask.done){
     addMsg(to,{me:true,text:card.text,read:true});log(`… 回晚了（${CHATS[to].name}）：${card.text}`);say("回晚了，对方已经不想理你了。");sfx.send();render();return;
@@ -486,10 +490,9 @@ function sendDraft(){
     say(`回复了${CHATS[to].name}`);
   }else{
     const m=addMsg(to,{me:true,text:card.text,wrong:true});sfx.send();
-    S.wrongs.push({msgId:m.id,to,card,sent:S.t,readAt:S.t+rand(2.0,3.4),state:"sent",slipped});S.stats.wrong++;
-    log(`✗ ${slipped?"（手滑）":""}把「${card.text.replace(/\n/g," ")}」（本该回${CHATS[card.cat].name}）发进了${CHATS[to].name}`);
-    if(slipped){banner(to,"手滑了！","消息发进了「"+CHATS[to].name+"」");sfx.bump();}
-    say(slipped?`手滑了！消息发进了「${CHATS[to].name}」！趁还没「已读」，按 Z 撤回！`:S.mode==="chaos"?`发进了${CHATS[to].name}……看看会发生什么`:`糟了……发进了${CHATS[to].name}！趁还没「已读」，按 Z 撤回！`);
+    S.wrongs.push({msgId:m.id,to,card,sent:S.t,readAt:S.t+rand(2.0,3.4),state:"sent",misTap});S.stats.wrong++;
+    log(`✗ ${misTap?`（想点${CHATS[misTap].name}，手滑点进了${CHATS[to].name}）`:""}把「${card.text.replace(/\n/g," ")}」（本该回${CHATS[card.cat].name}）发进了${CHATS[to].name}`);
+    say(S.mode==="chaos"?`发进了${CHATS[to].name}……看看会发生什么`:`糟了……发进了${CHATS[to].name}！趁还没「已读」，按 Z 撤回！`);
   }
   render();
 }
@@ -639,10 +642,10 @@ function render(fromTick){
     $("#list").innerHTML=ORDER.map(k=>{const c=S.chats[k],lm=c.msgs[c.msgs.length-1];
       const pv=lm?(lm.sys?lm.text:lm.me?"我："+lm.text:PEOPLE[lm.who].n+"："+lm.text).split("\n")[0]:"";
       const out=isOut(k)||(k==="blind"&&S.blindGone);
-      return `<button class="ci${out?" out":""}" data-chat="${k}" aria-current="${S.open===k}"><span class="av c-${k}">${CHATS[k].short}</span><span class="nm">${esc(CHATS[k].name)} <span class="risk ${riskLabel(k)[1]}" title="手滑风险">${riskLabel(k)[0]}</span></span>${c.unread?`<span class="badge">${c.unread}</span>`:""}<span class="pv">${S.drafts[k]&&!out?`<span class="dr">[草稿]</span> ${esc(S.drafts[k].card.text.split("\n")[0])}`:esc(out?(k==="blind"&&S.blindGone?"已被对方删除":"你已不在群聊中"):pv)}</span><span class="hk">${CHATS[k].key}</span></button>`;}).join("");}
+      return `<button class="ci${out?" out":""}" data-chat="${k}" aria-current="${S.open===k}"><span class="av c-${k}">${CHATS[k].short}</span><span class="nm">${esc(CHATS[k].name)} <span class="risk ${riskLabel(k)[1]}" title="点错风险">${riskLabel(k)[0]}</span></span>${c.unread?`<span class="badge">${c.unread}</span>`:""}<span class="pv">${S.drafts[k]&&!out?`<span class="dr">[草稿]</span> ${esc(S.drafts[k].card.text.split("\n")[0])}`:esc(out?(k==="blind"&&S.blindGone?"已被对方删除":"你已不在群聊中"):pv)}</span><span class="hk">${CHATS[k].key}</span></button>`;}).join("");}
   const ch=S.chats[S.open];
   const msgKey=S.open+ch.msgs.length+ch.msgs.map(m=>(m.read?1:0)+(m.sys?2:0)).join("")+S.wrongs.map(w=>w.state).join("");
-  $("#ctitle").textContent=CHATS[S.open].name;$("#csub").textContent=`${CHATS[S.open].size} · 手滑风险${riskLabel(S.open)[0]}`;
+  $("#ctitle").textContent=CHATS[S.open].name;$("#csub").textContent=`${CHATS[S.open].size} · 点错风险${riskLabel(S.open)[0]}`;
   if(msgKey!==lastMsgKey){lastMsgKey=msgKey;
     const box=$("#msgs"),stick=box.scrollTop+box.clientHeight>=box.scrollHeight-40;
     box.innerHTML=ch.msgs.map(m=>{
@@ -668,7 +671,7 @@ function render(fromTick){
   const ow=[...S.wrongs].reverse().find(x=>x.state==="sent");const oops=$("#oops");
   if(ow&&S.phase==="play"){oops.hidden=false;
     const left=Math.max(0,ow.readAt-S.t).toFixed(1);
-    oops.innerHTML=`<span>${ow.slipped?"手滑了！":"发错了！"}「${esc(ow.card.text.split("\n")[0])}」进了「${esc(CHATS[ow.to].name)}」</span><span class="cd">${left} 秒后对方已读</span><button data-recall="1">撤回（Z）· 剩 ${S.recalls} 次</button>`;}
+    oops.innerHTML=`<span>发错了！「${esc(ow.card.text.split("\n")[0])}」本该回「${esc(CHATS[ow.card.cat].name)}」，却进了「${esc(CHATS[ow.to].name)}」${ow.misTap?`<small class="why">刚才你想点「${esc(CHATS[ow.misTap].name)}」，手一滑点进了「${esc(CHATS[ow.to].name)}」，没看标题就打字了</small>`:""}</span><span class="cd">${left} 秒后对方已读</span><button data-recall="1">撤回（Z）· 剩 ${S.recalls} 次</button>`;}
   else oops.hidden=true;
   $("#clock").textContent=clockStr();
   $("#dayline").textContent=S.subway?"下班路上 · 挤地铁中":"周一 · 18:00 下班";
@@ -718,7 +721,7 @@ function renderModal(){
       <ul>
         <li>点左边的聊天（或按 <b>Q W E R T Y</b>）切换。点回复卡片（或按 <b>1–6</b>），字会打进输入框；打完按 <b>Enter</b> 发进<b>当前打开</b>的聊天。</li>
         <li>每个聊天有自己的输入框，和微信一样会留草稿。卡片上不写是回谁的，打进哪个聊天要自己看清楚。</li>
-        <li>每个聊天的<b>手滑风险</b>不一样：给宝发消息你会格外小心（低）；人多又容易混的群（同学群、死党群、家族群）容易手滑，发进长得像的聊天里（高）。刚切过去就急着发、或者待回消息太多时，风险更高。</li>
+        <li><b>点错聊天</b>：切换聊天时手可能一滑，点进一个长得像的聊天（看聊天标题！）。每个聊天的点错风险不一样：宝是置顶的，很少点错（低）；人多又容易混的群（同学群、死党群、家族群）容易点错（高）。待回消息太多时更容易点错。<b>Enter 永远发进屏幕上打开的那个聊天。</b></li>
         <li>发错了？在对方「已读」之前按 <b>Z</b> 撤回，一天 3 次。发错进工作群会被叫去挨训；太离谱会被移出群聊；截图还会流传到别的群。</li>
         <li>今天还有：10:30 视频会议、老板巡视（两次）、家族群广场舞接龙、17:20 下班挤地铁。</li>
       </ul>
@@ -735,7 +738,7 @@ function renderModal(){
       :`<div>今天一条都没发错。</div>`;
     m.innerHTML=`<div class="sheet" role="dialog" aria-label="下班结算"><h2>${S.ending?"今天提前结束了":title()}</h2>
       ${S.ending?`<div><b>${esc(ENDING[S.ending])}</b></div>`:`<div>18:00，下班了。${S.mode==="chaos"?"（故意社死模式）":""}</div>`}
-      <div>社死值 <b>${S.shame}</b> · 回对 ${S.stats.right} 条 · 发错 ${S.stats.wrong} 条（手滑 ${S.slips}，蒙混过关 ${S.passes}）· 没回 ${S.stats.expired} 条 · 撤回 ${S.stats.recalled} 次 · 新图鉴 ${S.stats.newDex} 个（共 ${Object.keys(DEX).length}/${CODEX_TOTAL}）${S.blindGone?" · 被小陈删了":""}</div>
+      <div>社死值 <b>${S.shame}</b> · 回对 ${S.stats.right} 条 · 发错 ${S.stats.wrong} 条（点错聊天 ${S.slips}，蒙混过关 ${S.passes}）· 没回 ${S.stats.expired} 条 · 撤回 ${S.stats.recalled} 次 · 新图鉴 ${S.stats.newDex} 个（共 ${Object.keys(DEX).length}/${CODEX_TOTAL}）${S.blindGone?" · 被小陈删了":""}</div>
       <div class="label">今日社死精选</div>
       <div class="shots">${shots}</div>
       <div class="row"><button class="btn primary" id="again">再过一天</button><button class="btn" id="openDex">社死图鉴</button><button class="btn" id="copy2">复制试玩记录</button><span class="status" id="copyMsg2"></span></div></div>`;
@@ -746,8 +749,8 @@ function renderModal(){
 
 /* ---------- record ---------- */
 function recordText(){
-  return ["发错群了 原型 v0.5 试玩记录",`模式：${S.mode==="chaos"?"故意社死":"正常上班"}`,...S.record,"—— 汇总 ——",
-    `社死值 ${S.shame}；回对 ${S.stats.right}，发错 ${S.stats.wrong}（其中手滑 ${S.slips}，蒙混过关 ${S.passes}），没回 ${S.stats.expired}，撤回 ${S.stats.recalled}，新图鉴 ${S.stats.newDex}（累计 ${Object.keys(DEX).length}/${CODEX_TOTAL}）`,
+  return ["发错群了 原型 v0.6 试玩记录",`模式：${S.mode==="chaos"?"故意社死":"正常上班"}`,...S.record,"—— 汇总 ——",
+    `社死值 ${S.shame}；回对 ${S.stats.right}，发错 ${S.stats.wrong}（点错聊天 ${S.slips} 次，蒙混过关 ${S.passes}），没回 ${S.stats.expired}，撤回 ${S.stats.recalled}，新图鉴 ${S.stats.newDex}（累计 ${Object.keys(DEX).length}/${CODEX_TOTAL}）`,
     `关系：${ORDER.map(k=>CHATS[k].rel+" "+(k==="blind"&&S.blindGone?"已删":Math.round(S.rel[k]))).join("，")}`,
     S.ending?`提前结束：${ENDING[S.ending]}`:(S.phase==="end"?"撑到了下班":"（还没结束）")].join("\n");
 }
