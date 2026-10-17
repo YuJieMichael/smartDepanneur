@@ -46,6 +46,8 @@ h1 small{font-family:var(--mono);font-size:12px;color:var(--muted);letter-spacin
 .ci .nm{font-weight:600;font-size:14px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .ci .pv{font-size:12.5px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;grid-column:2}
 .ci .badge{grid-row:1;grid-column:3;min-width:18px;height:18px;border-radius:9px;background:var(--tomato);color:#fff;font-size:11px;font-family:var(--mono);display:flex;align-items:center;justify-content:center;padding:0 5px}
+.risk{font-size:10.5px;font-weight:400;border-radius:4px;padding:0 4px;margin-left:2px;vertical-align:1px}
+.r-low{color:var(--ok);border:1px solid var(--ok)}.r-mid{color:var(--amber);border:1px solid var(--amber)}.r-high{color:var(--tomato);border:1px solid var(--tomato)}
 .ci .hk{grid-row:2;grid-column:3;font-family:var(--mono);font-size:11px;color:var(--muted)}
 .av{width:40px;height:40px;border-radius:10px;display:flex;align-items:center;justify-content:center;color:#fff;font-weight:600;font-size:16px;flex:none}
 .av.sm{width:32px;height:32px;border-radius:8px;font-size:13px}
@@ -153,7 +155,7 @@ textarea#recordBox{width:100%;min-height:160px;background:var(--panel-2);color:v
 
 <div class="wrap">
   <header>
-    <h1>发错群了<small>原型 v0.3</small></h1>
+    <h1>发错群了<small>原型 v0.4</small></h1>
     <div class="hright">
       <div class="keys"><kbd>Q</kbd>–<kbd>Y</kbd> 切换聊天 · <kbd>1</kbd>–<kbd>6</kbd> 选回复 · <kbd>Enter</kbd> 发送 · <kbd>Z</kbd> 撤回</div>
       <button class="btn" id="dexBtn">社死图鉴</button>
@@ -202,16 +204,18 @@ const PEOPLE={
   chen:{n:"小陈",c:"m-chen"}
 };
 const CHATS={
-  work:{name:"项目组",short:"工",size:"12 人 · 王总在群里",key:"Q",rel:"工作"},
-  family:{name:"相亲相爱一家人",short:"家",size:"23 人",key:"W",rel:"家人"},
-  love:{name:"宝",short:"宝",size:"对象",key:"E",rel:"对象"},
-  friends:{name:"废物联盟",short:"友",size:"4 人",key:"R",rel:"死党"},
-  classmates:{name:"高三（2）班",short:"同",size:"45 人",key:"T",rel:"同学"},
-  blind:{name:"小陈（相亲）",short:"陈",size:"妈介绍的相亲对象",key:"Y",rel:"相亲"}
+  work:{name:"项目组",short:"工",size:"12 人 · 王总在群里",key:"Q",rel:"工作",slip:0.10},
+  family:{name:"相亲相爱一家人",short:"家",size:"23 人",key:"W",rel:"家人",slip:0.12},
+  love:{name:"宝",short:"宝",size:"对象 · 已置顶",key:"E",rel:"对象",slip:0.02},
+  friends:{name:"废物联盟",short:"友",size:"4 人",key:"R",rel:"死党",slip:0.15},
+  classmates:{name:"高三（2）班",short:"同",size:"45 人",key:"T",rel:"同学",slip:0.18},
+  blind:{name:"小陈（相亲）",short:"陈",size:"妈介绍的相亲对象",key:"Y",rel:"相亲",slip:0.08}
 };
 const ORDER=["work","family","love","friends","classmates","blind"];
 const MEMBERS={work:["boss","li","hr"],family:["mom","dad","aunt","uncle"],love:["bao"],friends:["jie","pang","mei"],classmates:["monitor","xueba"],blind:["chen"]};
 const GROUPS=["work","family","friends","classmates"];
+const LOOKALIKE={work:["classmates"],classmates:["work","friends"],family:["friends","classmates"],friends:["family","classmates"],love:["blind"],blind:["love"]};
+const riskLabel=k=>{const r=CHATS[k].slip;return r<0.05?["低","r-low"]:r<0.13?["中","r-mid"]:["高","r-high"];};
 const ASKS={
   work:[
     {p:"boss",q:"@你 方案今天能给我吗？",r:"收到王总，下午一定给您！",d:1},
@@ -384,7 +388,7 @@ function newDay(mode){
   S={t:0,phase:"intro",mode:mode||"normal",open:"work",chats:{},cards:[],asks:[],rel:{},shame:0,recalls:RECALLS,
     nextAsk:2,nextChatter:3.5,draft:null,wrongs:[],shots:[],record:[],uid:0,msg:"",paused:false,
     stats:{right:0,wrong:0,expired:0,recalled:0,newDex:0},ending:null,used:{},kicked:{},lockUntil:0,blindGone:false,
-    meeting:null,patrol:null,subway:false,nextBump:0,ev:{meeting:false,patrol1:false,patrol2:false,dance:false,subway:false},dexOpen:false};
+    meeting:null,patrol:null,subway:false,lastSwitch:0,slips:0,nextBump:0,ev:{meeting:false,patrol1:false,patrol2:false,dance:false,subway:false},dexOpen:false};
   ORDER.forEach(k=>{S.chats[k]={msgs:[],unread:0};S.rel[k]=70;S.used[k]=[];});
   addMsg("work",{who:"boss",text:"今天大家都打起精神来"});
   addMsg("family",{who:"uncle",text:"[早安图片]"});
@@ -430,7 +434,7 @@ function spawnChatter(){
 
 /* ---------- actions ---------- */
 function canAct(){return S.phase==="play"&&!S.paused&&!S.meeting;}
-function openChat(k){if(!canAct())return;S.open=k;S.chats[k].unread=0;render();}
+function openChat(k){if(!canAct())return;if(S.open!==k)S.lastSwitch=S.t;S.open=k;S.chats[k].unread=0;render();}
 function pickCard(idx){
   if(!canAct())return;const card=S.cards[idx];if(!card)return;audio();
   if(S.t<S.lockUntil){say("还在王总办公室挨训，动不了");render();return;}
@@ -445,8 +449,12 @@ function sendDraft(){
   if(!canAct()||!S.draft)return;
   if(S.t<S.lockUntil){say("还在王总办公室挨训，发不了消息");render();return;}
   if(!draftDone()){say("还没打完字");render();return;}
-  const to=S.open;
+  let to=S.open,slipped=false;
   if(isOut(to)){say("你已经不在这个群里了，发不出去");render();return;}
+  {const hurry=S.t-S.lastSwitch<1.5,busy=S.asks.filter(a=>!a.done).length>=4;
+   const chance=CHATS[to].slip*(hurry?2:1)*(busy?1.5:1);
+   const alt=LOOKALIKE[to].filter(k=>!isOut(k)&&!(k==="blind"&&S.blindGone));
+   if(alt.length&&Math.random()<chance){to=pick(alt);slipped=true;S.slips++;}}
   if(to==="blind"&&S.blindGone){say("小陈已经把你删了，消息被拒收");render();return;}
   const card=S.draft.card;S.draft=null;audio();
   const ask=S.asks.find(a=>a.id===card.ask);
@@ -461,8 +469,9 @@ function sendDraft(){
   }else{
     const m=addMsg(to,{me:true,text:card.text,wrong:true});sfx.send();
     S.wrongs.push({msgId:m.id,to,card,sent:S.t,readAt:S.t+rand(1.6,3.0),state:"sent"});S.stats.wrong++;
-    log(`✗ 把「${card.text.replace(/\n/g," ")}」（本该回${CHATS[card.cat].name}）发进了${CHATS[to].name}`);
-    say(S.mode==="chaos"?`发进了${CHATS[to].name}……看看会发生什么`:`糟了……发进了${CHATS[to].name}！趁还没「已读」，按 Z 撤回！`);
+    log(`✗ ${slipped?"（手滑）":""}把「${card.text.replace(/\n/g," ")}」（本该回${CHATS[card.cat].name}）发进了${CHATS[to].name}`);
+    if(slipped){banner(to,"手滑了！","消息发进了「"+CHATS[to].name+"」");sfx.bump();}
+    say(slipped?`手滑了！消息发进了「${CHATS[to].name}」！趁还没「已读」，按 Z 撤回！`:S.mode==="chaos"?`发进了${CHATS[to].name}……看看会发生什么`:`糟了……发进了${CHATS[to].name}！趁还没「已读」，按 Z 撤回！`);
   }
   render();
 }
@@ -518,14 +527,15 @@ function blindGoneEvent(){
 
 /* ---------- events ---------- */
 function startMeeting(){
-  S.meeting={start:S.t,dur:16,cam:50,camOn:true,camOffUsed:false,camOffUntil:0,items:[],spawned:0,exposed:[],faceGone:0,faceHit:false};
+  S.meeting={start:S.t,dur:16,cam:50,camOn:true,offTime:0,offWarned:false,items:[],faceGone:0,faceHit:false};
+  if(document.activeElement&&document.activeElement.blur)document.activeElement.blur();
   const picks=[...MEET_ITEMS].sort(()=>Math.random()-0.5).slice(0,3);
   picks.forEach((it,i)=>{const fromLeft=Math.random()<0.5;S.meeting.items.push({...it,x:fromLeft?-8:108,v:(fromLeft?1:-1)*rand(10,15),appear:1.5+i*4.5,on:false,expo:0,hit:false});});
   addMsg("work",{sys:true,text:"王总 发起了视频会议"});log("📹 视频会议开始");sfx.alarm();render();
 }
 function tickMeeting(dt){
   const M=S.meeting,el=S.t-M.start;
-  if(M.camOffUntil&&S.t>=M.camOffUntil){M.camOn=true;M.camOffUntil=0;}
+  if(!M.camOn){M.offTime+=dt;if(M.offTime>2.5&&!M.offWarned){M.offWarned=true;S.rel.work=clamp(S.rel.work-4,0,100);addMsg("work",{who:"boss",text:"你摄像头怎么关了？"});log("  📹 摄像头关太久");}}
   const win=[M.cam-20,M.cam+20];
   M.items.forEach(it=>{if(el>=it.appear){it.on=true;it.x+=it.v*dt;}
     if(it.on&&!it.hit&&M.camOn&&it.x>win[0]&&it.x<win[1]){it.expo+=dt;if(it.expo>0.5){it.hit=true;
@@ -540,7 +550,7 @@ function tickMeeting(dt){
     log(`📹 视频会议结束（入镜 ${hits} 次）`);S.meeting=null;}
 }
 function camMove(d){if(S.meeting)S.meeting.cam=clamp(S.meeting.cam+d,10,90);}
-function camOff(){const M=S.meeting;if(!M||M.camOffUsed)return;M.camOffUsed=true;M.camOn=false;M.camOffUntil=S.t+3;say("关了摄像头 3 秒");}
+function camToggle(){const M=S.meeting;if(!M)return;M.camOn=!M.camOn;if(M.camOn){M.offTime=0;M.offWarned=false;say("摄像头打开了");}else say("摄像头关了，别关太久");}
 function startPatrol(){S.patrol={until:S.t+3};alertMsg("⚠ 王总从你身后走过来了！3 秒内切到「项目组」",3);sfx.alarm();log("👀 老板巡视");}
 function resolvePatrol(){
   const where=S.open;S.patrol=null;
@@ -552,7 +562,7 @@ function resolvePatrol(){
 }
 function startDance(){if(isOut("family"))return;makeAsk("family",DANCE_ASK,30);log("💃 广场舞接龙");}
 function startSubway(){S.subway=true;S.nextBump=S.t+3;alertMsg("🚇 下班挤地铁：手机会被挤得乱切聊天",2.5);log("🚇 开始挤地铁");}
-function bump(){const others=ORDER.filter(k=>k!==S.open);S.open=pick(others);S.chats[S.open].unread=0;sfx.bump();say(`被挤了一下，手机切到了「${CHATS[S.open].name}」`);}
+function bump(){const others=ORDER.filter(k=>k!==S.open);S.open=pick(others);S.lastSwitch=S.t;S.chats[S.open].unread=0;sfx.bump();say(`被挤了一下，手机切到了「${CHATS[S.open].name}」`);}
 
 /* ---------- tick ---------- */
 function tick(now){
@@ -602,10 +612,10 @@ function render(fromTick){
     $("#list").innerHTML=ORDER.map(k=>{const c=S.chats[k],lm=c.msgs[c.msgs.length-1];
       const pv=lm?(lm.sys?lm.text:lm.me?"我："+lm.text:PEOPLE[lm.who].n+"："+lm.text).split("\n")[0]:"";
       const out=isOut(k)||(k==="blind"&&S.blindGone);
-      return `<button class="ci${out?" out":""}" data-chat="${k}" aria-current="${S.open===k}"><span class="av c-${k}">${CHATS[k].short}</span><span class="nm">${esc(CHATS[k].name)}</span>${c.unread?`<span class="badge">${c.unread}</span>`:""}<span class="pv">${esc(out?(k==="blind"&&S.blindGone?"已被对方删除":"你已不在群聊中"):pv)}</span><span class="hk">${CHATS[k].key}</span></button>`;}).join("");}
+      return `<button class="ci${out?" out":""}" data-chat="${k}" aria-current="${S.open===k}"><span class="av c-${k}">${CHATS[k].short}</span><span class="nm">${esc(CHATS[k].name)} <span class="risk ${riskLabel(k)[1]}" title="手滑风险">${riskLabel(k)[0]}</span></span>${c.unread?`<span class="badge">${c.unread}</span>`:""}<span class="pv">${esc(out?(k==="blind"&&S.blindGone?"已被对方删除":"你已不在群聊中"):pv)}</span><span class="hk">${CHATS[k].key}</span></button>`;}).join("");}
   const ch=S.chats[S.open];
   const msgKey=S.open+ch.msgs.length+ch.msgs.map(m=>(m.read?1:0)+(m.sys?2:0)).join("")+S.wrongs.map(w=>w.state).join("");
-  $("#ctitle").textContent=CHATS[S.open].name;$("#csub").textContent=CHATS[S.open].size;
+  $("#ctitle").textContent=CHATS[S.open].name;$("#csub").textContent=`${CHATS[S.open].size} · 手滑风险${riskLabel(S.open)[0]}`;
   if(msgKey!==lastMsgKey){lastMsgKey=msgKey;
     const box=$("#msgs"),stick=box.scrollTop+box.clientHeight>=box.scrollHeight-40;
     box.innerHTML=ch.msgs.map(m=>{
@@ -645,16 +655,16 @@ function renderMeeting(){
   const M=S.meeting,left=Math.max(0,Math.ceil(M.dur-(S.t-M.start)));
   if(!box.firstChild){
     box.innerHTML=`<div class="mbox" role="dialog" aria-label="视频会议"><h3 id="mTitle"></h3>
-      <div style="font-size:13px;color:var(--muted)">用 ← → 移动镜头，别让家里的东西入镜，但你的脸要在镜头里。空格可以关一次摄像头（3 秒）。开会时聊天消息的倒计时暂停。</div>
+      <div style="font-size:13px;color:var(--muted)">用 ← → 移动镜头，别让家里的东西入镜，但你的脸要在镜头里。空格开关摄像头（关太久王总会问）。开会时聊天消息的倒计时暂停。</div>
       <div class="room" id="mRoom"><div class="camwin" id="mCam" style="width:40%"></div><div class="thing me" style="left:50%">你</div><div id="mThings"></div></div>
-      <div class="row"><button class="btn" data-cam="-1">← 镜头左移</button><button class="btn" data-cam="1">镜头右移 →</button><button class="btn" data-cam="off" id="mOff">关摄像头（空格）</button></div>
+      <div class="row"><button class="btn" data-cam="-1" tabindex="-1">← 镜头左移</button><button class="btn" data-cam="1" tabindex="-1">镜头右移 →</button><button class="btn" data-cam="off" id="mOff" tabindex="-1">关摄像头（空格）</button></div>
       <div class="mbar"><i id="mBar"></i></div></div>`;
   }
   box.hidden=false;
   $("#mTitle").textContent=`📹 王总的视频会议 · 还剩 ${left} 秒`;
   const cam=$("#mCam");cam.style.left=(M.cam-20)+"%";cam.className="camwin"+(M.camOn?"":" off");
   $("#mThings").innerHTML=M.items.filter(i=>i.on&&i.x>-10&&i.x<110).map(i=>`<div class="thing chaos" style="left:${i.x}%">${esc(i.n)}</div>`).join("");
-  $("#mOff").disabled=M.camOffUsed;
+  $("#mOff").textContent=M.camOn?"关摄像头（空格）":"开摄像头（空格）";
   $("#mBar").style.width=(100*(S.t-M.start)/M.dur)+"%";
 }
 function title(){const s=S.shame;return s===0?"零社死，人间清醒":s<=3?"轻度社死":s<=8?"社死达人":s<=14?"社死专业户":"社死传说";}
@@ -676,6 +686,7 @@ function renderModal(){
       <ul>
         <li>点左边的聊天（或按 <b>Q W E R T Y</b>）切换。点回复卡片（或按 <b>1–6</b>），字会打进输入框；打完按 <b>Enter</b> 发进<b>当前打开</b>的聊天。</li>
         <li>切换聊天时输入框里的字不会消失。卡片上不写是回谁的。</li>
+        <li>每个聊天的<b>手滑风险</b>不一样：给宝发消息你会格外小心（低）；人多又容易混的群（同学群、死党群、家族群）容易手滑，发进长得像的聊天里（高）。刚切过去就急着发、或者待回消息太多时，风险更高。</li>
         <li>发错了？在对方「已读」之前按 <b>Z</b> 撤回，一天 3 次。发错进工作群会被叫去挨训；太离谱会被移出群聊；截图还会流传到别的群。</li>
         <li>今天还有：10:30 视频会议、老板巡视（两次）、家族群广场舞接龙、17:20 下班挤地铁。</li>
       </ul>
@@ -692,7 +703,7 @@ function renderModal(){
       :`<div>今天一条都没发错。</div>`;
     m.innerHTML=`<div class="sheet" role="dialog" aria-label="下班结算"><h2>${S.ending?"今天提前结束了":title()}</h2>
       ${S.ending?`<div><b>${esc(ENDING[S.ending])}</b></div>`:`<div>18:00，下班了。${S.mode==="chaos"?"（故意社死模式）":""}</div>`}
-      <div>社死值 <b>${S.shame}</b> · 回对 ${S.stats.right} 条 · 发错 ${S.stats.wrong} 条 · 没回 ${S.stats.expired} 条 · 撤回 ${S.stats.recalled} 次 · 新图鉴 ${S.stats.newDex} 个（共 ${Object.keys(DEX).length}/${CODEX_TOTAL}）${S.blindGone?" · 被小陈删了":""}</div>
+      <div>社死值 <b>${S.shame}</b> · 回对 ${S.stats.right} 条 · 发错 ${S.stats.wrong} 条（手滑 ${S.slips}）· 没回 ${S.stats.expired} 条 · 撤回 ${S.stats.recalled} 次 · 新图鉴 ${S.stats.newDex} 个（共 ${Object.keys(DEX).length}/${CODEX_TOTAL}）${S.blindGone?" · 被小陈删了":""}</div>
       <div class="label">今日社死精选</div>
       <div class="shots">${shots}</div>
       <div class="row"><button class="btn primary" id="again">再过一天</button><button class="btn" id="openDex">社死图鉴</button><button class="btn" id="copy2">复制试玩记录</button><span class="status" id="copyMsg2"></span></div></div>`;
@@ -703,8 +714,8 @@ function renderModal(){
 
 /* ---------- record ---------- */
 function recordText(){
-  return ["发错群了 原型 v0.3 试玩记录",`模式：${S.mode==="chaos"?"故意社死":"正常上班"}`,...S.record,"—— 汇总 ——",
-    `社死值 ${S.shame}；回对 ${S.stats.right}，发错 ${S.stats.wrong}，没回 ${S.stats.expired}，撤回 ${S.stats.recalled}，新图鉴 ${S.stats.newDex}（累计 ${Object.keys(DEX).length}/${CODEX_TOTAL}）`,
+  return ["发错群了 原型 v0.4 试玩记录",`模式：${S.mode==="chaos"?"故意社死":"正常上班"}`,...S.record,"—— 汇总 ——",
+    `社死值 ${S.shame}；回对 ${S.stats.right}，发错 ${S.stats.wrong}（其中手滑 ${S.slips}），没回 ${S.stats.expired}，撤回 ${S.stats.recalled}，新图鉴 ${S.stats.newDex}（累计 ${Object.keys(DEX).length}/${CODEX_TOTAL}）`,
     `关系：${ORDER.map(k=>CHATS[k].rel+" "+(k==="blind"&&S.blindGone?"已删":Math.round(S.rel[k]))).join("，")}`,
     S.ending?`提前结束：${ENDING[S.ending]}`:(S.phase==="end"?"撑到了下班":"（还没结束）")].join("\n");
 }
@@ -722,7 +733,7 @@ $("#cards").addEventListener("click",e=>{const b=e.target.closest("[data-card]")
 $("#sendBtn").addEventListener("click",()=>sendDraft());
 $("#msgs").addEventListener("click",e=>{if(e.target.closest("[data-recall]"))recall();});
 $("#bannerHost").addEventListener("click",e=>{const b=e.target.closest("[data-open]");if(b){openChat(b.dataset.open);$("#bannerHost").innerHTML="";}});
-$("#meeting").addEventListener("click",e=>{const b=e.target.closest("[data-cam]");if(!b)return;const v=b.dataset.cam;if(v==="off")camOff();else camMove(+v*8);render();});
+$("#meeting").addEventListener("click",e=>{const b=e.target.closest("[data-cam]");if(!b)return;const v=b.dataset.cam;if(v==="off")camToggle();else camMove(+v*8);if(document.activeElement&&document.activeElement.blur)document.activeElement.blur();render();});
 $("#mute").addEventListener("click",()=>{muted=!muted;$("#mute").textContent=muted?"已静音":"静音";});
 $("#copyRec").addEventListener("click",()=>copyRecord("#copyMsg"));
 $("#dexBtn").addEventListener("click",()=>setDex(true));
@@ -741,7 +752,7 @@ document.addEventListener("keydown",e=>{
   if(S.meeting){
     if(k==="arrowleft"){e.preventDefault();camMove(-4);}
     else if(k==="arrowright"){e.preventDefault();camMove(4);}
-    else if(k===" "){e.preventDefault();camOff();}
+    else if(k===" "||e.code==="Space"){e.preventDefault();if(!e.repeat)camToggle();}
     return;
   }
   const ci={q:"work",w:"family",e:"love",r:"friends",t:"classmates",y:"blind"}[k];
@@ -751,6 +762,7 @@ document.addEventListener("keydown",e=>{
   if(k==="z")recall();
 });
 
+document.addEventListener("keyup",e=>{if(S&&S.meeting&&(e.key===" "||e.code==="Space"))e.preventDefault();});
 loadDex();newDay("normal");render();
 last=performance.now();requestAnimationFrame(tick);
 })();
