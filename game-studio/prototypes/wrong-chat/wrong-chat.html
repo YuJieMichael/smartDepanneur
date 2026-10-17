@@ -42,6 +42,12 @@ h1 small{font-family:var(--mono);font-size:12px;color:var(--muted);letter-spacin
 .ci:hover{background:var(--panel-2)}
 .ci[aria-current="true"]{background:color-mix(in srgb,var(--sel) 14%,transparent)}
 .ci.out{opacity:.5}
+.ci.hot{box-shadow:inset 0 0 0 2px var(--tomato)}
+.ci.hot .nm::after{content:" 有人@你";color:var(--tomato);font-size:11.5px}
+.banner.boss{border:2px solid var(--tomato)}
+.banner.boss .bt{color:var(--tomato);font-weight:600}
+.call .callwho{display:flex;gap:12px;align-items:center}
+.call .ring{font-size:14px;font-weight:600;color:var(--tomato)}
 .ci .av{grid-row:span 2}
 .ci .nm{font-weight:600;font-size:14px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .ci .pv{font-size:12.5px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;grid-column:2}
@@ -131,6 +137,9 @@ h1 small{font-family:var(--mono);font-size:12px;color:var(--muted);letter-spacin
   .banner{animation:drop .25s ease-out}
   @keyframes drop{from{transform:translate(-50%,-30px);opacity:0}to{transform:translate(-50%,0);opacity:1}}
   .draft .caret{animation:blink 1s steps(1) infinite}@keyframes blink{50%{opacity:0}}
+  .ci.hot{animation:pulse .5s ease-in-out infinite alternate}
+  .call .ring{animation:pulse .25s ease-in-out infinite alternate}
+  .call .av{animation:shake .3s ease-in-out infinite}@keyframes shake{25%{transform:rotate(-8deg)}75%{transform:rotate(8deg)}}
   .alert{animation:pulse .6s ease-in-out infinite alternate}@keyframes pulse{from{opacity:1}to{opacity:.75}}
 }
 .modal{position:fixed;inset:0;z-index:30;background:color-mix(in srgb,var(--bg) 82%,transparent);display:flex;align-items:center;justify-content:center;overflow:auto;
@@ -161,7 +170,7 @@ textarea#recordBox{width:100%;min-height:160px;background:var(--panel-2);color:v
 
 <div class="wrap">
   <header>
-    <h1>发错群了<small>原型 v0.6</small></h1>
+    <h1>发错群了<small>原型 v0.7</small></h1>
     <div class="hright">
       <div class="keys"><kbd>Q</kbd>–<kbd>Y</kbd> 切换聊天 · <kbd>1</kbd>–<kbd>6</kbd> 选回复 · <kbd>Enter</kbd> 发送 · <kbd>Z</kbd> 撤回</div>
       <button class="btn" id="dexBtn">社死图鉴</button>
@@ -397,9 +406,35 @@ function audio(){if(muted)return null;try{if(!ac)ac=new (window.AudioContext||wi
 function blip(f,d,v,type,slide,delay){const a=audio();if(!a)return;const t=a.currentTime+(delay||0);const o=a.createOscillator(),g=a.createGain();o.type=type||"sine";
   o.frequency.setValueAtTime(f,t);if(slide)o.frequency.exponentialRampToValueAtTime(slide,t+d);g.gain.setValueAtTime(v,t);g.gain.exponentialRampToValueAtTime(0.0001,t+d);o.connect(g).connect(a.destination);o.start(t);o.stop(t+d+0.02);}
 const sfx={ping:()=>{blip(880,0.08,0.05);blip(1320,0.1,0.05,"sine",0,0.07);},send:()=>blip(500,0.12,0.05,"triangle",900),
+  boss:()=>{blip(1046,0.12,0.11,"square");blip(784,0.12,0.11,"square",0,0.13);blip(1046,0.18,0.11,"square",0,0.26);},
   good:()=>{blip(660,0.08,0.05,"triangle");blip(990,0.12,0.05,"triangle",0,0.08);},read:()=>blip(1200,0.05,0.04,"square"),
   shame:()=>{blip(400,0.18,0.12,"sawtooth",200);blip(260,0.35,0.12,"sawtooth",120,0.16);},recall:()=>blip(900,0.15,0.05,"sine",400),
   timeout:()=>blip(300,0.2,0.06,"triangle",220),alarm:()=>{blip(880,0.12,0.08,"square");blip(660,0.12,0.08,"square",0,0.14);},bump:()=>blip(140,0.12,0.1,"sawtooth",80)};
+
+/* 劲爆金曲（原创旋律，2000 年代网络歌曲风格：Am–F–C–G，132 BPM，DJ 版） */
+const SONG={title:"《爱你爱到停不下来》（DJ 劲爆版）",bpm:132,
+  bass:[45,41,48,43],
+  lead:[76,76,74,72,74,76,69,0, 72,72,69,72,74,72,69,67, 76,76,79,76,74,72,74,76, 74,0,71,67,69,0,0,0]};
+let music=null;
+const mtof=n=>440*Math.pow(2,(n-69)/12);
+function mNote(a,out,f,t,d,v,type){const o=a.createOscillator(),g=a.createGain();o.type=type;o.frequency.setValueAtTime(f,t);
+  g.gain.setValueAtTime(0.0001,t);g.gain.exponentialRampToValueAtTime(v,t+0.008);g.gain.exponentialRampToValueAtTime(0.0001,t+d);o.connect(g).connect(out);o.start(t);o.stop(t+d+0.02);}
+function mKick(a,out,t){const o=a.createOscillator(),g=a.createGain();o.frequency.setValueAtTime(150,t);o.frequency.exponentialRampToValueAtTime(45,t+0.12);
+  g.gain.setValueAtTime(0.9,t);g.gain.exponentialRampToValueAtTime(0.0001,t+0.18);o.connect(g).connect(out);o.start(t);o.stop(t+0.2);}
+function mNoise(a,out,t,d,v,hp){if(!music.noise){const b=a.createBuffer(1,a.sampleRate*0.3,a.sampleRate),c=b.getChannelData(0);for(let i=0;i<c.length;i++)c[i]=Math.random()*2-1;music.noise=b;}
+  const s=a.createBufferSource(),f=a.createBiquadFilter(),g=a.createGain();s.buffer=music.noise;f.type="highpass";f.frequency.value=hp;
+  g.gain.setValueAtTime(v,t);g.gain.exponentialRampToValueAtTime(0.0001,t+d);s.connect(f).connect(g).connect(out);s.start(t);s.stop(t+d+0.02);}
+function musicStep(){const a=ac;if(!music||!a)return;const st=60/SONG.bpm/2;
+  while(music.next<a.currentTime+0.2){const t=music.next,i=music.step,bar=Math.floor(i/8)%4,e=i%8;
+    if(e%2===0)mKick(a,music.out,t);else mNoise(a,music.out,t,0.05,0.25,7000);
+    if(e===2||e===6)mNoise(a,music.out,t,0.14,0.35,1500);
+    mNote(a,music.out,mtof(SONG.bass[bar]+(e%2?12:0)),t,st*0.9,0.35,"sawtooth");
+    const n=SONG.lead[i%32];if(n){mNote(a,music.out,mtof(n),t,st*0.95,0.22,"square");mNote(a,music.out,mtof(n)*1.005,t,st*0.95,0.1,"sawtooth");}
+    music.next+=st;music.step++;}}
+function musicSet(vol){const a=vol>0?audio():null;
+  if(!a){if(music){try{music.out.gain.setTargetAtTime(0.0001,ac.currentTime,0.05);const o=music.out;setTimeout(()=>o.disconnect(),300);}catch(e){}clearInterval(music.iv);music=null;}return;}
+  if(!music){const out=a.createGain();out.gain.value=0.0001;out.connect(a.destination);music={out,next:a.currentTime+0.05,step:0,iv:setInterval(musicStep,50),vol:0};musicStep();}
+  if(music.vol!==vol){music.vol=vol;music.out.gain.setTargetAtTime(vol,a.currentTime,0.08);}}
 
 /* ---------- state ---------- */
 function newDay(mode){
@@ -432,8 +467,8 @@ function makeAsk(chat,a,life){
   ask.msgId=addMsg(chat,{who:a.p,text:a.q,ask:ask.id}).id;
   S.asks.push(ask);
   S.cards.splice(Math.floor(Math.random()*(S.cards.length+1)),0,{id:++S.uid,text:a.r,cat:chat,d:a.d,ask:ask.id});
-  if(chat!==S.open)banner(chat,PEOPLE[a.p].n,a.q);
-  sfx.ping();
+  if(chat==="work"){S.chats.work.hot=true;sfx.boss();if(chat!==S.open)banner(chat,PEOPLE[a.p].n+" @你",a.q,true);}
+  else{if(chat!==S.open)banner(chat,PEOPLE[a.p].n,a.q);sfx.ping();}
 }
 function spawnAsk(){
   if(S.asks.filter(a=>!a.done).length>=MAX_PENDING)return;
@@ -459,7 +494,7 @@ function openChat(k){if(!canAct())return;
     const busy=S.asks.filter(a=>!a.done).length>=4;
     const alt=LOOKALIKE[k].filter(x=>x!==S.open&&!isOut(x)&&!(x==="blind"&&S.blindGone));
     if(alt.length&&Math.random()<CHATS[k].slip*(busy?1.5:1)){const got=pick(alt);S.misTap={want:k,got};S.slips++;k=got;}}
-  S.open=k;S.chats[k].unread=0;render();}
+  S.open=k;S.chats[k].unread=0;S.chats[k].hot=false;render();}
 function pickCard(idx){
   if(!canAct())return;const card=S.cards[idx];if(!card)return;audio();
   if(S.t<S.lockUntil){say("还在王总办公室挨训，动不了");render();return;}
@@ -557,14 +592,17 @@ function blindGoneEvent(){
 
 /* ---------- events ---------- */
 function startMeeting(){
-  S.meeting={start:S.t,dur:16,cam:50,camOn:true,offTime:0,offWarned:false,items:[],faceGone:0,faceHit:false};
+  S.meeting={ring:true,ringStart:S.t,start:S.t,dur:16,cam:50,camOn:true,offTime:0,offWarned:false,items:[],faceGone:0,faceHit:false};
   if(document.activeElement&&document.activeElement.blur)document.activeElement.blur();
   const picks=[...MEET_ITEMS].sort(()=>Math.random()-0.5).slice(0,3);
   picks.forEach((it,i)=>{const fromLeft=Math.random()<0.5;S.meeting.items.push({...it,x:fromLeft?-8:108,v:(fromLeft?1:-1)*rand(10,15),appear:1.5+i*4.5,on:false,expo:0,hit:false});});
-  addMsg("work",{sys:true,text:"王总 发起了视频会议"});log("📹 视频会议开始");sfx.alarm();render();
+  addMsg("work",{sys:true,text:"王总 发起了视频会议"});log("📹 王总视频来电");render();
 }
+function answerCall(){const M=S.meeting;if(!M||!M.ring)return;M.ring=false;M.start=S.t;log("📹 视频会议开始");say("接通了！");}
 function tickMeeting(dt){
-  const M=S.meeting,el=S.t-M.start;
+  const M=S.meeting;
+  if(M.ring){if(S.t-M.ringStart>=4)answerCall();return;}
+  const el=S.t-M.start;
   if(!M.camOn){M.offTime+=dt;if(M.offTime>2.5&&!M.offWarned){M.offWarned=true;S.rel.work=clamp(S.rel.work-4,0,100);addMsg("work",{who:"boss",text:"你摄像头怎么关了？"});log("  📹 摄像头关太久");}}
   const win=[M.cam-20,M.cam+20];
   M.items.forEach(it=>{if(el>=it.appear){it.on=true;it.x+=it.v*dt;}
@@ -579,8 +617,8 @@ function tickMeeting(dt){
     if(!hits){S.rel.work=clamp(S.rel.work+6,0,100);}
     log(`📹 视频会议结束（入镜 ${hits} 次）`);S.meeting=null;}
 }
-function camMove(d){if(S.meeting)S.meeting.cam=clamp(S.meeting.cam+d,10,90);}
-function camToggle(){const M=S.meeting;if(!M)return;M.camOn=!M.camOn;if(M.camOn){M.offTime=0;M.offWarned=false;say("摄像头打开了");}else say("摄像头关了，别关太久");}
+function camMove(d){if(S.meeting&&!S.meeting.ring)S.meeting.cam=clamp(S.meeting.cam+d,10,90);}
+function camToggle(){const M=S.meeting;if(!M)return;if(M.ring){answerCall();return;}M.camOn=!M.camOn;if(M.camOn){M.offTime=0;M.offWarned=false;say("摄像头打开了");}else say("摄像头关了，别关太久");}
 function startPatrol(){S.patrol={until:S.t+3};alertMsg("⚠ 王总从你身后走过来了！3 秒内切到「项目组」",3);sfx.alarm();log("👀 老板巡视");}
 function resolvePatrol(){
   const where=S.open;S.patrol=null;
@@ -592,11 +630,12 @@ function resolvePatrol(){
 }
 function startDance(){if(isOut("family"))return;makeAsk("family",DANCE_ASK,30);log("💃 广场舞接龙");}
 function startSubway(){S.subway=true;S.nextBump=S.t+3;alertMsg("🚇 下班挤地铁：手机会被挤得乱切聊天",2.5);log("🚇 开始挤地铁");}
-function bump(){const others=ORDER.filter(k=>k!==S.open);S.open=pick(others);S.lastSwitch=S.t;S.chats[S.open].unread=0;sfx.bump();say(`被挤了一下，手机切到了「${CHATS[S.open].name}」`);}
+function bump(){const others=ORDER.filter(k=>k!==S.open);S.open=pick(others);S.lastSwitch=S.t;S.chats[S.open].unread=0;S.chats[S.open].hot=false;sfx.bump();say(`被挤了一下，手机切到了「${CHATS[S.open].name}」`);}
 
 /* ---------- tick ---------- */
 function tick(now){
   const dt=Math.min(0.25,(now-last)/1000);last=now;
+  musicSet(S.phase==="play"&&!S.paused&&S.meeting?(S.meeting.ring?0.16:0.07):0);
   if(S.phase==="play"&&!S.paused){
     S.t+=dt;
     if(!S.ev.meeting&&S.t>=atClock(10,30)){S.ev.meeting=true;startMeeting();}
@@ -622,14 +661,14 @@ function tick(now){
   }
   requestAnimationFrame(tick);
 }
-function endDay(broken){S.phase="end";S.ending=broken;S.meeting=null;S.patrol=null;$("#alertHost").innerHTML="";log(broken?`结束：${ENDING[broken]}`:"下班了！");render();}
+function endDay(broken){musicSet(0);S.phase="end";S.ending=broken;S.meeting=null;S.patrol=null;$("#alertHost").innerHTML="";log(broken?`结束：${ENDING[broken]}`:"下班了！");render();}
 
 /* ---------- ui bits ---------- */
 let bannerTimer=null,alertTimer=null;
-function banner(chat,who,text){
+function banner(chat,who,text,boss){
   const h=$("#bannerHost");
-  h.innerHTML=`<div class="banner" data-open="${chat}" role="status"><span class="av sm c-${chat}">${CHATS[chat].short}</span><div style="min-width:0"><div class="bt">${esc(CHATS[chat].name)} · ${esc(who)}</div><div class="bm">${esc(text.split("\n")[0])}</div></div></div>`;
-  clearTimeout(bannerTimer);bannerTimer=setTimeout(()=>{h.innerHTML="";},2200);
+  h.innerHTML=`<div class="banner${boss?" boss":""}" data-open="${chat}" role="status"><span class="av sm c-${chat}">${CHATS[chat].short}</span><div style="min-width:0"><div class="bt">${boss?"【工作群】":""}${esc(CHATS[chat].name)} · ${esc(who)}</div><div class="bm">${esc(text.split("\n")[0])}</div></div></div>`;
+  clearTimeout(bannerTimer);bannerTimer=setTimeout(()=>{h.innerHTML="";},boss?3200:2200);
 }
 function alertMsg(text,sec){const h=$("#alertHost");h.innerHTML=`<div class="alert" role="alert">${esc(text)}</div>`;clearTimeout(alertTimer);alertTimer=setTimeout(()=>{h.innerHTML="";},sec*1000);}
 function stamp(txt,good){const h=$("#stampHost");h.innerHTML=`<div class="stamp${good?" good":""}">${esc(txt)}</div>`;if(good)sfx.good();else sfx.shame();setTimeout(()=>{if(h.firstChild&&h.firstChild.textContent===txt)h.innerHTML="";},950);}
@@ -637,12 +676,12 @@ function stamp(txt,good){const h=$("#stampHost");h.innerHTML=`<div class="stamp$
 /* ---------- render ---------- */
 let lastMsgKey="",lastListKey="",lastCardsKey="",modalKey="";
 function render(fromTick){
-  const listKey=ORDER.map(k=>k+S.chats[k].unread+S.chats[k].msgs.length+(isOut(k)?"x":"")+(S.drafts[k]?"d"+S.drafts[k].card.id:"")).join("|")+S.open+S.blindGone;
+  const listKey=ORDER.map(k=>k+S.chats[k].unread+S.chats[k].msgs.length+(isOut(k)?"x":"")+(S.chats[k].hot?"h":"")+(S.drafts[k]?"d"+S.drafts[k].card.id:"")).join("|")+S.open+S.blindGone;
   if(listKey!==lastListKey){lastListKey=listKey;
     $("#list").innerHTML=ORDER.map(k=>{const c=S.chats[k],lm=c.msgs[c.msgs.length-1];
       const pv=lm?(lm.sys?lm.text:lm.me?"我："+lm.text:PEOPLE[lm.who].n+"："+lm.text).split("\n")[0]:"";
       const out=isOut(k)||(k==="blind"&&S.blindGone);
-      return `<button class="ci${out?" out":""}" data-chat="${k}" aria-current="${S.open===k}"><span class="av c-${k}">${CHATS[k].short}</span><span class="nm">${esc(CHATS[k].name)} <span class="risk ${riskLabel(k)[1]}" title="点错风险">${riskLabel(k)[0]}</span></span>${c.unread?`<span class="badge">${c.unread}</span>`:""}<span class="pv">${S.drafts[k]&&!out?`<span class="dr">[草稿]</span> ${esc(S.drafts[k].card.text.split("\n")[0])}`:esc(out?(k==="blind"&&S.blindGone?"已被对方删除":"你已不在群聊中"):pv)}</span><span class="hk">${CHATS[k].key}</span></button>`;}).join("");}
+      return `<button class="ci${out?" out":""}${c.hot&&S.open!==k&&!out?" hot":""}" data-chat="${k}" aria-current="${S.open===k}"><span class="av c-${k}">${CHATS[k].short}</span><span class="nm">${esc(CHATS[k].name)} <span class="risk ${riskLabel(k)[1]}" title="点错风险">${riskLabel(k)[0]}</span></span>${c.unread?`<span class="badge">${c.unread}</span>`:""}<span class="pv">${S.drafts[k]&&!out?`<span class="dr">[草稿]</span> ${esc(S.drafts[k].card.text.split("\n")[0])}`:esc(out?(k==="blind"&&S.blindGone?"已被对方删除":"你已不在群聊中"):pv)}</span><span class="hk">${CHATS[k].key}</span></button>`;}).join("");}
   const ch=S.chats[S.open];
   const msgKey=S.open+ch.msgs.length+ch.msgs.map(m=>(m.read?1:0)+(m.sys?2:0)).join("")+S.wrongs.map(w=>w.state).join("");
   $("#ctitle").textContent=CHATS[S.open].name;$("#csub").textContent=`${CHATS[S.open].size} · 点错风险${riskLabel(S.open)[0]}`;
@@ -686,8 +725,15 @@ function render(fromTick){
 }
 function renderMeeting(){
   const box=$("#meeting");
-  if(!S.meeting||S.phase!=="play"){if(!box.hidden){box.hidden=true;box.innerHTML="";}return;}
+  if(!S.meeting||S.phase!=="play"){if(!box.hidden){box.hidden=true;box.innerHTML="";box.dataset.ph="";}return;}
   const M=S.meeting,left=Math.max(0,Math.ceil(M.dur-(S.t-M.start)));
+  if(M.ring){
+    if(box.dataset.ph!=="ring"){box.dataset.ph="ring";
+      box.innerHTML=`<div class="mbox call" role="dialog" aria-label="视频来电"><div class="callwho"><span class="av c-work">王</span><div><h3>王总 邀请你视频通话</h3><div class="ring">♪ 你的彩铃：${esc(SONG.title)} ♪</div></div></div>
+        <div style="font-size:13px;color:var(--muted)">整个办公室都听到你的彩铃了。按 <b>空格</b> 或 <b>Enter</b> 接听（4 秒后自动接通）。</div>
+        <div class="row"><button class="btn primary" data-answer="1" tabindex="-1">📹 接听</button></div></div>`;}
+    box.hidden=false;return;}
+  if(box.dataset.ph!=="meet"){box.dataset.ph="meet";box.innerHTML="";}
   if(!box.firstChild){
     box.innerHTML=`<div class="mbox" role="dialog" aria-label="视频会议"><h3 id="mTitle"></h3>
       <div style="font-size:13px;color:var(--muted)">用 ← → 移动镜头，别让家里的东西入镜，但你的脸要在镜头里。空格开关摄像头（关太久王总会问）。开会时聊天消息的倒计时暂停。</div>
@@ -696,7 +742,7 @@ function renderMeeting(){
       <div class="mbar"><i id="mBar"></i></div></div>`;
   }
   box.hidden=false;
-  $("#mTitle").textContent=`📹 王总的视频会议 · 还剩 ${left} 秒`;
+  $("#mTitle").textContent=`📹 王总的视频会议 · 还剩 ${left} 秒 · ♪ BGM 停不下来`;
   const cam=$("#mCam");cam.style.left=(M.cam-20)+"%";cam.className="camwin"+(M.camOn?"":" off");
   $("#mThings").innerHTML=M.items.filter(i=>i.on&&i.x>-10&&i.x<110).map(i=>`<div class="thing chaos" style="left:${i.x}%">${esc(i.n)}</div>`).join("");
   $("#mOff").textContent=M.camOn?"关摄像头（空格）":"开摄像头（空格）";
@@ -749,7 +795,7 @@ function renderModal(){
 
 /* ---------- record ---------- */
 function recordText(){
-  return ["发错群了 原型 v0.6 试玩记录",`模式：${S.mode==="chaos"?"故意社死":"正常上班"}`,...S.record,"—— 汇总 ——",
+  return ["发错群了 原型 v0.7 试玩记录",`模式：${S.mode==="chaos"?"故意社死":"正常上班"}`,...S.record,"—— 汇总 ——",
     `社死值 ${S.shame}；回对 ${S.stats.right}，发错 ${S.stats.wrong}（点错聊天 ${S.slips} 次，蒙混过关 ${S.passes}），没回 ${S.stats.expired}，撤回 ${S.stats.recalled}，新图鉴 ${S.stats.newDex}（累计 ${Object.keys(DEX).length}/${CODEX_TOTAL}）`,
     `关系：${ORDER.map(k=>CHATS[k].rel+" "+(k==="blind"&&S.blindGone?"已删":Math.round(S.rel[k]))).join("，")}`,
     S.ending?`提前结束：${ENDING[S.ending]}`:(S.phase==="end"?"撑到了下班":"（还没结束）")].join("\n");
@@ -769,8 +815,8 @@ $("#sendBtn").addEventListener("click",()=>sendDraft());
 $("#msgs").addEventListener("click",e=>{if(e.target.closest("[data-recall]"))recall();});
 $("#oops").addEventListener("click",e=>{if(e.target.closest("[data-recall]"))recall();});
 $("#bannerHost").addEventListener("click",e=>{const b=e.target.closest("[data-open]");if(b){openChat(b.dataset.open);$("#bannerHost").innerHTML="";}});
-$("#meeting").addEventListener("click",e=>{const b=e.target.closest("[data-cam]");if(!b)return;const v=b.dataset.cam;if(v==="off")camToggle();else camMove(+v*8);if(document.activeElement&&document.activeElement.blur)document.activeElement.blur();render();});
-$("#mute").addEventListener("click",()=>{muted=!muted;$("#mute").textContent=muted?"已静音":"静音";});
+$("#meeting").addEventListener("click",e=>{if(e.target.closest("[data-answer]")){answerCall();render();return;}const b=e.target.closest("[data-cam]");if(!b)return;const v=b.dataset.cam;if(v==="off")camToggle();else camMove(+v*8);if(document.activeElement&&document.activeElement.blur)document.activeElement.blur();render();});
+$("#mute").addEventListener("click",()=>{muted=!muted;if(muted)musicSet(0);$("#mute").textContent=muted?"已静音":"静音";});
 $("#copyRec").addEventListener("click",()=>copyRecord("#copyMsg"));
 $("#dexBtn").addEventListener("click",()=>setDex(true));
 $("#modal").addEventListener("click",e=>{
@@ -789,6 +835,7 @@ document.addEventListener("keydown",e=>{
     if(k==="arrowleft"){e.preventDefault();camMove(-4);}
     else if(k==="arrowright"){e.preventDefault();camMove(4);}
     else if(k===" "||e.code==="Space"){e.preventDefault();if(!e.repeat)camToggle();}
+    else if(k==="enter"){e.preventDefault();answerCall();}
     return;
   }
   const ci={q:"work",w:"family",e:"love",r:"friends",t:"classmates",y:"blind"}[k];
