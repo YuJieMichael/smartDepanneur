@@ -179,13 +179,14 @@ h1 small{font-family:var(--mono);font-size:12px;color:var(--muted);letter-spacin
   .monly{display:block} .monly-i{display:inline}
   .mhud{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:5px 10px}
   .mrow{display:flex;gap:14px;align-items:baseline;font-size:13px}
+  .mrow #mDay{color:var(--muted);margin-right:-8px}
   .mrow #mClock{font-family:var(--mono);font-size:17px}
   .mrow .hot{color:var(--tomato);font-size:16px}
   .mrow #mPend{margin-left:auto;color:var(--muted)}
   .mstat{font-size:12.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:var(--fg)}
   .app{display:flex;flex-direction:column;gap:6px;flex:1;min-height:0}
   .side{display:none}
-  .list{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:2px;padding:4px;flex:none}
+  .list{display:grid;grid-template-columns:repeat(var(--n,6),minmax(0,1fr));gap:2px;padding:4px;flex:none}
   .ci{display:flex;flex-direction:column;align-items:center;gap:1px;padding:5px 2px 4px;position:relative;min-width:0}
   .ci .nm,.ci .pv,.ci .hk{display:none}
   .ci .av{width:38px;height:38px;font-size:15px}
@@ -216,14 +217,14 @@ textarea#recordBox{width:100%;min-height:160px;background:var(--panel-2);color:v
 
 <div class="wrap">
   <header>
-    <h1>发错群了<small>原型 v0.9</small></h1>
+    <h1>发错群了<small>原型 v1.0</small></h1>
     <div class="hright">
       <button class="btn monly" id="muteM" aria-label="静音">🔊</button>
       <div class="keys"><kbd>Q</kbd>–<kbd>Y</kbd> 切换聊天 · <kbd>1</kbd>–<kbd>6</kbd> 选回复 · <kbd>Enter</kbd> 发送 · <kbd>Z</kbd> 撤回</div>
       <button class="btn" id="dexBtn">社死图鉴</button>
     </div>
   </header>
-  <div class="mhud monly"><div class="mrow"><b id="mClock">09:00</b><span>社死 <b class="hot" id="mShame">0</b></span><span>撤回 <b id="mRec">3</b></span><span id="mPend"></span></div><div class="mstat" id="mStatus"></div></div>
+  <div class="mhud monly"><div class="mrow"><span id="mDay"></span><b id="mClock">09:00</b><span>社死 <b class="hot" id="mShame">0</b></span><span>撤回 <b id="mRec">3</b></span><span id="mPend"></span></div><div class="mstat" id="mStatus"></div></div>
   <div class="app">
     <nav class="pane list" id="list" aria-label="聊天列表"></nav>
     <section class="pane chat">
@@ -258,7 +259,7 @@ textarea#recordBox{width:100%;min-height:160px;background:var(--panel-2);color:v
 <script>
 (function(){
 "use strict";
-const DAY=240, MAX_PENDING_PER_CHAT=2, MAX_PENDING=6, RECALLS=3;
+let DAY=240;const RECALLS=3;
 const PEOPLE={
   boss:{n:"王总",c:"m-boss"},li:{n:"小李",c:"m-li"},hr:{n:"HR 张姐",c:"m-hr"},
   mom:{n:"妈",c:"m-mom"},dad:{n:"爸",c:"m-dad"},aunt:{n:"二姨",c:"m-aunt"},uncle:{n:"三舅",c:"m-uncle"},grandma:{n:"奶奶",c:"m-grandma"},
@@ -268,60 +269,184 @@ const PEOPLE={
   chen:{n:"小陈",c:"m-chen"}
 };
 const CHATS={
-  work:{name:"项目组",tab:"工作群",short:"工",size:"12 人 · 王总在群里",key:"Q",rel:"工作",slip:0.10},
-  family:{name:"相亲相爱一家人",tab:"家族群",short:"家",size:"23 人",key:"W",rel:"家人",slip:0.12},
-  love:{name:"宝",tab:"宝",short:"宝",size:"对象 · 已置顶",key:"E",rel:"对象",slip:0.02},
-  friends:{name:"废物联盟",tab:"死党群",short:"友",size:"4 人",key:"R",rel:"死党",slip:0.15},
-  classmates:{name:"高三（2）班",tab:"同学群",short:"同",size:"45 人",key:"T",rel:"同学",slip:0.18},
-  blind:{name:"小陈（相亲）",tab:"小陈",short:"陈",size:"妈介绍的相亲对象",key:"Y",rel:"相亲",slip:0.08}
+  work:{name:"项目组",tab:"工作群",short:"工",size:"12 人 · 王总在群里",key:"Q",rel:"工作",slip:0.10,tol:"低",wrongMul:1.4,miss:12,forgive:0,kickAt:4,leak:0.5},
+  family:{name:"相亲相爱一家人",tab:"家族群",short:"家",size:"23 人",key:"W",rel:"家人",slip:0.12,tol:"中",wrongMul:1,miss:8,forgive:0,kickAt:5,leak:0.6},
+  love:{name:"宝",tab:"宝",short:"宝",size:"对象 · 已置顶",key:"E",rel:"对象",slip:0.02,tol:"很低",wrongMul:1.6,miss:14,forgive:0,leak:0.4},
+  friends:{name:"废物联盟",tab:"死党群",short:"友",size:"4 人",key:"R",rel:"死党",slip:0.15,tol:"高",wrongMul:0.5,miss:6,forgive:1,kickAt:99,leak:0.7},
+  classmates:{name:"高三（2）班",tab:"同学群",short:"同",size:"45 人",key:"T",rel:"同学",slip:0.18,tol:"很高",wrongMul:0.5,miss:4,forgive:1,kickAt:5,leak:0.8},
+  blind:{name:"小陈（相亲）",tab:"小陈",short:"陈",size:"妈介绍的相亲对象",key:"Y",rel:"相亲",slip:0.08,tol:"很低",wrongMul:2,miss:10,forgive:0,leak:0.4}
 };
 const ORDER=["work","family","love","friends","classmates","blind"];
 const MEMBERS={work:["boss","li","hr"],family:["mom","dad","aunt","uncle"],love:["bao"],friends:["jie","pang","mei"],classmates:["monitor","xueba"],blind:["chen"]};
 const GROUPS=["work","family","friends","classmates"];
 const LOOKALIKE={work:["classmates"],classmates:["work","friends"],family:["friends","classmates"],friends:["family","classmates"],love:["blind"],blind:["love"]};
 const riskLabel=k=>{const r=CHATS[k].slip;return r<0.05?["低","r-low"]:r<0.13?["中","r-mid"]:["高","r-high"];};
-const ASKS={
+/* ---------- 一周剧情 ----------
+   每个聊天每天一条剧情线，按时间（at）往下走：上一句回完（或超时）才会出下一句。
+   ok：回对之后对方接的话；miss：没回时对方的话；pre：提问之前群里先说的话。 */
+const STORY={
+ 1:{
   work:[
-    {p:"boss",q:"@你 方案今天能给我吗？",r:"收到王总，下午一定给您！",d:1},
-    {p:"boss",q:"在吗？",r:"在的在的，您说",d:1},
-    {p:"hr",q:"周五团建，自费，大家都要来哈",r:"好的好的，一定到！",d:1},
-    {p:"li",q:"那个文件发我一下",r:"[文件] 方案_最终版_v7_真的最终.pptx",d:1},
-    {p:"boss",q:"这周末加个班，没问题吧？",r:"没问题！随叫随到",d:1}
-  ],
+   {at:"09:05",pre:[["boss","新项目启动，周五给客户汇报"]],p:"boss",q:"@你 这个项目你来负责，有问题吗？",r:"没问题王总，保证完成任务！",d:1,ok:[["boss","好，年轻人有干劲"]]},
+   {at:"11:00",p:"li",q:"方案模板在哪个文件夹？",r:"共享盘/项目/模板，第三个",d:1,ok:[["li","找到了，谢谢"]]},
+   {at:"13:40",p:"boss",q:"@你 方案今天能给我吗？",r:"收到王总，下午一定给您！",d:1,ok:[["boss","好，五点前"]],miss:[["boss","下午五点前我要看到"]]},
+   {at:"16:20",p:"boss",q:"方案我看了，整体方向不对",r:"好的王总，我马上改",d:1,ok:[["boss","明天给我新的"]],miss:[["boss","？人呢，明天给我新的"]]}],
   family:[
-    {p:"mom",q:"吃饭了没",r:"吃了妈，别担心",d:1},
-    {p:"aunt",q:"[转发] 紧急扩散！！隔夜西瓜会致癌！！",r:"二姨，这是谣言哈",d:1},
-    {p:"dad",q:"[语音 59″]",r:"爸，你打字吧，我在上班",d:1},
-    {p:"mom",q:"小陈加你了吗？人家孩子挺好的",r:"妈！我真的在忙！",d:2},
-    {p:"uncle",q:"大家早上好[玫瑰][玫瑰][玫瑰]",r:"三舅早上好[玫瑰]",d:1}
-  ],
+   {at:"10:00",p:"aunt",q:"[转发] 紧急扩散！！隔夜西瓜会致癌！！",r:"二姨，这是谣言哈",d:1,ok:[["aunt","宁可信其有"]]},
+   {at:"13:00",p:"mom",q:"你什么时候带个对象回来？",r:"妈，八字还没一撇呢",d:2,ok:[["mom","你都多大了"],["aunt","二姨帮你留意着"]]},
+   {at:"15:50",p:"dad",q:"[语音 59″]",r:"爸，你打字吧，我在上班",d:1,ok:[["dad","好"],["dad","[语音 58″]"]]}],
   love:[
-    {p:"bao",q:"在干嘛呀",r:"在想你呀宝宝😘",d:2},
-    {p:"bao",q:"今晚吃什么",r:"听你的，火锅还是烧烤？",d:1},
-    {p:"bao",q:"你是不是不爱我了",r:"怎么可能！爱你一万年！！",d:2},
-    {p:"bao",q:"[图片] 新裙子好看吗",r:"好看！你穿什么都好看～",d:2},
-    {p:"bao",q:"想你了",r:"我也想你，么么么么哒",d:3}
-  ],
+   {at:"09:10",p:"bao",q:"早安宝宝，今天也要想我",r:"早安～已经在想了",d:2,ok:[["bao","嘻嘻"]]},
+   {at:"12:40",p:"bao",q:"我刚跟闺蜜说起你",r:"说我什么坏话了",d:1,ok:[["bao","说你帅[害羞]"]]},
+   {at:"16:00",p:"bao",q:"今晚吃什么",r:"听你的，火锅还是烧烤？",d:1,ok:[["bao","火锅！"]],miss:[["bao","算了，我自己吃"]]}]
+ },
+ 2:{
+  work:[
+   {at:"09:05",p:"boss",q:"@你 方案改好了吗？",r:"在改了在改了，中午前给您",d:1,ok:[["boss","抓紧"]]},
+   {at:"11:30",p:"li",q:"那个文件发我一下",r:"[文件] 方案_最终版_v7_真的最终.pptx",d:1,ok:[["li","收到……v7？"]]},
+   {at:"14:20",p:"boss",q:"客户说颜色要再亮一点，但是不要太亮",r:"明白，亮而不艳",d:1,ok:[["boss","对，就是这个感觉"]]},
+   {at:"16:50",p:"boss",q:"今晚辛苦一下，把第三页改了",r:"没问题！随叫随到",d:1,ok:[["boss","👍"]]}],
+  family:[
+   {at:"10:00",p:"grandma",q:"乖孙，下周日奶奶过生日，回来吃饭",r:"一定回来！奶奶生日快乐",d:1,ok:[["grandma","乖"]]},
+   {at:"13:00",p:"mom",q:"小陈加你了吗？人家孩子挺好的",r:"妈！我真的在忙！",d:2,ok:[["mom","忙忙忙，就知道忙"]]},
+   {at:"16:20",pre:[["mom","[名片] 小陈"]],p:"mom",q:"我把小陈推给你了，加一下",r:"好好好，我加",d:1,ok:[["mom","要主动一点！"]]}],
+  love:[
+   {at:"10:00",p:"bao",q:"[图片] 新裙子好看吗",r:"好看！你穿什么都好看～",d:2,ok:[["bao","哼，算你会说话"]]},
+   {at:"13:20",p:"bao",q:"你昨晚几点睡的？",r:"十二点，一直在想你",d:2,ok:[["bao","骗人[害羞]"]]},
+   {at:"16:40",p:"bao",q:"周六我们去看电影吧",r:"好呀，周六下午见",d:2,ok:[["bao","说好了哦，不许放我鸽子"]]}],
   friends:[
-    {p:"jie",q:"今晚开黑？",r:"来！等我先把老板应付完",d:2},
-    {p:"pang",q:"你们老板今天又发疯没",r:"别提了，我们老板就是个画饼大王",d:3},
-    {p:"mei",q:"[表情包] 打工人.jpg",r:"哈哈哈哈哈哈哈哈",d:1},
-    {p:"jie",q:"借我 200，下周还",r:"上次的 500 还没还呢兄弟",d:2},
-    {p:"pang",q:"明天请假出来玩？",r:"请！就说我奶奶又病了",d:3}
-  ],
-  classmates:[
-    {p:"monitor",q:"同学聚会下周六，来不来？",r:"来！好久不见了",d:1},
-    {p:"xueba",q:"[转发] 我们公司在招人，内推了解一下",r:"了解一下，谢谢学霸",d:1},
-    {p:"monitor",q:"大家报一下现在在哪工作",r:"在一家小公司搬砖",d:1},
-    {p:"xueba",q:"谁还记得高三班主任的电话？",r:"不记得了，帮你问问",d:1}
-  ],
+   {at:"10:20",intro:true,pre:[["pang","兄弟们，我把人拉回来了"]],p:"pang",q:"你们老板今天又发疯没",r:"别提了，我们老板就是个画饼大王",d:3,ok:[["pang","哈哈哈哈同款"]]},
+   {at:"14:00",p:"jie",q:"今晚开黑？",r:"来！等我先把老板应付完",d:2,ok:[["jie","八点上号"]]},
+   {at:"16:50",p:"mei",q:"[图片] 新发型，给打个分",r:"十分，不怕你骄傲",d:1,ok:[["mei","算你识相"]]}]
+ },
+ 3:{
+  work:[
+   {at:"09:05",p:"hr",q:"今天上午客户视频会议，大家注意形象",r:"收到，已经穿好衬衫了",d:1,ok:[["li","下半身呢[狗头]"]]},
+   {at:"11:20",p:"boss",q:"刚才会上你那边什么声音？",r:"没什么王总，邻居装修",d:2,ok:[["boss","下次找个安静的地方"]]},
+   {at:"14:00",p:"boss",q:"客户要改需求，周五照常汇报",r:"好的王总，我加个班赶出来",d:1,ok:[["boss","辛苦"]]},
+   {at:"16:40",p:"li",q:"@你 下午茶喝什么？我请",r:"冰美式，谢谢李哥",d:1,ok:[["li","好嘞"]]}],
+  family:[
+   {at:"10:00",p:"mom",q:"小陈说你通过了，聊得怎么样？",r:"刚开始聊，别催",d:2,ok:[["mom","好好聊！"]]},
+   {at:"13:10",p:"aunt",q:"[转发] 这三种菜千万不能一起吃",r:"收到二姨[抱拳]",d:1,ok:[["aunt","[玫瑰]"]]},
+   {at:"16:00",p:"uncle",q:"奶奶生日在哪家饭店订？大家投票",r:"我投老地方",d:1,ok:[["uncle","老地方 +1"]]}],
+  love:[
+   {at:"11:30",p:"bao",q:"你今天怎么回消息这么慢",r:"开会呢宝，刚开完",d:1,ok:[["bao","哦，那原谅你"]]},
+   {at:"13:40",p:"bao",q:"你是不是不爱我了",r:"怎么可能！爱你一万年！！",d:2,ok:[["bao","哼"]]},
+   {at:"16:30",p:"bao",q:"我妈问你什么时候来家里吃饭",r:"等我忙完这个项目就去",d:2,ok:[["bao","每次都这么说"]]}],
+  friends:[
+   {at:"10:00",p:"jie",q:"借我 200，下周还",r:"上次的 500 还没还呢兄弟",d:2,ok:[["jie","……当我没说"]]},
+   {at:"14:00",p:"pang",q:"听说你在相亲？？",r:"我妈安排的，别声张",d:3,ok:[["pang","已声张"],["jie","哈哈哈哈哈哈"]]},
+   {at:"16:50",p:"mei",q:"周五喝酒，谁来",r:"我！不醉不归",d:1,ok:[["mei","记下了"]]}],
   blind:[
-    {p:"chen",q:"你好，我是你妈介绍的小陈",r:"你好你好，久仰",d:2},
-    {p:"chen",q:"周末有空喝个咖啡吗？",r:"可以呀，周六下午？",d:2},
-    {p:"chen",q:"你平时有什么爱好？",r:"看看书，跑跑步",d:1},
-    {p:"chen",q:"你对未来有什么规划？",r:"努力工作，早日买房",d:1}
-  ]
+   {at:"09:40",intro:true,p:"chen",q:"你好，我是你妈介绍的小陈",r:"你好你好，久仰",d:2,ok:[["chen","哈哈你好客气"]]},
+   {at:"13:00",p:"chen",q:"你平时有什么爱好？",r:"看看书，跑跑步",d:1,ok:[["chen","我也喜欢跑步！"]]},
+   {at:"16:10",p:"chen",q:"你对未来有什么规划？",r:"努力工作，早日买房",d:1,ok:[["chen","挺实在的"]]}]
+ },
+ 4:{
+  work:[
+   {at:"09:05",p:"boss",q:"@你 明天汇报的 PPT 今天要定稿",r:"收到，今天一定定稿",d:1,ok:[["boss","好"]]},
+   {at:"11:00",p:"hr",q:"周五团建，自费，大家都要来哈",r:"好的好的，一定到！",d:1,ok:[["hr","[玫瑰]"]]},
+   {at:"14:40",p:"boss",q:"这周末加个班，没问题吧？",r:"……好的王总",d:1,ok:[["boss","很好"]]},
+   {at:"17:00",p:"boss",q:"PPT 第 12 页的字体换成微软雅黑",r:"已换，王总请过目",d:1,ok:[["boss","嗯"]]}],
+  family:[
+   {at:"09:40",p:"mom",q:"妈今天下午跳广场舞比赛，你来不来加油？",r:"上班呢妈，精神上支持你",d:1,ok:[["mom","那你在群里接龙"]]},
+   {at:"16:00",p:"dad",q:"你妈让我问你，小陈怎么样",r:"还行吧，挺有礼貌的",d:2,ok:[["dad","嗯"],["mom","有戏！"]]}],
+  love:[
+   {at:"10:00",p:"bao",q:"你最近怎么老看手机",r:"工作消息太多了",d:1,ok:[["bao","哦"]]},
+   {at:"13:00",p:"bao",q:"明天是我们在一起 730 天",r:"我记得！早就准备好了",d:2,ok:[["bao","真的？？"]]},
+   {at:"16:30",p:"bao",q:"周六看电影你没忘吧",r:"没忘没忘，票都买好了",d:2,ok:[["bao","爱你"]]}],
+  friends:[
+   {at:"10:20",p:"pang",q:"明天请假出来玩？",r:"请！就说我奶奶又病了",d:3,ok:[["pang","你奶奶真不容易"]]},
+   {at:"14:00",p:"jie",q:"你周六到底陪谁？宝还是小陈？",r:"两个都陪，时间管理大师",d:3,ok:[["jie","渣男/渣女实锤"],["mei","已截图"]]},
+   {at:"16:50",p:"mei",q:"[表情包] 打工人.jpg",r:"哈哈哈哈哈哈哈哈",d:1}],
+  classmates:[
+   {at:"09:30",intro:true,pre:[["monitor","欢迎新同学入群👏"]],p:"monitor",q:"@你 好久不见！毕业十年，聚一聚",r:"班长好！好久不见",d:1,ok:[["xueba","欢迎欢迎"]]},
+   {at:"12:00",p:"monitor",q:"大家报一下现在在哪工作",r:"在一家小公司搬砖",d:1,ok:[["xueba","我在大厂当牛马"]]},
+   {at:"15:30",p:"xueba",q:"[转发] 我们公司在招人，内推了解一下",r:"了解一下，谢谢学霸",d:1,ok:[["xueba","简历发我"]]}],
+  blind:[
+   {at:"10:00",p:"chen",q:"早上好，今天忙吗？",r:"还好，你呢？",d:1,ok:[["chen","我也还好"]]},
+   {at:"13:30",p:"chen",q:"周末有空喝个咖啡吗？",r:"可以呀，周六下午？",d:2,ok:[["chen","好呀"]]},
+   {at:"16:30",p:"chen",q:"那周六下午三点，楼下咖啡店见？",r:"好的，不见不散",d:2,ok:[["chen","期待～"]]}]
+ },
+ 5:{
+  work:[
+   {at:"09:05",p:"boss",q:"@你 今天汇报，准备好了吗？",r:"准备好了，稳得很",d:1,ok:[["boss","别掉链子"]]},
+   {at:"11:30",p:"li",q:"[文件] 客户最新意见.docx 你看下",r:"收到，我看看",d:1},
+   {at:"14:00",p:"boss",q:"汇报很成功，客户很满意",r:"谢谢王总栽培！",d:1,ok:[["boss","下周还有新项目"],["li","[震惊]"]]},
+   {at:"16:30",p:"hr",q:"@你 周报今天下班前交",r:"好的张姐，马上写",d:1,ok:[["hr","好"]]}],
+  family:[
+   {at:"10:00",p:"mom",q:"周末回来吃饭吗？带上小陈",r:"回来，但不带小陈",d:2,ok:[["mom","你这孩子"]]},
+   {at:"13:30",p:"grandma",q:"[语音 60″]",r:"奶奶我晚上给你回电话",d:1,ok:[["grandma","好好好"]]},
+   {at:"16:00",p:"aunt",q:"听说你周六要跟小陈约会？",r:"二姨你听谁说的？？",d:2,ok:[["mom","我说的"]]}],
+  love:[
+   {at:"09:20",p:"bao",q:"纪念日快乐！礼物呢？",r:"晚上给你惊喜",d:2,ok:[["bao","期待！！"]]},
+   {at:"13:00",p:"bao",q:"你周六下午到底有没有空",r:"有空！整个下午都是你的",d:2,ok:[["bao","这还差不多"]]},
+   {at:"16:30",p:"bao",q:"下班来接我",r:"好，六点楼下见",d:1,ok:[["bao","嗯嗯"]]}],
+  friends:[
+   {at:"10:20",p:"pang",q:"今晚老地方？",r:"必须的，我请客",d:1,ok:[["jie","你说的啊"]]},
+   {at:"14:00",p:"jie",q:"宝知道你周六还约了小陈吗",r:"嘘！千万别说",d:3,ok:[["jie","[拉链封嘴]"]]},
+   {at:"17:00",p:"pang",q:"[位置] 烧烤摊，到了吗",r:"在地铁上，马上",d:1}],
+  classmates:[
+   {at:"10:00",p:"monitor",q:"同学聚会下周六，来不来？",r:"来！好久不见了",d:1,ok:[["monitor","好嘞"]]},
+   {at:"13:00",p:"xueba",q:"谁还记得高三班主任的电话？",r:"不记得了，帮你问问",d:1},
+   {at:"16:00",p:"monitor",q:"聚会可以带家属，你带吗？",r:"带！到时候介绍给你们",d:2,ok:[["xueba","哟！"]]}],
+  blind:[
+   {at:"10:00",p:"chen",q:"我妈问我们聊得怎么样",r:"挺好的，替我问阿姨好",d:1,ok:[["chen","好呀"]]},
+   {at:"13:00",p:"chen",q:"你喜欢猫还是狗？",r:"猫，像你一样高冷",d:2,ok:[["chen","哈哈哈我哪里高冷了"]]},
+   {at:"16:00",p:"chen",q:"明天见面，我穿白衣服",r:"好，我会认出你的",d:2,ok:[["chen","明天见～"]]}]
+ }
 };
+/* 每天都会重复出现的日常话题。win：只在这个时间段出现 */
+const ROUTINE={
+ work:[
+  {p:"boss",q:"在吗？",r:"在的在的，您说",d:1,ok:[["boss","没事了"]]},
+  {p:"hr",q:"早上打卡了吗？今天又有人忘了",r:"打了打了",d:1,win:["09:00","10:30"]},
+  {p:"li",q:"中午帮我带个饭？",r:"行，老样子黄焖鸡",d:1,win:["11:00","12:30"],ok:[["li","爱你"]]},
+  {p:"li",q:"打印机又卡纸了，你会修吗",r:"拍两下就好了",d:1,ok:[["li","……真好了"]]}],
+ family:[
+  {p:"uncle",q:"大家早上好[玫瑰][玫瑰][玫瑰]",r:"三舅早上好[玫瑰]",d:1,win:["09:00","10:30"]},
+  {p:"mom",q:"吃饭了没",r:"吃了妈，别担心",d:1,win:["11:30","13:30"]},
+  {p:"dad",q:"天气预报说明天降温",r:"知道了爸，会加衣服",d:1},
+  {p:"aunt",q:"[转发] 每天喝八杯水的人，后来都怎么样了",r:"二姨我看了",d:1},
+  {p:"mom",q:"晚上回家吃饭吗",r:"不回了妈，要加班",d:1,win:["15:00","18:00"],ok:[["mom","又加班"]]}],
+ love:[
+  {p:"bao",q:"在干嘛呀",r:"在想你呀宝宝😘",d:2},
+  {p:"bao",q:"想你了",r:"我也想你，么么么么哒",d:3},
+  {p:"bao",q:"午饭吃的什么",r:"黄焖鸡，你呢宝宝",d:1,win:["11:30","13:30"]},
+  {p:"bao",q:"[表情包] 戳戳",r:"[表情包] 戳回去",d:1}],
+ friends:[
+  {p:"mei",q:"[表情包] 我是废物.jpg",r:"[表情包] 我也是",d:1},
+  {p:"jie",q:"上号上号",r:"等下，还在上班",d:1,win:["15:00","18:00"]},
+  {p:"pang",q:"又是想辞职的一天",r:"+1，裸辞吧",d:2}],
+ classmates:[
+  {p:"xueba",q:"[链接] 我的新论文，帮忙点个赞",r:"已赞，学霸牛",d:1},
+  {p:"monitor",q:"@所有人 收一下聚会 AA 费 200",r:"[转账] 200",d:1,ok:[["monitor","收到"]]}],
+ blind:[
+  {p:"chen",q:"在忙吗？",r:"有点忙，晚点聊",d:1,ok:[["chen","好，你先忙"]]},
+  {p:"chen",q:"吃午饭了吗",r:"吃了，你呢？",d:1,win:["11:30","13:30"]}]
+};
+/* 一周的节奏：周五就是完整难度，之后每天再快一点 */
+const DAYS=[null,
+ {chats:["work","family","love"],len:150,gap:[7,5],life:[30,26],maxP:3,slip:0.5,ev:[],
+  brief:"新的一周。王总说这周五要给客户汇报。今天只有工作群、家族群和宝找你。"},
+ {chats:["work","family","love","friends"],len:180,gap:[6.5,4],life:[28,22],maxP:4,slip:0.7,ev:["patrol1"],
+  brief:"胖子把你拉回了「废物联盟」（上周你一气之下退群了）。",nw:"新：死党群；12:40 老板巡视"},
+ {chats:["work","family","love","friends","blind"],len:210,gap:[6,3.2],life:[26,19],maxP:5,slip:0.85,ev:["meeting","patrol1"],
+  brief:"昨晚妈把小陈的名片推给了你。上午还有客户视频会议。",nw:"新：小陈（相亲）；10:30 视频会议"},
+ {chats:["work","family","love","friends","classmates","blind"],len:240,gap:[5.8,2.7],life:[25,17],maxP:6,slip:1,ev:["meeting","patrol1","dance","patrol2"],
+  brief:"班长把你拉进了「高三（2）班」，毕业十年要聚会。下午妈的广场舞比赛要接龙。",nw:"新：同学群；14:20 广场舞接龙；16:10 第二次巡视"},
+ {chats:["work","family","love","friends","classmates","blind"],len:240,gap:[5.5,2.2],life:[24,16],maxP:6,slip:1,ev:["meeting","patrol1","dance","patrol2","subway"],
+  brief:"汇报日，也是你和宝在一起 730 天。周六下午，宝和小陈你都答应了……",nw:"新：17:20 下班挤地铁"}];
+function dayCfg(n){if(n<=5)return DAYS[n];const k=n-5,b=DAYS[5];
+  return {...b,gap:[Math.max(3.6,b.gap[0]*0.95**k),Math.max(1.6,b.gap[1]*0.95**k)],life:[Math.max(16,b.life[0]-k),Math.max(12,b.life[1]-k)],slip:Math.min(1.5,1+0.08*k),
+    brief:"又是新的一周，消息来得更快了。",nw:"难度 +"+k};}
+const WEEKDAY=["周一","周二","周三","周四","周五"];
+const dayName=n=>(n>5?`第 ${Math.floor((n-1)/5)+1} 周 `:"")+WEEKDAY[(n-1)%5];
+const storyDay=n=>((n-1)%5)+1;
+const toMin=s=>{const [h,m]=s.split(":").map(Number);return h*60+m;};
+/* 容忍度高的群，轻微发错没人在意 */
+const FORGIVE={friends:[[["pang","发错群了吧哈哈哈"],["jie","习惯了"]],[["mei","？"],["pang","又发错了，不管他"]]],
+  classmates:[[["monitor","发错群了吧"],["xueba","哈哈没事"]],[["xueba","？"],["monitor","没事，大家都发错过"]]]};
 const DANCE_ASK={p:"mom",q:"【广场舞比赛加油团·接龙】\n1. 妈\n2. 二姨\n3. 三舅",r:"4. 我（家属）",d:2};
 const REACT={
   love:{work:[["boss","？"],["li","……"],["hr","[捂脸]"]],
@@ -396,6 +521,21 @@ const SPECIAL={
     classmates:[["monitor","5. 班长"],["xueba","6. 学霸"]],
     blind:[["chen","5. 小陈（？）"],["chen","我也可以去吗"]]},
   "努力工作，早日买房":{work:[["boss","很好，有这个觉悟"],["li","？？"]],love:[["bao","？？你在跟谁规划未来"]]},
+  "妈，八字还没一撇呢":{love:[["bao","八字还没一撇？？"],["bao","我们在一起两年了"],["bao","你给我解释清楚"]],friends:[["pang","？宝知道吗"],["jie","渣"]],work:[["boss","？什么八字"]]},
+  "我妈安排的，别声张":{love:[["bao","？？？什么安排"],["bao","你在相亲？？"]],family:[["mom","什么叫我安排的！"],["aunt","哟，相亲啊"]],blind:[["chen","……我听得到"],["chen","原来你是被安排的"]],work:[["boss","上班时间相亲？"],["li","[吃瓜]"]]},
+  "两个都陪，时间管理大师":{love:[["bao","两个？？？"],["bao","还有谁？"],["bao","你今晚别回来了"]],blind:[["chen","两个？"],["chen","我是其中一个吗"]],family:[["mom","什么两个？？"],["grandma","乖孙出息了"]],work:[["boss","时间管理？那周末加班也没问题"]]},
+  "嘘！千万别说":{love:[["bao","别说什么？？"],["bao","你有事瞒着我"]],family:[["mom","说什么？"],["aunt","有瓜！"]],work:[["boss","？"],["li","我什么都没看见"]],blind:[["chen","？别跟谁说"]]},
+  "挺好的，替我问阿姨好":{family:[["mom","？我就是你妈"]],love:[["bao","阿姨？哪个阿姨？"]]},
+  "猫，像你一样高冷":{love:[["bao","像谁一样高冷？"],["bao","你在撩谁"]],work:[["boss","？说谁高冷"],["li","王总……"]],family:[["mom","哎哟会撩了"],["aunt","说谁呢说谁呢"]]},
+  "好的，不见不散":{love:[["bao","跟谁不见不散？？"],["bao","周六下午？"]],work:[["boss","不见不散？我们天天见"]]},
+  "好呀，周六下午见":{work:[["boss","周六下午你约了谁？"],["boss","周六要加班"]],family:[["mom","跟小陈约好了？好好好！"]]},
+  "有空！整个下午都是你的":{work:[["boss","很好，周六下午来公司"]],friends:[["pang","肉麻"],["jie","给谁的？"]]},
+  "带！到时候介绍给你们":{blind:[["chen","带我？"],["chen","我们还没见过面……"]],family:[["mom","介绍谁？小陈吗？"]]},
+  "+1，裸辞吧":{work:[["boss","？谁要裸辞"],["hr","@你 来我办公室一下"]],family:[["mom","裸辞？？你疯了"],["dad","不许辞"]],love:[["bao","你要辞职？？那房子怎么办"]]},
+  "[转账] 200":{love:[["bao","？转给谁"],["bao","我呢？"]],work:[["boss","？"],["li","谢谢老板！"]],family:[["mom","给谁转钱？"],["uncle","我也要"]],blind:[["chen","？为什么给我转钱"]]},
+  "晚上给你惊喜":{work:[["boss","？什么惊喜"],["li","哇哦"]],family:[["mom","惊喜？给谁？"],["grandma","乖孙要给奶奶惊喜？"]],blind:[["chen","惊喜？我们还没见面……"]]},
+  "十二点，一直在想你":{work:[["boss","十二点还没睡？难怪上班没精神"]],family:[["mom","想谁？？"],["aunt","有情况！"]],blind:[["chen","……想我？"],["chen","我们还没见过"]]},
+  "等我忙完这个项目就去":{work:[["boss","这个项目忙完还有下个项目"]]},
   "看看书，跑跑步":{friends:[["pang","你？跑步？"],["jie","你上次跑步是高中体测"]],love:[["bao","你什么时候跑过步"]]}
 };
 /* Wrong sends that happen to make sense where they land: no embarrassment. */
@@ -406,6 +546,12 @@ const PASS={
   "在的在的，您说":{family:[["mom","在就好，晚上给妈打个电话"]],classmates:[["monitor","那报一下工作单位"]],blind:[["chen","您？哈哈哈好客气"]]},
   "不记得了，帮你问问":{work:[["li","好，谢谢"]],family:[["mom","嗯"]],friends:[["pang","？问啥，算了"]]},
   "听你的，火锅还是烧烤？":{friends:[["pang","火锅！"],["jie","今晚？我也去"]]},
+  "好呀，周六下午见":{blind:[["chen","好呀，那就周六下午"]]},
+  "有空！整个下午都是你的":{blind:[["chen","哈哈好，那我订位子"]]},
+  "带！到时候介绍给你们":{love:[["bao","带我？好呀[害羞]"]]},
+  "[转账] 200":{friends:[["jie","收到！上次的 200 两清"]]},
+  "妈，八字还没一撇呢":{blind:[["chen","哦……那我们慢慢来"]]},
+  "在地铁上，马上":{love:[["bao","好，等你"]],work:[["boss","嗯，路上注意安全"]]},
   "三舅早上好[玫瑰]":{classmates:[["monitor","早上好[玫瑰]"],["xueba","[玫瑰]"]]}
 };
 const PRAISE={work:[["boss","👍"],["boss","好"],["li","收到"]],family:[["mom","好孩子"],["aunt","[玫瑰]"],["grandma","乖"]],
@@ -442,7 +588,7 @@ const clamp=(x,a,b)=>Math.max(a,Math.min(b,x));
 
 /* ---------- codex (per-viewer, browser storage) ---------- */
 function codexKey(text,cat,to){return PASS[text]&&PASS[text][to]?`P|${text}|${to}`:SPECIAL[text]&&SPECIAL[text][to]?`S|${text}|${to}`:`G|${cat}|${to}`;}
-const CODEX_TOTAL=(()=>{const keys=new Set();const all=[];ORDER.forEach(c=>ASKS[c].forEach(a=>all.push([a.r,c])));all.push([DANCE_ASK.r,"family"]);
+const CODEX_TOTAL=(()=>{const keys=new Set();const all=[];ORDER.forEach(c=>{ROUTINE[c].forEach(a=>all.push([a.r,c]));for(let d=1;d<=5;d++)(STORY[d][c]||[]).forEach(a=>all.push([a.r,c]));});all.push([DANCE_ASK.r,"family"]);
   all.forEach(([t,c])=>ORDER.forEach(to=>{if(to!==c)keys.add(codexKey(t,c,to));}));return keys.size;})();
 let DEX={};
 function loadDex(){try{DEX=JSON.parse(localStorage.getItem("wrongchat-dex")||"{}")||{};}catch(e){DEX={};}}
@@ -484,22 +630,35 @@ function musicSet(vol){const a=vol>0?audio():null;
   if(!music){const out=a.createGain();out.gain.value=0.0001;out.connect(a.destination);music={out,next:a.currentTime+0.05,step:0,iv:setInterval(musicStep,50),vol:0};musicStep();}
   if(music.vol!==vol){music.vol=vol;music.out.gain.setTargetAtTime(vol,a.currentTime,0.08);}}
 
+/* ---------- week progress (per-viewer, browser storage) ---------- */
+let WEEK={day:1,rel:{}};
+function loadWeek(){try{const w=JSON.parse(localStorage.getItem("wrongchat-week")||"null");if(w&&w.day>=1)WEEK=w;}catch(e){}}
+function saveWeek(){try{localStorage.setItem("wrongchat-week",JSON.stringify(WEEK));}catch(e){}}
+// 下班后关系值带到明天，往 70 回弹一半；小陈删了你，第二天妈逼她再给你一次机会
+function carryRel(){const rel={};S.on.forEach(k=>{rel[k]=k==="blind"&&S.blindGone?40:clamp(Math.round((S.rel[k]+70)/2),50,100);});return rel;}
+
 /* ---------- state ---------- */
-function newDay(mode){
-  S={t:0,phase:"intro",mode:mode||"normal",open:"work",chats:{},cards:[],asks:[],rel:{},shame:0,recalls:RECALLS,
+function newDay(mode,day){
+  const chaos=mode==="chaos";day=chaos?5:(day||WEEK.day||1);
+  const cfg=dayCfg(day);DAY=cfg.len;
+  S={t:0,phase:"intro",mode:mode||"normal",day,cfg,sd:storyDay(day),on:ORDER.filter(k=>cfg.chats.includes(k)),story:{},
+    open:"work",chats:{},cards:[],asks:[],rel:{},shame:0,recalls:RECALLS,forgiven:0,
     nextAsk:2,nextChatter:3.5,wrongs:[],shots:[],record:[],uid:0,msg:"",paused:false,
     stats:{right:0,wrong:0,expired:0,recalled:0,newDex:0},ending:null,used:{},kicked:{},lockUntil:0,blindGone:false,
     meeting:null,patrol:null,subway:false,lastSwitch:0,slips:0,drafts:{},passes:0,nextBump:0,ev:{meeting:false,patrol1:false,patrol2:false,dance:false,subway:false},dexOpen:false};
-  ORDER.forEach(k=>{S.chats[k]={msgs:[],unread:0};S.rel[k]=70;S.used[k]=[];});
-  addMsg("work",{who:"boss",text:"今天大家都打起精神来"});
+  ORDER.forEach(k=>{S.chats[k]={msgs:[],unread:0};S.rel[k]=(!chaos&&WEEK.rel&&WEEK.rel[k])||70;S.used[k]=[];S.story[k]=0;});
+  const sd=S.sd;
+  addMsg("work",{who:"boss",text:sd===1?"新的一周，大家打起精神来":"今天大家都打起精神来"});
   addMsg("family",{who:"uncle",text:"[早安图片]"});
   addMsg("love",{who:"bao",text:"早安～"});
-  addMsg("friends",{who:"pang",text:"又是想辞职的一天"});
-  addMsg("classmates",{who:"monitor",text:"[群公告] 毕业十周年聚会筹备中"});
-  addMsg("blind",{sys:true,text:"你已添加了小陈，现在可以开始聊天了"});
+  if(sd===2)addMsg("friends",{sys:true,text:"胖子 邀请你加入了群聊「废物联盟」"});else addMsg("friends",{who:"pang",text:"又是想辞职的一天"});
+  if(sd===4)addMsg("classmates",{sys:true,text:"班长 邀请你加入了群聊「高三（2）班」"});else addMsg("classmates",{who:"monitor",text:"[群公告] 毕业十周年聚会筹备中"});
+  if(sd===3)addMsg("blind",{sys:true,text:"你已添加了小陈，现在可以开始聊天了"});else addMsg("blind",{who:"chen",text:"早呀"});
   ORDER.forEach(k=>S.chats[k].unread=0);
   timers.length=0;
 }
+const clockMin=()=>540+S.t/DAY*540;
+const isOn=k=>S.on.includes(k);
 const clockStr=()=>{const m=9*60+Math.floor(S.t/DAY*540);return String(Math.floor(m/60)).padStart(2,"0")+":"+String(m%60).padStart(2,"0");};
 const atClock=(h,mi)=>((h*60+mi)-540)/540*DAY;
 function log(s){S.record.push(`${clockStr()} ${s}`);}
@@ -510,41 +669,53 @@ const isOut=k=>S.kicked[k]&&S.t<S.kicked[k];
 
 /* ---------- spawning ---------- */
 function pendingIn(chat){return S.asks.filter(a=>a.chat===chat&&!a.done).length;}
-function makeAsk(chat,a,life){
-  const ask={id:++S.uid,chat,src:a,born:S.t,deadline:S.t+life,life,done:false};
+function makeAsk(chat,a,life,story){
+  (a.pre||[]).forEach(([who,text])=>addMsg(chat,{who,text}));
+  const ask={id:++S.uid,chat,src:a,born:S.t,deadline:S.t+life,life,done:false,story:!!story};
   ask.msgId=addMsg(chat,{who:a.p,text:a.q,ask:ask.id}).id;
   S.asks.push(ask);
   S.cards.splice(Math.floor(Math.random()*(S.cards.length+1)),0,{id:++S.uid,text:a.r,cat:chat,d:a.d,ask:ask.id});
   if(chat==="work"){S.chats.work.hot=true;sfx.boss();if(chat!==S.open)banner(chat,PEOPLE[a.p].n+" @你",a.q,true);}
   else{if(chat!==S.open)banner(chat,PEOPLE[a.p].n,a.q);sfx.ping();}
 }
+// 1 对 1 的聊天一次只问一件事，群里可以两个人同时说话
+const perChat=k=>k==="love"||k==="blind"?1:2;
+const canSpawnIn=k=>isOn(k)&&!isOut(k)&&!(k==="blind"&&S.blindGone)&&pendingIn(k)<perChat(k);
+function dueStory(k){const steps=(STORY[S.sd]||{})[k]||[],st=steps[S.story[k]];
+  if(!st||clockMin()<toMin(st.at)||S.asks.some(a=>a.chat===k&&!a.done&&a.story))return null;return st;}
+function routinePool(k){const now=clockMin(),st0=((STORY[S.sd]||{})[k]||[])[0];
+  if(st0&&st0.intro&&S.story[k]===0)return []; // 刚加好友 / 刚进群：先等对方开口
+  const ok=ROUTINE[k].filter(a=>(!a.win||(now>=toMin(a.win[0])&&now<toMin(a.win[1])))&&!S.asks.some(x=>!x.done&&x.src===a));
+  const fresh=ok.filter(a=>!S.used[k].includes(a));return fresh.length?fresh:ok;}
 function spawnAsk(){
-  if(S.asks.filter(a=>!a.done).length>=MAX_PENDING)return;
-  const options=ORDER.filter(k=>pendingIn(k)<MAX_PENDING_PER_CHAT&&!isOut(k)&&!(k==="blind"&&S.blindGone));if(!options.length)return;
-  const chat=pick(options);
-  let pool=ASKS[chat].filter((a,i)=>!S.used[chat].includes(i)&&!S.asks.some(x=>!x.done&&x.src===a));
-  if(!pool.length){S.used[chat]=[];pool=ASKS[chat].filter(a=>!S.asks.some(x=>!x.done&&x.src===a));}
-  if(!pool.length)return;
-  const a=pick(pool);S.used[chat].push(ASKS[chat].indexOf(a));
-  makeAsk(chat,a,Math.round(clamp(24-S.t/DAY*8,16,24)));
+  if(S.asks.filter(a=>!a.done).length>=S.cfg.maxP)return;
+  const open=ORDER.filter(canSpawnIn);if(!open.length)return;
+  const due=open.filter(dueStory);
+  if(due.length&&Math.random()<0.75){const k=pick(due),st=dueStory(k);S.story[k]++;makeAsk(k,st,lifeNow(),true);return;}
+  const opts=open.filter(k=>routinePool(k).length||dueStory(k));if(!opts.length)return;
+  const k=pick(opts),pool=routinePool(k);
+  if(!pool.length){const st=dueStory(k);S.story[k]++;makeAsk(k,st,lifeNow(),true);return;}
+  const a=pick(pool);S.used[k].push(a);makeAsk(k,a,lifeNow(),false);
 }
+const lerp=(a,b,f)=>a+(b-a)*clamp(f,0,1);
+const lifeNow=()=>Math.round(lerp(S.cfg.life[0],S.cfg.life[1],S.t/DAY));
 function spawnChatter(){
-  const chat=pick(["work","family","family","friends","friends","love","classmates"]);if(isOut(chat))return;
+  const chat=pick(["work","family","family","friends","friends","love","classmates"]);if(!isOn(chat)||isOut(chat))return;
   const [who,text]=pick(CHATTER[chat]);addMsg(chat,{who,text});if(chat!==S.open&&Math.random()<0.4)banner(chat,PEOPLE[who].n,text);
 }
 
 /* ---------- actions ---------- */
 function canAct(){return S.phase==="play"&&!S.paused&&!S.meeting;}
-function openChat(k){if(!canAct())return;
+function openChat(k){if(!canAct()||!isOn(k))return;
   S.misTap=null;
   if(S.open!==k){S.lastSwitch=S.t;
     // 点错聊天：手一滑点进了「长得像」的聊天。只在切换时发生，发送永远进屏幕上这个聊天
     const busy=S.asks.filter(a=>!a.done).length>=4;
-    const alt=LOOKALIKE[k].filter(x=>x!==S.open&&!isOut(x)&&!(x==="blind"&&S.blindGone));
-    if(alt.length&&Math.random()<CHATS[k].slip*(busy?1.5:1)){const got=pick(alt);S.misTap={want:k,got};S.slips++;k=got;}}
+    const alt=LOOKALIKE[k].filter(x=>isOn(x)&&x!==S.open&&!isOut(x)&&!(x==="blind"&&S.blindGone));
+    if(alt.length&&Math.random()<CHATS[k].slip*S.cfg.slip*(busy?1.5:1)){const got=pick(alt);S.misTap={want:k,got};S.slips++;k=got;}}
   S.open=k;S.chats[k].unread=0;S.chats[k].hot=false;render();}
 // 别的聊天里的草稿也显示在卡片区，点一下就挪到当前聊天（像删掉重打）
-const ghosts=()=>ORDER.filter(k=>k!==S.open&&S.drafts[k]&&!isOut(k));
+const ghosts=()=>S.on.filter(k=>k!==S.open&&S.drafts[k]&&!isOut(k));
 function pickCard(idx){
   if(!canAct())return;const gk=idx>=S.cards.length?ghosts()[idx-S.cards.length]:null;
   const card=gk?S.drafts[gk].card:S.cards[idx];if(!card)return;audio();
@@ -575,7 +746,8 @@ function sendDraft(){
   if(card.cat===to&&ask&&!ask.done){
     ask.done=true;addMsg(to,{me:true,text:card.text,read:true});S.rel[to]=clamp(S.rel[to]+8,0,100);S.stats.right++;sfx.good();
     log(`✓ 回${CHATS[to].name}：${card.text.replace(/\n/g," ")}`);
-    if(Math.random()<0.55){const [who,text]=pick(PRAISE[to]);later(rand(0.6,1.4),()=>{addMsg(to,{who,text});render();});}
+    const ok=ask.src.ok||(Math.random()<0.55?[pick(PRAISE[to])]:[]);
+    ok.forEach(([who,text],i)=>later(rand(0.6,1.2)+0.9*i,()=>{addMsg(to,{who,text});render();}));
     say(`回复了${CHATS[to].name}`);
   }else{
     const m=addMsg(to,{me:true,text:card.text,wrong:true});sfx.send();
@@ -612,10 +784,19 @@ function reactWrong(w){
     return;
   }
   const sp=SPECIAL[w.card.text]&&SPECIAL[w.card.text][w.to];
+  const T=CHATS[w.to];
+  if(!sp&&w.card.d<=(T.forgive||0)&&FORGIVE[w.to]){
+    // 容忍度高：轻微发错，大家笑笑就过去了
+    const fl=pick(FORGIVE[w.to]);S.forgiven++;w.pass=true;
+    const key=codexKey(w.card.text,w.card.cat,w.to);if(!DEX[key]){DEX[key]={text:w.card.text,to:w.to,lines:fl};saveDex();S.stats.newDex++;}
+    fl.forEach(([p,t],i)=>later(0.7*i,()=>{addMsg(w.to,{who:p,text:t});if(i===0)stamp(`${T.tab}没在意`,true);render();}));
+    log(`  ≈ ${T.tab}容忍度高，没人在意：${fl.map(([p,t])=>PEOPLE[p].n+"："+t).join(" / ")}`);
+    return;
+  }
   const lines=(sp||REACT[w.card.cat][w.to]||[["li","？"]]).map(([p,t])=>[p,t.replace("{t}",w.card.text)]);
   let danger=w.card.d+(sp?1:0);
   if(w.card.cat==="blind"&&w.to==="love")danger+=1;
-  S.shame+=danger;S.rel[w.to]=clamp(S.rel[w.to]-8*danger,0,100);
+  S.shame+=danger;S.rel[w.to]=clamp(S.rel[w.to]-Math.round(8*danger*T.wrongMul),0,100);
   const key=codexKey(w.card.text,w.card.cat,w.to),isNew=!DEX[key];
   if(isNew){DEX[key]={text:w.card.text,to:w.to,lines:lines.slice(0,2)};saveDex();S.stats.newDex++;}
   const shot={chat:w.to,text:w.card.text,lines,danger,after:[]};
@@ -626,13 +807,13 @@ function reactWrong(w){
   if(w.to==="work"&&danger>=2)later(after,()=>{
     S.lockUntil=S.t+6;addMsg("work",{sys:true,text:"王总 私聊你：来一下我办公室"});
     alertMsg("你被叫去王总办公室挨训（6 秒内不能打字、不能发消息）",6);shot.after.push("被叫去办公室挨训");log("  被叫去王总办公室挨训 6 秒");render();});
-  if(GROUPS.includes(w.to)&&danger>=4)later(after+0.5,()=>{
+  if(GROUPS.includes(w.to)&&danger>=(T.kickAt||99))later(after+0.5,()=>{
     const [kicker,inviter]=KICK[w.to];S.kicked[w.to]=S.t+25;
     addMsg(w.to,{sys:true,text:`${PEOPLE[kicker].n} 将你移出了群聊`});
     later(25,()=>{addMsg(w.to,{sys:true,text:`${PEOPLE[inviter].n} 邀请你重新加入了群聊`});log(`  被拉回${CHATS[w.to].name}`);render();});
     shot.after.push(`被${PEOPLE[kicker].n}移出群聊`);log(`  被移出${CHATS[w.to].name} 25 秒`);if(S.open===w.to)say("你被移出了群聊！");render();});
-  if(danger>=3&&Math.random()<0.6)later(after+1.5,()=>{
-    const dest=pick(GROUPS.filter(g=>g!==w.to&&!isOut(g)));if(!dest)return;
+  if(danger>=3&&Math.random()<(T.leak||0.5))later(after+1.5,()=>{
+    const dest=pick(GROUPS.filter(g=>isOn(g)&&g!==w.to&&!isOut(g)));if(!dest)return;
     const [who,text]=LEAK[dest];addMsg(dest,{who,text:`${text}\n「${w.card.text}」`});
     const [p2,t2]=pick(LEAK_REACT[dest]);later(0.8,()=>{addMsg(dest,{who:p2,text:t2});render();});
     S.shame+=1;S.rel[dest]=clamp(S.rel[dest]-4,0,100);shot.after.push(`截图流传到「${CHATS[dest].name}」`);
@@ -684,7 +865,7 @@ function resolvePatrol(){
 }
 function startDance(){if(isOut("family"))return;makeAsk("family",DANCE_ASK,30);log("💃 广场舞接龙");}
 function startSubway(){S.subway=true;S.nextBump=S.t+3;alertMsg("🚇 下班挤地铁：手机会被挤得乱切聊天",2.5);log("🚇 开始挤地铁");}
-function bump(){const others=ORDER.filter(k=>k!==S.open);S.open=pick(others);S.lastSwitch=S.t;S.chats[S.open].unread=0;S.chats[S.open].hot=false;sfx.bump();say(`被挤了一下，手机切到了「${CHATS[S.open].name}」`);}
+function bump(){const others=S.on.filter(k=>k!==S.open);S.open=pick(others);S.lastSwitch=S.t;S.chats[S.open].unread=0;S.chats[S.open].hot=false;sfx.bump();say(`被挤了一下，手机切到了「${CHATS[S.open].name}」`);}
 
 /* ---------- tick ---------- */
 function tick(now){
@@ -692,30 +873,32 @@ function tick(now){
   musicSet(S.phase==="play"&&!S.paused&&S.meeting?(S.meeting.ring?0.16:0.07):0);
   if(S.phase==="play"&&!S.paused){
     S.t+=dt;
-    if(!S.ev.meeting&&S.t>=atClock(10,30)){S.ev.meeting=true;startMeeting();}
-    if(!S.ev.patrol1&&S.t>=atClock(12,40)){S.ev.patrol1=true;startPatrol();}
-    if(!S.ev.dance&&S.t>=atClock(14,20)){S.ev.dance=true;startDance();}
-    if(!S.ev.patrol2&&S.t>=atClock(16,10)){S.ev.patrol2=true;startPatrol();}
-    if(!S.ev.subway&&S.t>=atClock(17,20)){S.ev.subway=true;startSubway();}
+    if(!S.ev.meeting&&S.cfg.ev.includes("meeting")&&S.t>=atClock(10,30)){S.ev.meeting=true;startMeeting();}
+    if(!S.ev.patrol1&&S.cfg.ev.includes("patrol1")&&S.t>=atClock(12,40)){S.ev.patrol1=true;startPatrol();}
+    if(!S.ev.dance&&S.cfg.ev.includes("dance")&&S.t>=atClock(14,20)){S.ev.dance=true;startDance();}
+    if(!S.ev.patrol2&&S.cfg.ev.includes("patrol2")&&S.t>=atClock(16,10)){S.ev.patrol2=true;startPatrol();}
+    if(!S.ev.subway&&S.cfg.ev.includes("subway")&&S.t>=atClock(17,20)){S.ev.subway=true;startSubway();}
     if(S.meeting){S.asks.forEach(a=>{if(!a.done)a.deadline+=dt;});tickMeeting(dt);}
     if(S.patrol&&S.t>=S.patrol.until)resolvePatrol();
     if(S.subway&&!S.meeting&&S.t>=S.nextBump){bump();S.nextBump=S.t+rand(4,6.5);}
-    if(S.t>=S.nextAsk){spawnAsk();S.nextAsk=S.t+clamp(5.5-S.t/DAY*3.4,2.2,5.5)*rand(0.7,1.3);}
+    if(S.t>=S.nextAsk){spawnAsk();S.nextAsk=S.t+lerp(S.cfg.gap[0],S.cfg.gap[1],S.t/DAY)*rand(0.7,1.3);}
     if(S.t>=S.nextChatter){spawnChatter();S.nextChatter=S.t+rand(3,6);}
     for(let i=timers.length-1;i>=0;i--)if(S.t>=timers[i].at){const f=timers[i].fn;timers.splice(i,1);f();}
-    S.asks.forEach(a=>{if(!a.done&&S.t>=a.deadline){a.done=true;a.expired=true;S.rel[a.chat]=clamp(S.rel[a.chat]-10,0,100);S.stats.expired++;
+    S.asks.forEach(a=>{if(!a.done&&S.t>=a.deadline){a.done=true;a.expired=true;S.rel[a.chat]=clamp(S.rel[a.chat]-CHATS[a.chat].miss,0,100);S.stats.expired++;
       const ci=S.cards.findIndex(c=>c.ask===a.id);if(ci>=0)S.cards.splice(ci,1);
-      const [who,text]=pick(TIMEOUT[a.chat]);addMsg(a.chat,{who,text});sfx.timeout();log(`⌛ 没回${CHATS[a.chat].name}：${a.src.q.replace(/\n/g," ")}`);}});
+      (a.src.miss||[pick(TIMEOUT[a.chat])]).forEach(([who,text])=>addMsg(a.chat,{who,text}));sfx.timeout();log(`⌛ 没回${CHATS[a.chat].name}：${a.src.q.replace(/\n/g," ")}`);}});
     S.wrongs.forEach(w=>{if(w.state==="sent"&&S.t>=w.readAt){w.state="read";
       const m=S.chats[w.to].msgs.find(x=>x.id===w.msgId);if(m)m.read=true;sfx.read();later(0.9,()=>reactWrong(w));}});
     if(!S.blindGone&&S.rel.blind<=0)blindGoneEvent();
-    if(S.mode==="normal"){const broken=ORDER.find(k=>k!=="blind"&&S.rel[k]<=0);if(broken)endDay(broken);}
+    if(S.mode==="normal"){const broken=S.on.find(k=>k!=="blind"&&S.rel[k]<=0);if(broken)endDay(broken);}
     if(S.phase==="play"&&S.t>=DAY)endDay(null);
     render(true);
   }
   requestAnimationFrame(tick);
 }
-function endDay(broken){musicSet(0);S.phase="end";S.ending=broken;S.meeting=null;S.patrol=null;$("#alertHost").innerHTML="";log(broken?`结束：${ENDING[broken]}`:"下班了！");render();}
+function endDay(broken){musicSet(0);
+  if(!broken&&S.mode==="normal"&&S.phase==="play"){WEEK={day:S.day+1,rel:carryRel()};saveWeek();}
+  S.phase="end";S.ending=broken;S.meeting=null;S.patrol=null;$("#alertHost").innerHTML="";log(broken?`结束：${ENDING[broken]}`:"下班了！");render();}
 
 /* ---------- ui bits ---------- */
 let bannerTimer=null,alertTimer=null;
@@ -732,15 +915,16 @@ let lastMsgKey="",lastListKey="",lastCardsKey="",modalKey="";
 let lastOops=true;
 const relCol=v=>v>50?"var(--ok)":v>25?"var(--amber)":"var(--tomato)";
 function render(fromTick){
-  const listKey=ORDER.map(k=>k+S.chats[k].unread+S.chats[k].msgs.length+(isOut(k)?"x":"")+(S.chats[k].hot?"h":"")+Math.round(S.rel[k])+(S.drafts[k]?"d"+S.drafts[k].card.id:"")).join("|")+S.open+S.blindGone;
+  const listKey=S.on.map(k=>k+S.chats[k].unread+S.chats[k].msgs.length+(isOut(k)?"x":"")+(S.chats[k].hot?"h":"")+Math.round(S.rel[k])+(S.drafts[k]?"d"+S.drafts[k].card.id:"")).join("|")+S.open+S.blindGone;
   if(listKey!==lastListKey){lastListKey=listKey;
-    $("#list").innerHTML=ORDER.map(k=>{const c=S.chats[k],lm=c.msgs[c.msgs.length-1];
+    $("#list").style.setProperty("--n",S.on.length);
+    $("#list").innerHTML=S.on.map(k=>{const c=S.chats[k],lm=c.msgs[c.msgs.length-1];
       const pv=lm?(lm.sys?lm.text:lm.me?"我："+lm.text:PEOPLE[lm.who].n+"："+lm.text).split("\n")[0]:"";
       const out=isOut(k)||(k==="blind"&&S.blindGone);
       return `<button class="ci${out?" out":""}${S.drafts[k]&&!out?" hasdraft":""}${c.hot&&S.open!==k&&!out?" hot":""}" data-chat="${k}" aria-current="${S.open===k}"><span class="av c-${k}">${CHATS[k].short}</span><span class="nm">${esc(CHATS[k].name)} <span class="risk ${riskLabel(k)[1]}" title="点错风险">${riskLabel(k)[0]}</span></span>${c.unread?`<span class="badge">${c.unread}</span>`:""}<span class="pv">${S.drafts[k]&&!out?`<span class="dr">[草稿]</span> ${esc(S.drafts[k].card.text.split("\n")[0])}`:esc(out?(k==="blind"&&S.blindGone?"已被对方删除":"你已不在群聊中"):pv)}</span><span class="hk">${CHATS[k].key}</span><span class="tb">${CHATS[k].tab}</span><span class="rb"><i style="width:${Math.round(S.rel[k])}%;background:${relCol(S.rel[k])}"></i></span></button>`;}).join("");}
   const ch=S.chats[S.open];
   const msgKey=S.open+ch.msgs.length+ch.msgs.map(m=>(m.read?1:0)+(m.sys?2:0)).join("")+S.wrongs.map(w=>w.state).join("");
-  $("#ctitle").textContent=CHATS[S.open].name;$("#csub").textContent=`${CHATS[S.open].size} · 点错风险${riskLabel(S.open)[0]}`;
+  $("#ctitle").textContent=CHATS[S.open].name;$("#csub").textContent=`${CHATS[S.open].size} · 容忍度${CHATS[S.open].tol} · 点错风险${riskLabel(S.open)[0]}`;
   if(msgKey!==lastMsgKey){lastMsgKey=msgKey;
     const box=$("#msgs"),stick=box.scrollTop+box.clientHeight>=box.scrollHeight-40;
     box.innerHTML=ch.msgs.map(m=>{
@@ -772,14 +956,14 @@ function render(fromTick){
   else oops.hidden=true;
   if(oops.hidden!==lastOops){lastOops=oops.hidden;const box=$("#msgs");box.scrollTop=box.scrollHeight;}
   $("#clock").textContent=clockStr();
-  $("#dayline").textContent=S.subway?"下班路上 · 挤地铁中":"周一 · 18:00 下班";
+  $("#dayline").textContent=S.subway?`${dayName(S.day)} · 下班路上 · 挤地铁中`:`${dayName(S.day)}${S.mode==="chaos"?"":` · 第 ${S.day} 天`} · 18:00 下班`;
   $("#shame").textContent=S.shame;
   $("#modePill").textContent=S.mode==="chaos"?"故意社死模式":"正常上班";
-  $("#rels").innerHTML=ORDER.map(k=>{const v=Math.round(S.rel[k]);const col=v>50?"var(--ok)":v>25?"var(--amber)":"var(--tomato)";
+  $("#rels").innerHTML=S.on.map(k=>{const v=Math.round(S.rel[k]);const col=v>50?"var(--ok)":v>25?"var(--amber)":"var(--tomato)";
     return `<div class="rel"><span>${CHATS[k].rel}</span><div class="bar"><i style="width:${v}%;background:${col}"></i></div><span class="v">${k==="blind"&&S.blindGone?"删":v}</span></div>`;}).join("");
   $("#recalls").textContent=S.recalls;
   $("#status").textContent=S.msg;
-  $("#mClock").textContent=clockStr();$("#mShame").textContent=S.shame;$("#mRec").textContent=S.recalls;
+  $("#mClock").textContent=clockStr();$("#mDay").textContent=dayName(S.day);$("#mShame").textContent=S.shame;$("#mRec").textContent=S.recalls;
   $("#mPend").textContent=totalPending?`待回 ${totalPending}`:"";$("#mStatus").textContent=S.msg||"\u00a0";
   $("#dexBtn").textContent=`社死图鉴 ${Object.keys(DEX).length}/${CODEX_TOTAL}`;
   renderMeeting();renderModal();
@@ -823,19 +1007,27 @@ function renderModal(){
     m.hidden=false;return;
   }
   if(S.phase==="intro"){
-    m.innerHTML=`<div class="sheet" role="dialog" aria-label="开始"><h2>发错群了</h2>
-      <div>周一早上 9:00。工作群、家族群、对象、死党、老同学和妈介绍的相亲对象，会同时找你。撑到 18:00 下班。</div>
-      <ul>
+    const d=S.day,cfg=S.cfg,first=d===1;
+    const EVN={meeting:"10:30 王总视频会议",patrol1:"12:40 老板巡视",dance:"14:20 家族群广场舞接龙",patrol2:"16:10 第二次巡视",subway:"17:20 下班挤地铁"};
+    const evs=cfg.ev.map(e=>EVN[e]).join("、");
+    const rules=`<ul>
         <li>点左边的聊天（或按 <b>Q W E R T Y</b>）切换。点回复卡片（或按 <b>1–6</b>），字会打进输入框；打完按 <b>Enter</b> 发进<b>当前打开</b>的聊天。<span class="monly-i">手机上：点顶上一排头像切换聊天，点卡片打字，点「发送」。</span></li>
         <li>每个聊天有自己的输入框，和微信一样会留草稿。卡片上不写是回谁的，打进哪个聊天要自己看清楚。打错了还没发？切到对的聊天，点卡片区里虚线框的那张就能挪过去；或者点输入框旁的 ✕（Backspace）删掉草稿。</li>
-        <li><b>点错聊天</b>：切换聊天时手可能一滑，点进一个长得像的聊天（看聊天标题！）。每个聊天的点错风险不一样：宝是置顶的，很少点错（低）；人多又容易混的群（同学群、死党群、家族群）容易点错（高）。待回消息太多时更容易点错。<b>Enter 永远发进屏幕上打开的那个聊天。</b></li>
+        <li><b>点错聊天</b>：切换聊天时手可能一滑，点进一个长得像的聊天（看聊天标题！）。宝是置顶的，很少点错；人多的群容易点错。<b>Enter 永远发进屏幕上打开的那个聊天。</b></li>
+        <li><b>容忍度</b>：每个聊天不一样。死党群、同学群容忍度高，小错没人在意，不读不回也无所谓；工作群低；宝和小陈很低，发错一次伤得很重，不回消息也最记仇。聊天标题里写着容忍度。</li>
         <li>发错了？在对方「已读」之前按 <b>Z</b> 撤回，一天 3 次。发错进工作群会被叫去挨训；太离谱会被移出群聊；截图还会流传到别的群。</li>
-        <li>今天还有：10:30 视频会议、老板巡视（两次）、家族群广场舞接龙、17:20 下班挤地铁。</li>
-      </ul>
+        <li>关系值会带到第二天。一周五天，每天多一点人、多一点事。</li>
+      </ul>`;
+    m.innerHTML=`<div class="sheet" role="dialog" aria-label="开始"><h2>发错群了 · ${dayName(d)}</h2>
+      <div>${esc(cfg.brief)}</div>
+      ${cfg.nw?`<div><b>${esc(cfg.nw)}</b></div>`:""}
+      <div>今天找你的：${S.on.map(k=>CHATS[k].tab).join("、")}。${evs?`今天还有：${evs}。`:""}撑到 18:00 下班。</div>
+      ${first?rules:`<details><summary>规则</summary>${rules}</details>`}
       <div class="modes">
-        <button class="mode" data-mode="normal"><b>正常上班</b><span>关系掉到 0 当天就结束（小陈除外）。尽量别发错。</span></button>
-        <button class="mode" data-mode="chaos"><b>故意社死</b><span>不会被开除，也不会被分手。专门把话发错群，收集社死图鉴。</span></button>
-      </div></div>`;
+        <button class="mode" data-mode="normal"><b>开始${dayName(d)}</b><span>第 ${d} 天。任何一段关系掉到 0 当天就结束（小陈除外），要重来这一天。</span></button>
+        <button class="mode" data-mode="chaos"><b>故意社死</b><span>自由模式：周五的全部聊天，不会被开除也不会被分手，不影响进度。专门发错群，收集社死图鉴。</span></button>
+      </div>
+      ${WEEK.day>1?`<div class="row"><button class="btn" id="restart">从周一重新开始</button></div>`:""}</div>`;
     m.hidden=false;return;
   }
   if(S.phase==="end"){
@@ -843,12 +1035,13 @@ function renderModal(){
     const shots=top.length?top.map(s=>`<div class="shot"><div class="sh"><span>${esc(CHATS[s.chat].name)}</span><span style="color:var(--tomato)">社死 +${s.danger}</span></div><div class="sb">
       <div class="l me">${esc(s.text)}</div>${s.lines.map(([p,t])=>`<div class="l"><b>${esc(PEOPLE[p].n)}</b>${esc(t)}</div>`).join("")}${s.after.map(a=>`<div class="after">${esc(a)}</div>`).join("")}</div></div>`).join("")
       :`<div>今天一条都没发错。</div>`;
-    m.innerHTML=`<div class="sheet" role="dialog" aria-label="下班结算"><h2>${S.ending?"今天提前结束了":title()}</h2>
+    m.innerHTML=`<div class="sheet" role="dialog" aria-label="下班结算"><h2>${dayName(S.day)} · ${S.ending?"今天提前结束了":title()}</h2>
       ${S.ending?`<div><b>${esc(ENDING[S.ending])}</b></div>`:`<div>18:00，下班了。${S.mode==="chaos"?"（故意社死模式）":""}</div>`}
-      <div>社死值 <b>${S.shame}</b> · 回对 ${S.stats.right} 条 · 发错 ${S.stats.wrong} 条（点错聊天 ${S.slips}，蒙混过关 ${S.passes}）· 没回 ${S.stats.expired} 条 · 撤回 ${S.stats.recalled} 次 · 新图鉴 ${S.stats.newDex} 个（共 ${Object.keys(DEX).length}/${CODEX_TOTAL}）${S.blindGone?" · 被小陈删了":""}</div>
+      <div>社死值 <b>${S.shame}</b> · 回对 ${S.stats.right} 条 · 发错 ${S.stats.wrong} 条（点错聊天 ${S.slips}，蒙混过关 ${S.passes}，没人在意 ${S.forgiven}）· 没回 ${S.stats.expired} 条 · 撤回 ${S.stats.recalled} 次 · 新图鉴 ${S.stats.newDex} 个（共 ${Object.keys(DEX).length}/${CODEX_TOTAL}）${S.blindGone?" · 被小陈删了":""}</div>
       <div class="label">今日社死精选</div>
       <div class="shots">${shots}</div>
-      <div class="row"><button class="btn primary" id="again">再过一天</button><button class="btn" id="openDex">社死图鉴</button><button class="btn" id="copy2">复制试玩记录</button><span class="status" id="copyMsg2"></span></div></div>`;
+      ${S.mode==="normal"&&!S.ending?`<div><b>明天：${dayName(S.day+1)}</b>。${esc(dayCfg(S.day+1).nw||"")}</div>`:""}
+      <div class="row">${S.mode==="normal"&&!S.ending?`<button class="btn primary" id="next">进入${dayName(S.day+1)}</button>`:`<button class="btn primary" id="again">${S.mode==="chaos"?"再来一局":"重来"+dayName(S.day)}</button>`}<button class="btn" id="openDex">社死图鉴</button><button class="btn" id="copy2">复制试玩记录</button><span class="status" id="copyMsg2"></span></div></div>`;
     m.hidden=false;return;
   }
   m.hidden=true;m.innerHTML="";
@@ -856,9 +1049,9 @@ function renderModal(){
 
 /* ---------- record ---------- */
 function recordText(){
-  return ["发错群了 原型 v0.9 试玩记录",`模式：${S.mode==="chaos"?"故意社死":"正常上班"}`,...S.record,"—— 汇总 ——",
-    `社死值 ${S.shame}；回对 ${S.stats.right}，发错 ${S.stats.wrong}（点错聊天 ${S.slips} 次，蒙混过关 ${S.passes}），没回 ${S.stats.expired}，撤回 ${S.stats.recalled}，新图鉴 ${S.stats.newDex}（累计 ${Object.keys(DEX).length}/${CODEX_TOTAL}）`,
-    `关系：${ORDER.map(k=>CHATS[k].rel+" "+(k==="blind"&&S.blindGone?"已删":Math.round(S.rel[k]))).join("，")}`,
+  return ["发错群了 原型 v1.0 试玩记录",`模式：${S.mode==="chaos"?"故意社死":"正常上班"} · ${dayName(S.day)}（第 ${S.day} 天）`,...S.record,"—— 汇总 ——",
+    `社死值 ${S.shame}；回对 ${S.stats.right}，发错 ${S.stats.wrong}（点错聊天 ${S.slips} 次，蒙混过关 ${S.passes}，没人在意 ${S.forgiven}），没回 ${S.stats.expired}，撤回 ${S.stats.recalled}，新图鉴 ${S.stats.newDex}（累计 ${Object.keys(DEX).length}/${CODEX_TOTAL}）`,
+    `关系：${S.on.map(k=>CHATS[k].rel+" "+(k==="blind"&&S.blindGone?"已删":Math.round(S.rel[k]))).join("，")}`,
     S.ending?`提前结束：${ENDING[S.ending]}`:(S.phase==="end"?"撑到了下班":"（还没结束）")].join("\n");
 }
 function copyRecord(sel){
@@ -887,6 +1080,8 @@ $("#modal").addEventListener("click",e=>{
   if(e.target.closest("#dexClose")){setDex(false);return;}
   if(e.target.closest("#openDex")){setDex(true);return;}
   if(e.target.closest("#again")){const mode=S.mode;newDay(mode);modalKey="";render();return;}
+  if(e.target.closest("#next")){newDay("normal");modalKey="";render();return;}
+  if(e.target.closest("#restart")){WEEK={day:1,rel:{}};saveWeek();newDay("normal");modalKey="";render();return;}
   if(e.target.closest("#copy2"))copyRecord("#copyMsg2");
 });
 document.addEventListener("keydown",e=>{
@@ -910,7 +1105,7 @@ document.addEventListener("keydown",e=>{
 });
 
 document.addEventListener("keyup",e=>{if(S&&S.meeting&&(e.key===" "||e.code==="Space"))e.preventDefault();});
-loadDex();newDay("normal");render();
+loadDex();loadWeek();newDay("normal");render();
 last=performance.now();requestAnimationFrame(tick);
 })();
 </script>
