@@ -2,6 +2,7 @@ import { ForbiddenException, Injectable } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 
 const STORE_AUDIT_TABLES = new Set([
+  'agent_actions',
   'categories',
   'inventory_movements',
   'products',

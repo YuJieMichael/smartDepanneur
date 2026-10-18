@@ -3,7 +3,8 @@ import { PrismaService } from '../prisma/prisma.service';
 import { InsightsService } from './insights.service';
 
 describe('InsightsService', () => {
-  it('uses sales velocity to calculate a fourteen-day reorder quantity', async () => {
+  it('falls back to the seven-day average for a product with a short sales history', async () => {
+    const day = 86_400_000;
     const prisma = {
       product: {
         fields: { minStock: 'minStock' },
@@ -30,6 +31,14 @@ describe('InsightsService', () => {
             _sum: { quantity: 7 },
           },
         ]),
+        // One unit a day for the last seven days: under two weeks of history.
+        findMany: jest.fn().mockResolvedValue(
+          Array.from({ length: 7 }, (_, index) => ({
+            productId: 1,
+            quantity: 1,
+            sale: { createdAt: new Date(Date.now() - (index + 0.5) * day) },
+          })),
+        ),
       },
     } as unknown as PrismaService;
     const service = new InsightsService(prisma);
@@ -40,6 +49,8 @@ describe('InsightsService', () => {
     expect(result.suggestions[0]).toMatchObject({
       productName: 'Milk 2%',
       soldLast7Days: 7,
+      forecastNext14Days: 14,
+      forecastMethod: 'moving-average',
       suggestedReorderQty: 17,
       urgency: 'high',
       reason: 'Milk 2% 过去 7 天卖出 7 件，且库存低于最低线。',

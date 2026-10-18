@@ -69,7 +69,7 @@ export default function SalesPage() {
   const [voidReason, setVoidReason] = useState<VoidReasonCode | undefined>();
   const [ownerEmail, setOwnerEmail] = useState('');
   const [ownerPassword, setOwnerPassword] = useState('');
-  const [policyClock, setPolicyClock] = useState(Date.now());
+  const [policyClock, setPolicyClock] = useState(() => Date.now());
 
   const loadProducts = useCallback(async () => {
     const result = await apiGetProductList({

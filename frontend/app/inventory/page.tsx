@@ -17,6 +17,7 @@ import {
   LowStockProductRow,
 } from '@/api/inventory';
 import { apiGetProductList, ProductRow } from '@/api/products';
+import InvoiceScanModal from '@/components/store/invoice-scan-modal';
 import { useI18nStore, useT } from '@/lib/i18n';
 import { globalMessage } from '@/lib/message-bridge';
 
@@ -268,6 +269,7 @@ export default function InventoryPage() {
             <Button icon={<PlusOutlined />} type="primary" onClick={() => openModal('stockIn')}>
               {isZh ? '入库' : isFr ? 'Réception' : 'Stock In'}
             </Button>
+            <InvoiceScanModal products={products} onReceived={() => setRefreshFlag((flag) => flag + 1)} />
             <Button icon={<ToolOutlined />} onClick={() => openModal('adjust')}>
               {isZh ? '调整' : isFr ? 'Ajuster' : 'Adjust'}
             </Button>

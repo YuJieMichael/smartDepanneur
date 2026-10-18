@@ -370,6 +370,75 @@ async function main() {
     }
   }
 
+  // Five weeks of past sales with a weekday rhythm (busier Friday to Sunday),
+  // so the demand forecast and minimum-stock review have history to work
+  // with. Current stock above already reflects these sales, so they do not
+  // change it. Units per day, Sunday first.
+  {
+    const historyPattern = {
+      'DRK-COKE-355': [4, 2, 2, 3, 3, 6, 7],
+      'DRK-RB-250': [10, 5, 5, 6, 7, 14, 16],
+      'SNK-LAY-235': [3, 1, 1, 1, 2, 4, 5],
+      'SNK-CHOC-BAR': [6, 4, 4, 5, 5, 8, 9],
+      'LOT-SCRATCH-5': [12, 8, 8, 15, 9, 18, 14],
+    };
+    const productRows = await prisma.product.findMany({
+      where: { sku: { in: Object.keys(historyPattern) } },
+    });
+    const paymentMethods = ['debit', 'cash', 'credit'];
+
+    for (let daysAgo = 35; daysAgo >= 1; daysAgo -= 1) {
+      const createdAt = new Date(Date.now() - daysAgo * 86_400_000);
+      createdAt.setHours(14, 0, 0, 0);
+      const weekday = createdAt.getDay();
+      const items = productRows.map((product) => {
+        const quantity = historyPattern[product.sku][weekday];
+        return {
+          product,
+          quantity,
+          lineTotal: product.sellingPrice.mul(quantity),
+          lineProfit: product.sellingPrice.sub(product.costPrice).mul(quantity),
+        };
+      });
+      const subtotal = items.reduce((sum, item) => sum.add(item.lineTotal), new Prisma.Decimal(0));
+      const tax = subtotal.mul(TAX_RATE).toDecimalPlaces(2);
+      const sale = await prisma.sale.create({
+        data: {
+          saleNumber: `DEMO-H-${String(daysAgo).padStart(2, '0')}`,
+          subtotal,
+          tax,
+          total: subtotal.add(tax),
+          profitEstimate: items.reduce((sum, item) => sum.add(item.lineProfit), new Prisma.Decimal(0)),
+          paymentMethod: paymentMethods[daysAgo % paymentMethods.length],
+          cashierId: admin.id,
+          createdAt,
+          items: {
+            create: items.map((item) => ({
+              quantity: item.quantity,
+              unitPrice: item.product.sellingPrice,
+              unitCost: item.product.costPrice,
+              lineTotal: item.lineTotal,
+              productId: item.product.id,
+            })),
+          },
+        },
+      });
+      await prisma.inventoryMovement.createMany({
+        data: items.map((item) => ({
+          type: 'sale',
+          quantity: -item.quantity,
+          unitCost: item.product.costPrice,
+          reason: `Sale ${sale.saleNumber}`,
+          referenceType: 'sale',
+          referenceId: sale.id,
+          productId: item.product.id,
+          userId: admin.id,
+          createdAt,
+        })),
+      });
+    }
+  }
+
   console.log('Seeded SmartDepanneur demo users, products, inventory, and sales.');
 }
 
